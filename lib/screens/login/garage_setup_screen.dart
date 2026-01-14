@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../utils/colors.dart';
+import '../../models/motorcycle_model.dart';
+import '../../services/motorcycle_data_service.dart';
 
 class GarageSetupScreen extends StatefulWidget {
   final Function({
+    required String brand,
+    required String model,
     required String plate,
     required int currentKm,
     required String oilType,
@@ -20,31 +24,49 @@ class GarageSetupScreen extends StatefulWidget {
 }
 
 class _GarageSetupScreenState extends State<GarageSetupScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _plateController = TextEditingController();
-  final _currentKmController = TextEditingController(text: '12450');
-  final _oilTypeController = TextEditingController(text: '10W-40 Sintético');
-  final _frontTireController = TextEditingController(text: '2.5');
-  final _rearTireController = TextEditingController(text: '2.8');
+  final _searchController = TextEditingController();
+  List<MotorcycleModel> _searchResults = [];
+  MotorcycleModel? _selectedMotorcycle;
+  bool _isSearching = false;
 
   @override
   void dispose() {
-    _plateController.dispose();
-    _currentKmController.dispose();
-    _oilTypeController.dispose();
-    _frontTireController.dispose();
-    _rearTireController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  void _handleComplete() {
-    if (_formKey.currentState!.validate()) {
+  void _performSearch(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      _searchResults = MotorcycleDataService.searchMotorcycles(query);
+    });
+  }
+
+  void _selectMotorcycle(MotorcycleModel motorcycle) {
+    setState(() {
+      _selectedMotorcycle = motorcycle;
+      _isSearching = false;
+    });
+  }
+
+  void _handleContinue() {
+    if (_selectedMotorcycle != null) {
       widget.onComplete(
-        plate: _plateController.text,
-        currentKm: int.parse(_currentKmController.text),
-        oilType: _oilTypeController.text,
-        frontTirePressure: double.parse(_frontTireController.text),
-        rearTirePressure: double.parse(_rearTireController.text),
+        brand: _selectedMotorcycle!.brand,
+        model: _selectedMotorcycle!.model,
+        plate: 'ABC-1234', // Placeholder
+        currentKm: 12450,
+        oilType: '10W-40 Sintético',
+        frontTirePressure: 2.5,
+        rearTirePressure: 2.8,
       );
     }
   }
@@ -52,132 +74,275 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.darkGrafite,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Configurar Garagem'),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFFFFFFF),
+              Color(0xFFD2D2D2),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: _selectedMotorcycle == null
+              ? _buildSearchView()
+              : _buildMotorcycleDetailView(),
+        ),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    );
+  }
+
+  Widget _buildSearchView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        children: [
+          const SizedBox(height: 60),
+          
+          // Campo de busca
+          TextField(
+            controller: _searchController,
+            onChanged: _performSearch,
+            style: const TextStyle(color: Colors.black),
+            decoration: InputDecoration(
+              hintText: 'Buscar por modelo ou marca',
+              hintStyle: const TextStyle(color: Colors.black54),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.black26),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.black26),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(
+                  color: AppColors.racingOrange,
+                  width: 2,
+                ),
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                color: Colors.black54,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Resultados da busca
+          if (_isSearching && _searchResults.isEmpty && _searchController.text.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Text(
+                'Nenhuma moto encontrada',
+                style: TextStyle(color: Colors.black54),
+              ),
+            )
+          else if (_searchResults.isNotEmpty)
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _searchResults.length,
+              itemBuilder: (context, index) {
+                final moto = _searchResults[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    leading: Image.asset(
+                      moto.brandImagePath,
+                      width: 50,
+                      height: 50,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.motorcycle);
+                      },
+                    ),
+                    title: Text(
+                      '${moto.brand} ${moto.model}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${moto.displacement} • ${moto.abs}',
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                    onTap: () => _selectMotorcycle(moto),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMotorcycleDetailView() {
+    final moto = _selectedMotorcycle!;
+    
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Banner/Logo da marca
+          Container(
+            width: double.infinity,
+            height: 150,
+            decoration: BoxDecoration(
+              color: AppColors.racingOrange.withOpacity(0.1),
+            ),
+            child: Stack(
               children: [
-                const Text(
-                  'Dados Técnicos',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
+                Center(
+                  child: Image.asset(
+                    moto.brandImagePath,
+                    width: 200,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Image.asset(
+                        'assets/marca/banner-header.png',
+                        width: 200,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(Icons.motorcycle, size: 80);
+                        },
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Configure os dados da sua moto para começar o monitoramento',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: AppColors.textSecondary,
+                Positioned(
+                  top: 16,
+                  left: 16,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.black),
+                    onPressed: () {
+                      setState(() {
+                        _selectedMotorcycle = null;
+                        _searchController.clear();
+                      });
+                    },
                   ),
-                ),
-                const SizedBox(height: 48),
-                TextFormField(
-                  controller: _plateController,
-                  decoration: const InputDecoration(
-                    labelText: 'Placa',
-                    hintText: 'ABC-1234',
-                    prefixIcon: Icon(Icons.description),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Por favor, insira a placa';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _currentKmController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Quilometragem Atual (km)',
-                    prefixIcon: Icon(Icons.speed),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Por favor, insira a quilometragem';
-                    }
-                    final km = int.tryParse(value);
-                    if (km == null || km < 0) {
-                      return 'Quilometragem inválida';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _oilTypeController,
-                  decoration: const InputDecoration(
-                    labelText: 'Tipo de Óleo',
-                    hintText: 'Ex: 10W-40 Sintético',
-                    prefixIcon: Icon(Icons.water_drop),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Por favor, insira o tipo de óleo';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _frontTireController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Pressão Pneu Dianteiro (bar)',
-                    prefixIcon: Icon(Icons.circle),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Por favor, insira a pressão';
-                    }
-                    final pressure = double.tryParse(value);
-                    if (pressure == null || pressure <= 0) {
-                      return 'Pressão inválida';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _rearTireController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Pressão Pneu Traseiro (bar)',
-                    prefixIcon: Icon(Icons.circle),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Por favor, insira a pressão';
-                    }
-                    final pressure = double.tryParse(value);
-                    if (pressure == null || pressure <= 0) {
-                      return 'Pressão inválida';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 48),
-                ElevatedButton(
-                  onPressed: _handleComplete,
-                  child: const Text('Continuar'),
                 ),
               ],
             ),
           ),
-        ),
+          
+          const SizedBox(height: 24),
+          
+          // Nome do modelo
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              moto.model.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 32),
+          
+          // Imagem da moto
+          Container(
+            height: 250,
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/images/moto-black.png',
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 32),
+          
+          // Especificações
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSpecRow('Cilindrada', moto.displacement),
+                const SizedBox(height: 16),
+                _buildSpecRow('ABS / Outros', moto.abs),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 48),
+          
+          // Botão CONTINUAR
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _handleContinue,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.racingOrange,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                child: const Text('CONTINUAR'),
+              ),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildSpecRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

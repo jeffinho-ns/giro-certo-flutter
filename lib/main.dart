@@ -3,8 +3,9 @@ import 'package:provider/provider.dart';
 import 'providers/app_state_provider.dart';
 import 'utils/theme.dart';
 import 'screens/login/splash_screen.dart';
+import 'screens/login/login_screen.dart';
 import 'screens/login/register_screen.dart';
-import 'screens/login/profile_basic_screen.dart';
+
 import 'screens/login/garage_intro_screen.dart';
 import 'screens/login/garage_setup_screen.dart';
 import 'screens/login/pilot_profile_screen.dart';
@@ -60,25 +61,37 @@ class _AuthWrapperState extends State<AuthWrapper> {
     });
   }
 
-  void _handleRegister(String name, String email, String password) {
+  void _handleLogin() {
+    // Por enquanto, vai direto para a tela principal com dados mockados
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    appState.initializeMockData();
+    setState(() {
+      _currentStep = 999; // Ir para tela principal
+    });
+  }
+
+  void _handleRegister() {
+    // Vai para a tela de registro
+    setState(() {
+      _currentStep = 2; // Ir para tela de registro (que agora é step 2)
+    });
+  }
+
+  void _handleRegisterComplete(String name, String email, String password, int age) {
     setState(() {
       _userName = name;
       _userEmail = email;
       _userPassword = password;
-      _currentStep++;
+      _userAge = age;
+      _currentStep = 4; // Ir direto para GarageIntro
     });
   }
 
-  void _handleProfileBasic(String name, int age, String bikeModel) {
-    setState(() {
-      _userName = name;
-      _userAge = age;
-      _bikeModel = bikeModel;
-      _currentStep++;
-    });
-  }
+
 
   void _handleGarageSetup({
+    required String brand,
+    required String model,
     required String plate,
     required int currentKm,
     required String oilType,
@@ -86,6 +99,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     required double rearTirePressure,
   }) {
     setState(() {
+      _bikeModel = '$brand $model';
       _plate = plate;
       _currentKm = currentKm;
       _oilType = oilType;
@@ -154,17 +168,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
       case 0:
         return SplashScreen(onComplete: _goToNextStep);
       case 1:
-        return RegisterScreen(onRegister: _handleRegister);
-      case 2:
-        return ProfileBasicScreen(
-          userName: _userName,
-          onComplete: _handleProfileBasic,
+        return LoginScreen(
+          onLogin: _handleLogin,
+          onRegister: _handleRegister,
         );
-      case 3:
-        return GarageIntroScreen(onContinue: _goToNextStep);
+      case 2:
+        return RegisterScreen(onRegister: _handleRegisterComplete);
+
       case 4:
-        return GarageSetupScreen(onComplete: _handleGarageSetup);
+        return GarageIntroScreen(onContinue: _goToNextStep);
       case 5:
+        return GarageSetupScreen(onComplete: _handleGarageSetup);
+      case 6:
         return PilotProfileScreen(onSelectProfile: _handlePilotProfile);
       default:
         return const MainNavigation();

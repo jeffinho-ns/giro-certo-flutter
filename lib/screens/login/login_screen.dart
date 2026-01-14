@@ -1,43 +1,36 @@
 import 'package:flutter/material.dart';
 import '../../utils/colors.dart';
 
-class RegisterScreen extends StatefulWidget {
-  final Function(String name, String email, String password, int age) onRegister;
+class LoginScreen extends StatefulWidget {
+  final VoidCallback onLogin;
+  final VoidCallback onRegister;
 
-  const RegisterScreen({
+  const LoginScreen({
     super.key,
+    required this.onLogin,
     required this.onRegister,
   });
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _ageController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _ageController.dispose();
     super.dispose();
   }
 
-  void _handleRegister() {
+  void _handleLogin() {
     if (_formKey.currentState!.validate()) {
-      widget.onRegister(
-        _nameController.text,
-        _emailController.text,
-        _passwordController.text,
-        int.parse(_ageController.text),
-      );
+      widget.onLogin();
     }
   }
 
@@ -65,7 +58,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 children: [
                   const SizedBox(height: 40),
                   const Text(
-                    'Registrar',
+                    'Entrar',
                     style: TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.bold,
@@ -74,114 +67,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Crie sua conta para começar',
+                    'Entre na sua conta para continuar',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 48),
-                  
-                  // Campo Nome
-                  const Text(
-                    'Nome Completo',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _nameController,
-                    style: const TextStyle(color: Colors.black),
-                    decoration: InputDecoration(
-                      hintText: 'Seu nome completo',
-                      hintStyle: const TextStyle(color: Colors.black54),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.black26),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.black26),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.racingOrange,
-                          width: 2,
-                        ),
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.person_outlined,
-                        color: Colors.black54,
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira seu nome';
-                      }
-                      return null;
-                    },
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Campo Idade
-                  const Text(
-                    'Idade',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _ageController,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Colors.black),
-                    decoration: InputDecoration(
-                      hintText: 'Sua idade',
-                      hintStyle: const TextStyle(color: Colors.black54),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.black26),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.black26),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.racingOrange,
-                          width: 2,
-                        ),
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.cake,
-                        color: Colors.black54,
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira sua idade';
-                      }
-                      final age = int.tryParse(value);
-                      if (age == null || age < 16 || age > 100) {
-                        return 'Idade inválida';
-                      }
-                      return null;
-                    },
-                  ),
-
-                  const SizedBox(height: 24),
                   
                   // Campo Email
                   const Text(
@@ -291,20 +183,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Por favor, insira sua senha';
                       }
-                      if (value.length < 6) {
-                        return 'Senha deve ter pelo menos 6 caracteres';
-                      }
                       return null;
                     },
                   ),
                   
                   const SizedBox(height: 48),
                   
-                  // Botão Registrar
+                  // Botão Entrar
                   SizedBox(
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _handleRegister,
+                      onPressed: _handleLogin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.racingOrange,
                         foregroundColor: Colors.white,
@@ -317,7 +206,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      child: const Text('Registrar'),
+                      child: const Text('Entrar'),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 32),
+                  
+                  // Link para Registrar
+                  Center(
+                    child: GestureDetector(
+                      onTap: widget.onRegister,
+                      child: RichText(
+                        text: const TextSpan(
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                          children: [
+                            TextSpan(text: 'Ainda não tem conta? '),
+                            TextSpan(
+                              text: 'Registrar',
+                              style: TextStyle(
+                                color: AppColors.racingOrange,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
