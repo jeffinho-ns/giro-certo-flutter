@@ -5,14 +5,22 @@ import '../models/part.dart';
 import '../models/post.dart';
 
 class MockDataService {
+  static User? _cachedUser;
+  static Bike? _cachedBike;
+  static List<Maintenance>? _cachedMaintenances;
+  static List<Part>? _cachedParts;
+  static List<Post>? _cachedPosts;
+
   static User getMockUser() {
-    return User(
+    if (_cachedUser != null) return _cachedUser!;
+    _cachedUser = User(
       id: '1',
       name: 'João Silva',
       email: 'joao@example.com',
       age: 28,
       pilotProfile: 'Urbano',
     );
+    return _cachedUser!;
   }
 
   static Bike getMockBike() {
@@ -26,6 +34,7 @@ class MockDataService {
       frontTirePressure: 2.5,
       rearTirePressure: 2.8,
     );
+    return _cachedBike!;
   }
 
   static List<Maintenance> getMockMaintenances(int currentKm) {

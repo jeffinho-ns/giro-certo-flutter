@@ -1,8 +1,12 @@
 import '../models/motorcycle_model.dart';
 
 class MotorcycleDataService {
+  static List<MotorcycleModel>? _cachedList;
+
   static List<MotorcycleModel> getAllMotorcycles() {
-    return [
+    if (_cachedList != null) return _cachedList!;
+
+    _cachedList = [
       // Honda
       MotorcycleModel(id: '1', brand: 'Honda', model: 'CG 125', displacement: '125 cc', abs: 'Sem ABS'),
       MotorcycleModel(id: '2', brand: 'Honda', model: 'CG 160', displacement: '160 cc', abs: 'ABS em versões superiores'),
@@ -56,6 +60,7 @@ class MotorcycleDataService {
       MotorcycleModel(id: '44', brand: 'Ducati', model: 'Panigale V2', displacement: '950 cc', abs: 'ABS + electronics'),
       MotorcycleModel(id: '45', brand: 'Ducati', model: 'Multistrada', displacement: '1260 cc', abs: 'ABS + electronics'),
     ];
+    return _cachedList!;
   }
 
   static List<MotorcycleModel> searchMotorcycles(String query) {

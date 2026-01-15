@@ -29,19 +29,20 @@ class _SplashScreenState extends State<SplashScreen> {
     final stripeWidth = initialStripeWidth + (screenWidth - initialStripeWidth) * progress;
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFFFFFFF), // #ffffff
-              Color(0xFFD2D2D2), // #d2d2d2
-            ],
+      body: SizedBox.expand(
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFFFFFFF), // #ffffff
+                Color(0xFFD2D2D2), // #d2d2d2
+              ],
+            ),
           ),
-        ),
-        child: Stack(
-          children: [
+          child: Stack(
+            children: [
             // Faixa laranja animada
             AnimatedPositioned(
               duration: const Duration(milliseconds: 100),
@@ -126,7 +127,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         // Slider com anel branco
                         AnimatedPositioned(
                           duration: _completed 
-                              ? const Duration(milliseconds: 300) 
+                              ? const Duration(milliseconds: 80) 
                               : Duration.zero,
                           curve: Curves.easeOut,
                           left: _dragPosition.clamp(0.0, buttonWidth - slideButtonWidth),
@@ -140,9 +141,8 @@ class _SplashScreenState extends State<SplashScreen> {
                                   
                                   if (_dragPosition >= buttonWidth - slideButtonWidth - 10) {
                                     _completed = true;
-                                    Future.delayed(const Duration(milliseconds: 300), () {
-                                      widget.onComplete();
-                                    });
+                                    // Small delay to allow final render, then navigate instantly
+                                    Future.microtask(() => widget.onComplete());
                                   }
                                 });
                               }
@@ -203,6 +203,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

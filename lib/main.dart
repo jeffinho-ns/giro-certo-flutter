@@ -5,15 +5,18 @@ import 'utils/theme.dart';
 import 'screens/login/splash_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/login/register_screen.dart';
-
 import 'screens/login/garage_intro_screen.dart';
 import 'screens/login/garage_setup_screen.dart';
 import 'screens/login/pilot_profile_screen.dart';
 import 'screens/main_navigation.dart';
 import 'models/user.dart';
 import 'models/bike.dart';
+import 'services/app_preload_service.dart';
+import 'services/motorcycle_data_service.dart';
+import 'utils/colors.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -54,6 +57,38 @@ class _AuthWrapperState extends State<AuthWrapper> {
   String _oilType = '10W-40 Sintético';
   double _frontTirePressure = 2.5;
   double _rearTirePressure = 2.8;
+  bool _isPreloading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _preloadAssets();
+  }
+
+  Future<void> _preloadAssets() async {
+    // Aguardar o primeiro frame antes de pré-carregar
+    await Future.delayed(const Duration(milliseconds: 50));
+    
+    if (!mounted) return;
+    
+    // Pré-carregar todos os assets com timeout
+    try {
+      await AppPreloadService.preloadAllAssets(context).timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          // Timeout - continua mesmo sem pré-carregar tudo
+        },
+      );
+    } catch (e) {
+      // Continua mesmo se houver erro
+    }
+    
+    if (mounted) {
+      setState(() {
+        _isPreloading = false;
+      });
+    }
+  }
 
   void _goToNextStep() {
     setState(() {
@@ -62,18 +97,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _handleLogin() {
-    // Por enquanto, vai direto para a tela principal com dados mockados
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     appState.initializeMockData();
     setState(() {
-      _currentStep = 999; // Ir para tela principal
+      _currentStep = 999;
     });
   }
 
   void _handleRegister() {
-    // Vai para a tela de registro
     setState(() {
-      _currentStep = 2; // Ir para tela de registro (que agora é step 2)
+      _currentStep = 2;
     });
   }
 
@@ -83,11 +116,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
       _userEmail = email;
       _userPassword = password;
       _userAge = age;
-      _currentStep = 4; // Ir direto para GarageIntro
+      _currentStep = 4;
     });
   }
-
-
 
   void _handleGarageSetup({
     required String brand,
@@ -119,7 +150,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void _finalizeSetup() {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     
-    // Criar usuário
     final user = User(
       id: '1',
       name: _userName,
@@ -128,7 +158,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       pilotProfile: _pilotProfile,
     );
     
-    // Criar bike (separar marca e modelo)
     final bikeParts = _bikeModel.split(' ');
     final brand = bikeParts.isNotEmpty ? bikeParts[0] : 'Desconhecida';
     final model = bikeParts.length > 1 ? bikeParts.sublist(1).join(' ') : _bikeModel;
@@ -150,7 +179,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     appState.completeSetup();
     
     setState(() {
-      _currentStep = 999; // Ir para tela principal
+      _currentStep = 999;
     });
   }
 
@@ -158,12 +187,32 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
     
-    // Se já está logado, mostra a tela principal
+    if (_isPreloading) {
+      return Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFFFFFFF),
+                Color(0xFFD2D2D2),
+              ],
+            ),
+          ),
+          child: const Center(
+            child: CircularProgressIndicator(
+              color: AppColors.racingOrange,
+            ),
+          ),
+        ),
+      );
+    }
+    
     if (appState.isLoggedIn && appState.hasCompletedSetup) {
       return const MainNavigation();
     }
 
-    // Fluxo de login
     switch (_currentStep) {
       case 0:
         return SplashScreen(onComplete: _goToNextStep);
@@ -174,7 +223,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         );
       case 2:
         return RegisterScreen(onRegister: _handleRegisterComplete);
-
       case 4:
         return GarageIntroScreen(onContinue: _goToNextStep);
       case 5:
