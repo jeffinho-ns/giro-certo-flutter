@@ -41,6 +41,8 @@ class MotorcycleModel {
       'KTM': 'ktm',
       'Kymco': 'kymco',
       'Piaggio / Vespa': 'piaggio',
+      'Vespa': 'piaggio',
+      'Piaggio': 'piaggio',
     };
     return 'assets/marca/${brandMap[brand] ?? 'honda'}.png';
   }

@@ -25,6 +25,17 @@ class AppPreloadService {
         'assets/marca/tvs.png',
         'assets/marca/suzuki.png',
         'assets/marca/ktm.png',
+        'assets/marca/shineray.png',
+        'assets/marca/mottu.png',
+        'assets/marca/avelloz.png',
+        'assets/marca/baja.png',
+        'assets/marca/triumph.png',
+        'assets/marca/dafra.png',
+        'assets/marca/voltz.png',
+        'assets/marca/aurat.png',
+        'assets/marca/gcx.png',
+        'assets/marca/kymco.png',
+        'assets/marca/piaggio.png',
       ];
 
       // Pré-carregar imagens em paralelo com timeout
