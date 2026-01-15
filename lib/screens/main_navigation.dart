@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 import 'home/home_screen.dart';
 import 'garage/garage_screen.dart';
 import 'ranking/ranking_screen.dart';
 import 'manual/manual_screen.dart';
 import 'community/community_screen.dart';
 import 'maintenance/maintenance_detail_screen.dart';
-import '../utils/colors.dart';
+import 'settings/settings_screen.dart';
+import '../widgets/floating_bottom_nav.dart';
+import 'sidebars/profile_sidebar.dart';
+import '../providers/drawer_provider.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -17,55 +20,53 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final List<Widget> _screens = [
     const HomeScreen(),
     const MaintenanceDetailScreen(),
     const RankingScreen(),
-    const ManualScreen(),
     const CommunityScreen(),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Registrar a chave do scaffold no provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final drawerProvider = Provider.of<DrawerProvider>(context, listen: false);
+      drawerProvider.setScaffoldKey(_scaffoldKey);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
-      body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppColors.darkGray,
-        selectedItemColor: AppColors.racingOrange,
-        unselectedItemColor: AppColors.textSecondary,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.wrench),
-            label: 'Manutenção',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.trophy),
-            label: 'Ranking',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.bookOpen),
-            label: 'Manual',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.users),
-            label: 'Comunidade',
+      key: _scaffoldKey,
+      drawerEnableOpenDragGesture: true,
+      body: Stack(
+        children: [
+          _screens[_currentIndex],
+          // Bottom navigation flutuante
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: FloatingBottomNav(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+            ),
           ),
         ],
       ),
+      endDrawer: const ProfileSidebar(),
+      endDrawerEnableOpenDragGesture: true,
     );
   }
 }

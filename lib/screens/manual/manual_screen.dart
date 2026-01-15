@@ -47,84 +47,142 @@ class _ManualScreenState extends State<ManualScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
-      backgroundColor: AppColors.darkGrafite,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Manual Interativo'),
-      ),
-      body: _selectedPart == null ? _buildBikeDiagram() : _buildPartDetail(_selectedPart!),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: _selectedPart == null ? _buildBikeDiagram(theme) : _buildPartDetail(_selectedPart!, theme),
     );
   }
 
-  Widget _buildBikeDiagram() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          const Text(
-            'Knowledge Hub',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
+  Widget _buildBikeDiagram(ThemeData theme) {
+    return CustomScrollView(
+      slivers: [
+        // Header
+        SliverAppBar(
+          expandedHeight: 100,
+          floating: false,
+          pinned: true,
+          backgroundColor: theme.scaffoldBackgroundColor,
+          elevation: 0,
+          flexibleSpace: FlexibleSpaceBar(
+            title: Text(
+              'Manual Interativo',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                letterSpacing: -0.5,
+              ),
             ),
+            centerTitle: false,
+            titlePadding: const EdgeInsets.only(left: 24, bottom: 16),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Toque em uma parte para saber mais',
-            style: TextStyle(
-              fontSize: 16,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 48),
-          
-          // Diagrama simplificado da moto
-          Container(
-            height: 400,
-            decoration: BoxDecoration(
-              color: AppColors.darkGray,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Stack(
-              children: [
-                // Desenho simplificado usando ícones e textos
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildPartButton('Pneus', 0.2, 0.1),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildPartButton('Freios', 0.15, 0.3),
-                          _buildPartButton('Motor', 0.2, 0.4),
-                          _buildPartButton('Suspensão', 0.15, 0.3),
+        ),
+        
+        // Conteúdo
+        SliverPadding(
+          padding: const EdgeInsets.all(24),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              Builder(
+                builder: (context) {
+                  return Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppColors.racingOrange.withOpacity(0.12),
+                          AppColors.racingOrange.withOpacity(0.05),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildPartButton('Transmissão', 0.15, 0.3),
-                          _buildPartButton('Elétrica', 0.15, 0.3),
-                        ],
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: AppColors.racingOrange.withOpacity(0.2),
+                        width: 1.5,
                       ),
-                    ],
-                  ),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Knowledge Hub',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Toque em uma parte para saber mais',
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 32),
+              
+              // Diagrama simplificado
+              Builder(
+                builder: (context) {
+                  final theme = Theme.of(context);
+                  return Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: theme.dividerColor,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildPartButton('Pneus', 0.2, 0.1),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildPartButton('Freios', 0.15, 0.3),
+                            _buildPartButton('Motor', 0.2, 0.4),
+                            _buildPartButton('Suspensão', 0.15, 0.3),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildPartButton('Transmissão', 0.15, 0.3),
+                            _buildPartButton('Elétrica', 0.15, 0.3),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              
+              const SizedBox(height: 32),
+              
+              // Lista de partes
+              Text(
+                'Todas as Partes',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              ..._partsInfo.keys.map((partKey) => _buildPartListItem(partKey, theme)),
+            ]),
           ),
-          
-          const SizedBox(height: 32),
-          
-          // Lista de partes
-          ..._partsInfo.keys.map((partKey) => _buildPartListItem(partKey)),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -135,9 +193,24 @@ class _ManualScreenState extends State<ManualScreen> {
         width: 100,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.racingOrange.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.racingOrange, width: 2),
+          gradient: LinearGradient(
+            colors: [
+              AppColors.racingOrange.withOpacity(0.2),
+              AppColors.racingOrange.withOpacity(0.1),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: AppColors.racingOrange,
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.racingOrange.withOpacity(0.2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -163,98 +236,166 @@ class _ManualScreenState extends State<ManualScreen> {
     );
   }
 
-  Widget _buildPartListItem(String part) {
+  Widget _buildPartListItem(String part, ThemeData theme) {
     final info = _partsInfo[part]!;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        onTap: () => setState(() => _selectedPart = part),
-        contentPadding: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        tileColor: AppColors.darkGray,
-        leading: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.racingOrange.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => setState(() => _selectedPart = part),
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: theme.dividerColor,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.racingOrange.withOpacity(0.2),
+                        AppColors.racingOrange.withOpacity(0.1),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    _getIconForPart(part),
+                    color: AppColors.racingOrange,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        info['title']!,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Toque para ver detalhes',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  LucideIcons.chevronRight,
+                  color: theme.iconTheme.color,
+                ),
+              ],
+            ),
           ),
-          child: Icon(
-            _getIconForPart(part),
-            color: AppColors.racingOrange,
-          ),
-        ),
-        title: Text(
-          info['title']!,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        trailing: const Icon(
-          LucideIcons.chevronRight,
-          color: AppColors.textSecondary,
         ),
       ),
     );
   }
 
-  Widget _buildPartDetail(String part) {
+  Widget _buildPartDetail(String part, ThemeData theme) {
     final info = _partsInfo[part]!;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          IconButton(
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          expandedHeight: 100,
+          floating: false,
+          pinned: true,
+          backgroundColor: theme.scaffoldBackgroundColor,
+          elevation: 0,
+          leading: IconButton(
             icon: const Icon(LucideIcons.arrowLeft),
             onPressed: () => setState(() => _selectedPart = null),
           ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppColors.darkGray,
-              borderRadius: BorderRadius.circular(24),
+          flexibleSpace: FlexibleSpaceBar(
+            title: Text(
+              info['title']!,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                letterSpacing: -0.5,
+              ),
             ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppColors.racingOrange.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _getIconForPart(part),
-                    color: AppColors.racingOrange,
-                    size: 64,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  info['title']!,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  info['description']!,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: AppColors.textSecondary,
-                    height: 1.6,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+            centerTitle: false,
+            titlePadding: const EdgeInsets.only(left: 56, bottom: 16),
           ),
-        ],
-      ),
+        ),
+        
+        SliverPadding(
+          padding: const EdgeInsets.all(24),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              Container(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.racingOrange.withOpacity(0.15),
+                      AppColors.racingOrange.withOpacity(0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: AppColors.racingOrange.withOpacity(0.3),
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.racingOrange,
+                            AppColors.racingOrangeLight,
+                          ],
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _getIconForPart(part),
+                        color: Colors.white,
+                        size: 64,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Builder(
+                      builder: (context) {
+                        final theme = Theme.of(context);
+                        return Text(
+                          info['description']!,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontSize: 16,
+                            height: 1.7,
+                          ),
+                          textAlign: TextAlign.center,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ],
     );
   }
 

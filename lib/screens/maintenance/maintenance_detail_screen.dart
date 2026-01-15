@@ -5,6 +5,7 @@ import '../../providers/app_state_provider.dart';
 import '../../services/mock_data_service.dart';
 import '../../models/maintenance.dart';
 import '../../utils/colors.dart';
+import '../../widgets/modern_header.dart';
 import 'package:intl/intl.dart';
 
 class MaintenanceDetailScreen extends StatelessWidget {
@@ -15,26 +16,35 @@ class MaintenanceDetailScreen extends StatelessWidget {
     final appState = Provider.of<AppStateProvider>(context);
     final bike = appState.bike!;
     final maintenances = MockDataService.getMockMaintenances(bike.currentKm);
+    final theme = Theme.of(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.darkGrafite,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Manutenção Detalhada'),
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: maintenances.length,
-        itemBuilder: (context, index) {
-          final maintenance = maintenances[index];
-          return _buildMaintenanceCard(maintenance);
-        },
-      ),
-    );
+    return SafeArea(
+      bottom: false,
+      child: Column(
+          children: [
+            // Header
+            const ModernHeader(
+              title: 'Manutenção Detalhada',
+              showBackButton: false,
+            ),
+            
+            // Lista de manutenções
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(24),
+                itemCount: maintenances.length,
+                itemBuilder: (context, index) {
+                  final maintenance = maintenances[index];
+                  return _buildModernMaintenanceCard(maintenance, theme);
+                },
+              ),
+            ),
+          ],
+        ),
+      );
   }
 
-  Widget _buildMaintenanceCard(Maintenance maintenance) {
+  Widget _buildModernMaintenanceCard(Maintenance maintenance, ThemeData theme) {
     Color statusColor;
     IconData statusIcon;
     
@@ -50,144 +60,230 @@ class MaintenanceDetailScreen extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.darkGray,
-        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            statusColor.withOpacity(0.1),
+            statusColor.withOpacity(0.05),
+          ],
+        ),
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: statusColor.withOpacity(0.3),
-          width: 1,
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Text(
-                  maintenance.partName,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: Icon(
+                  statusIcon,
+                  color: statusColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(statusIcon, color: statusColor, size: 16),
-                    const SizedBox(width: 4),
                     Text(
-                      maintenance.status,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 12,
+                      maintenance.partName,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      maintenance.category,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontSize: 14,
+                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
                       ),
                     ),
                   ],
                 ),
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: statusColor,
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  maintenance.status,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            maintenance.category,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 16),
           
-          // Barra de Vida
+          const SizedBox(height: 24),
+          
+          // Barra de progresso moderna
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Saúde: ${(maintenance.healthPercentage * 100).toInt()}%',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.activity,
+                        size: 16,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Saúde: ${(maintenance.healthPercentage * 100).toInt()}%',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '${maintenance.remainingKm} km restantes',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.mapPin,
+                        size: 16,
+                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${maintenance.remainingKm} km restantes',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
                 child: LinearProgressIndicator(
                   value: maintenance.healthPercentage,
-                  minHeight: 12,
-                  backgroundColor: AppColors.mediumGray,
+                  minHeight: 10,
+                  backgroundColor: statusColor.withOpacity(0.2),
                   valueColor: AlwaysStoppedAnimation<Color>(statusColor),
                 ),
               ),
             ],
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           
-          Row(
-            children: [
-              Expanded(
-                child: _buildInfoItem(
-                  'Última Troca',
-                  '${NumberFormat('#,###').format(maintenance.lastChangeKm)} km',
+          // Informações em grid
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildInfoItem(
+                    theme: theme,
+                    icon: LucideIcons.clock,
+                    label: 'Última Troca',
+                    value: '${NumberFormat('#,###').format(maintenance.lastChangeKm)} km',
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _buildInfoItem(
-                  'Recomendado',
-                  '${NumberFormat('#,###').format(maintenance.recommendedChangeKm)} km',
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: theme.dividerColor,
                 ),
-              ),
-            ],
+                Expanded(
+                  child: _buildInfoItem(
+                    theme: theme,
+                    icon: LucideIcons.target,
+                    label: 'Recomendado',
+                    value: '${NumberFormat('#,###').format(maintenance.recommendedChangeKm)} km',
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoItem(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.textSecondary,
+  Widget _buildInfoItem({
+    required ThemeData theme,
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 12,
+                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

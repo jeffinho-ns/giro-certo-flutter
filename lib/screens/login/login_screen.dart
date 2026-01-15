@@ -36,18 +36,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SizedBox.expand(
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFFFFFFFF), // #ffffff
-                Color(0xFFD2D2D2), // #d2d2d2
-              ],
-            ),
+          decoration: BoxDecoration(
+            gradient: isDark
+                ? LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      theme.scaffoldBackgroundColor,
+                      theme.scaffoldBackgroundColor,
+                    ],
+                  )
+                : const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFFFFFFFF),
+                      Color(0xFFD2D2D2),
+                    ],
+                  ),
           ),
           child: SafeArea(
             child: SingleChildScrollView(
@@ -58,50 +71,43 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 40),
-                  const Text(
+                  Text(
                     'Entrar',
-                    style: TextStyle(
+                    style: theme.textTheme.displaySmall?.copyWith(
                       fontSize: 36,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Entre na sua conta para continuar',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.black87,
-                    ),
+                    style: theme.textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 48),
                   
                   // Campo Email
-                  const Text(
+                  Text(
                     'Email',
-                    style: TextStyle(
+                    style: theme.textTheme.bodyMedium?.copyWith(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: Colors.black),
+                    style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                     decoration: InputDecoration(
                       hintText: 'Seu email',
-                      hintStyle: const TextStyle(color: Colors.black54),
                       filled: true,
-                      fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.black26),
+                        borderSide: BorderSide(color: theme.dividerColor),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.black26),
+                        borderSide: BorderSide(color: theme.dividerColor),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -110,9 +116,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 2,
                         ),
                       ),
-                      prefixIcon: const Icon(
+                      prefixIcon: Icon(
                         Icons.email_outlined,
-                        color: Colors.black54,
+                        color: theme.iconTheme.color,
                       ),
                     ),
                     validator: (value) {
@@ -129,31 +135,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 24),
                   
                   // Campo Senha
-                  const Text(
+                  Text(
                     'Senha',
-                    style: TextStyle(
+                    style: theme.textTheme.bodyMedium?.copyWith(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
-                    style: const TextStyle(color: Colors.black),
+                    style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                     decoration: InputDecoration(
                       hintText: 'Sua senha',
-                      hintStyle: const TextStyle(color: Colors.black54),
                       filled: true,
-                      fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.black26),
+                        borderSide: BorderSide(color: theme.dividerColor),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.black26),
+                        borderSide: BorderSide(color: theme.dividerColor),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -162,16 +165,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 2,
                         ),
                       ),
-                      prefixIcon: const Icon(
+                      prefixIcon: Icon(
                         Icons.lock_outlined,
-                        color: Colors.black54,
+                        color: theme.iconTheme.color,
                       ),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
                               ? Icons.visibility_off_outlined
                               : Icons.visibility_outlined,
-                          color: Colors.black54,
+                          color: theme.iconTheme.color,
                         ),
                         onPressed: () {
                           setState(() {
@@ -218,13 +221,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: GestureDetector(
                       onTap: widget.onRegister,
                       child: RichText(
-                        text: const TextSpan(
-                          style: TextStyle(
+                        text: TextSpan(
+                          style: theme.textTheme.bodyMedium?.copyWith(
                             fontSize: 14,
-                            color: Colors.black87,
                           ),
                           children: [
-                            TextSpan(text: 'Ainda não tem conta? '),
+                            const TextSpan(text: 'Ainda não tem conta? '),
                             TextSpan(
                               text: 'Registrar',
                               style: TextStyle(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_state_provider.dart';
+import 'providers/theme_provider.dart';
+import 'providers/drawer_provider.dart';
 import 'utils/theme.dart';
 import 'screens/login/splash_screen.dart';
 import 'screens/login/login_screen.dart';
@@ -25,13 +27,29 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppStateProvider(),
-      child: MaterialApp(
-        title: 'Giro Certo',
-        theme: AppTheme.darkTheme,
-        debugShowCheckedModeBanner: false,
-        home: const AuthWrapper(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AppStateProvider()),
+        ChangeNotifierProvider(create: (_) => DrawerProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp(
+            title: 'Giro Certo',
+            theme: AppTheme.getLightTheme(
+              primaryColor: themeProvider.primaryColor,
+              primaryLightColor: themeProvider.primaryLightColor,
+            ),
+            darkTheme: AppTheme.getDarkTheme(
+              primaryColor: themeProvider.primaryColor,
+              primaryLightColor: themeProvider.primaryLightColor,
+            ),
+            themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+            debugShowCheckedModeBanner: false,
+            home: const AuthWrapper(),
+          );
+        },
       ),
     );
   }
@@ -186,19 +204,31 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     
     if (_isPreloading) {
       return Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFFFFFFFF),
-                Color(0xFFD2D2D2),
-              ],
-            ),
+          decoration: BoxDecoration(
+            gradient: isDark
+                ? LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      theme.scaffoldBackgroundColor,
+                      theme.scaffoldBackgroundColor,
+                    ],
+                  )
+                : const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFFFFFFFF),
+                      Color(0xFFD2D2D2),
+                    ],
+                  ),
           ),
           child: const Center(
             child: CircularProgressIndicator(
