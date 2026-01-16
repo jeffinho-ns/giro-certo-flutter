@@ -19,6 +19,7 @@ class FloatingBottomNav extends StatelessWidget {
     final navItems = [
       {'icon': LucideIcons.home, 'label': 'Home'},
       {'icon': LucideIcons.wrench, 'label': 'Manutenção'},
+      {'icon': LucideIcons.store, 'label': 'Parceiros'},
       {'icon': LucideIcons.trophy, 'label': 'Ranking'},
       {'icon': LucideIcons.users, 'label': 'Comunidade'},
     ];

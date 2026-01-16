@@ -3,6 +3,7 @@ import '../models/bike.dart';
 import '../models/maintenance.dart';
 import '../models/part.dart';
 import '../models/post.dart';
+import '../models/partner.dart';
 
 class MockDataService {
   static User? _cachedUser;
@@ -213,6 +214,150 @@ class MockDataService {
         likes: 67,
         comments: 15,
         isSameBike: true,
+      ),
+    ];
+  }
+
+  static List<Partner> getMockPartners() {
+    return [
+      // Lojas
+      Partner(
+        id: 'p1',
+        name: 'MotoPeças Central',
+        type: PartnerType.store,
+        address: 'Av. Paulista, 1000 - São Paulo, SP',
+        latitude: -23.5505,
+        longitude: -46.6333,
+        rating: 4.7,
+        isTrusted: true,
+        specialties: ['Óleo', 'Pneus', 'Filtros'],
+        activePromotions: [
+          Promotion(
+            id: 'promo1',
+            description: '10% de desconto em óleo Motul',
+            code: 'GIRO10',
+            discountPercentage: 10.0,
+            category: 'Óleo',
+          ),
+          Promotion(
+            id: 'promo2',
+            description: '15% de desconto em filtros de ar',
+            code: 'FILTRO15',
+            discountPercentage: 15.0,
+            category: 'Filtros',
+          ),
+        ],
+      ),
+      Partner(
+        id: 'p2',
+        name: 'Bike Shop Premium',
+        type: PartnerType.store,
+        address: 'Rua Augusta, 500 - São Paulo, SP',
+        latitude: -23.5475,
+        longitude: -46.6512,
+        rating: 4.9,
+        isTrusted: true,
+        specialties: ['Pneus', 'Travões', 'Acessórios'],
+        activePromotions: [
+          Promotion(
+            id: 'promo3',
+            description: '20% de desconto em pneus Michelin',
+            code: 'PNEU20',
+            discountPercentage: 20.0,
+            category: 'Pneus',
+          ),
+        ],
+      ),
+      Partner(
+        id: 'p3',
+        name: 'AutoMoto Express',
+        type: PartnerType.store,
+        address: 'Av. Consolação, 2000 - São Paulo, SP',
+        latitude: -23.5489,
+        longitude: -46.6564,
+        rating: 4.5,
+        isTrusted: false,
+        specialties: ['Óleo', 'Travões'],
+        activePromotions: [
+          Promotion(
+            id: 'promo4',
+            description: '5% de desconto em qualquer produto',
+            code: 'EXPRESS5',
+            discountPercentage: 5.0,
+          ),
+        ],
+      ),
+      // Mecânicos de Confiança
+      Partner(
+        id: 'p4',
+        name: 'Mecânica Speed Motors',
+        type: PartnerType.mechanic,
+        address: 'Rua dos Três Irmãos, 100 - São Paulo, SP',
+        latitude: -23.5615,
+        longitude: -46.7282,
+        rating: 4.8,
+        isTrusted: true,
+        specialties: ['Manutenção Completa', 'Travões', 'Motor'],
+        activePromotions: [
+          Promotion(
+            id: 'promo5',
+            description: 'Revisão completa com 12% de desconto',
+            code: 'SPEED12',
+            discountPercentage: 12.0,
+          ),
+        ],
+      ),
+      Partner(
+        id: 'p5',
+        name: 'Oficina MotoExpert',
+        type: PartnerType.mechanic,
+        address: 'Av. Rebouças, 1500 - São Paulo, SP',
+        latitude: -23.5672,
+        longitude: -46.6744,
+        rating: 4.6,
+        isTrusted: true,
+        specialties: ['Pneus', 'Transmissão', 'Suspensão'],
+        activePromotions: [
+          Promotion(
+            id: 'promo6',
+            description: 'Troca de pneus com instalação grátis',
+            code: 'EXPERTGRATIS',
+            discountPercentage: 0.0,
+            category: 'Pneus',
+          ),
+        ],
+      ),
+      Partner(
+        id: 'p6',
+        name: 'Moto Service Vila Madalena',
+        type: PartnerType.mechanic,
+        address: 'Rua Harmonia, 300 - São Paulo, SP',
+        latitude: -23.5431,
+        longitude: -46.6913,
+        rating: 4.4,
+        isTrusted: false,
+        specialties: ['Óleo', 'Filtros'],
+        activePromotions: [],
+      ),
+      Partner(
+        id: 'p7',
+        name: 'Loja de Pneus Rápido',
+        type: PartnerType.store,
+        address: 'Av. Faria Lima, 800 - São Paulo, SP',
+        latitude: -23.5676,
+        longitude: -46.6928,
+        rating: 4.3,
+        isTrusted: false,
+        specialties: ['Pneus'],
+        activePromotions: [
+          Promotion(
+            id: 'promo7',
+            description: 'Pneus com menor preço garantido',
+            code: 'MENORPRECO',
+            discountPercentage: 8.0,
+            category: 'Pneus',
+          ),
+        ],
       ),
     ];
   }

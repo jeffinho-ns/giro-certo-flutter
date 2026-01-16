@@ -6,6 +6,7 @@ import 'ranking/ranking_screen.dart';
 import 'manual/manual_screen.dart';
 import 'community/community_screen.dart';
 import 'maintenance/maintenance_detail_screen.dart';
+import 'partners/partners_screen.dart';
 import 'settings/settings_screen.dart';
 import '../widgets/floating_bottom_nav.dart';
 import 'sidebars/profile_sidebar.dart';
@@ -25,6 +26,7 @@ class _MainNavigationState extends State<MainNavigation> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const MaintenanceDetailScreen(),
+    const PartnersScreen(),
     const RankingScreen(),
     const CommunityScreen(),
   ];
@@ -43,26 +45,30 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
+    // Ocultar menu na tela de Parceiros (índice 2)
+    final showBottomNav = _currentIndex != 2;
+    
     return Scaffold(
       key: _scaffoldKey,
       drawerEnableOpenDragGesture: true,
       body: Stack(
         children: [
           _screens[_currentIndex],
-          // Bottom navigation flutuante
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: FloatingBottomNav(
-              currentIndex: _currentIndex,
-              onTap: (index) {
-                setState(() {
-                  _currentIndex = index;
-                });
-              },
+          // Bottom navigation flutuante (oculto na tela de parceiros)
+          if (showBottomNav)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: FloatingBottomNav(
+                currentIndex: _currentIndex,
+                onTap: (index) {
+                  setState(() {
+                    _currentIndex = index;
+                  });
+                },
+              ),
             ),
-          ),
         ],
       ),
       endDrawer: const ProfileSidebar(),

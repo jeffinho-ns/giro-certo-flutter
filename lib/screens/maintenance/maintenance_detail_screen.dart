@@ -4,8 +4,10 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/mock_data_service.dart';
 import '../../models/maintenance.dart';
+import '../../models/partner.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
+import '../partners/voucher_modal.dart';
 import 'package:intl/intl.dart';
 
 class MaintenanceDetailScreen extends StatelessWidget {
@@ -35,7 +37,7 @@ class MaintenanceDetailScreen extends StatelessWidget {
                 itemCount: maintenances.length,
                 itemBuilder: (context, index) {
                   final maintenance = maintenances[index];
-                  return _buildModernMaintenanceCard(maintenance, theme);
+                  return _buildModernMaintenanceCard(context, maintenance, theme);
                 },
               ),
             ),
@@ -44,7 +46,7 @@ class MaintenanceDetailScreen extends StatelessWidget {
       );
   }
 
-  Widget _buildModernMaintenanceCard(Maintenance maintenance, ThemeData theme) {
+  Widget _buildModernMaintenanceCard(BuildContext context, Maintenance maintenance, ThemeData theme) {
     Color statusColor;
     IconData statusIcon;
     
@@ -241,8 +243,230 @@ class MaintenanceDetailScreen extends StatelessWidget {
               ],
             ),
           ),
+          
+          // Sugestão de parceiro para itens com status Atenção ou Crítico
+          if (maintenance.status == 'Atenção' || maintenance.status == 'Crítico')
+            _buildPartnerSuggestion(context, maintenance, theme),
         ],
       ),
+    );
+  }
+
+  Widget _buildPartnerSuggestion(BuildContext context, Maintenance maintenance, ThemeData theme) {
+    // Localização simulada do usuário
+    const double userLatitude = -23.5505;
+    const double userLongitude = -46.6333;
+    
+    final partners = MockDataService.getMockPartners();
+    
+    // Encontrar parceiros relevantes que tenham promoções para a categoria
+    final relevantPartners = partners.where((partner) {
+      // Verifica se o parceiro tem especialidade na categoria ou promoção relacionada
+      final hasSpecialty = partner.specialties.any(
+        (specialty) => specialty.toLowerCase() == maintenance.category.toLowerCase()
+      );
+      final hasPromotion = partner.activePromotions.any(
+        (promo) => promo.category?.toLowerCase() == maintenance.category.toLowerCase()
+      );
+      return (hasSpecialty || hasPromotion) && partner.activePromotions.isNotEmpty;
+    }).toList();
+    
+    if (relevantPartners.isEmpty) return const SizedBox.shrink();
+    
+    // Ordenar por distância
+    relevantPartners.sort((a, b) => 
+      a.distanceTo(userLatitude, userLongitude)
+        .compareTo(b.distanceTo(userLatitude, userLongitude))
+    );
+    
+    final nearestPartner = relevantPartners.first;
+    final distance = nearestPartner.distanceTo(userLatitude, userLongitude);
+    final relevantPromotion = nearestPartner.activePromotions.firstWhere(
+      (promo) => promo.category?.toLowerCase() == maintenance.category.toLowerCase(),
+      orElse: () => nearestPartner.activePromotions.first,
+    );
+
+    return Column(
+      children: [
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.racingOrange.withOpacity(0.2),
+                AppColors.racingOrange.withOpacity(0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.racingOrange.withOpacity(0.4),
+              width: 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.racingOrange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      LucideIcons.store,
+                      color: AppColors.racingOrange,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Precisa trocar este item?',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.racingOrange,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Veja a ${nearestPartner.type == PartnerType.store ? "Loja" : "Oficina"} ${nearestPartner.name}',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    LucideIcons.mapPin,
+                    size: 16,
+                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'A ${distance.toStringAsFixed(1)} km de distância',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const Spacer(),
+                  if (nearestPartner.isTrusted)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.neonGreen.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.shieldCheck,
+                            size: 12,
+                            color: AppColors.neonGreen,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Verificado',
+                            style: TextStyle(
+                              color: AppColors.neonGreen,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              if (relevantPromotion.discountPercentage > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.racingOrange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.tag,
+                        size: 16,
+                        color: AppColors.racingOrange,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${relevantPromotion.discountPercentage.toInt()}% de desconto via Giro Certo',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.racingOrange,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => VoucherModal(
+                        partner: nearestPartner,
+                        promotion: relevantPromotion,
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.racingOrange,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Ver Oferta',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        LucideIcons.arrowRight,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
