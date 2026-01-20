@@ -214,37 +214,48 @@ class _DeliveryScreenState extends State<DeliveryScreen> with SingleTickerProvid
           
           // Conteúdo
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
+            child: Stack(
               children: [
-                _buildMapView(theme, pendingOrders),
-                _isRiderMode 
-                  ? _buildRiderOrdersList(theme, pendingOrders)
-                  : _buildStoreOrdersList(theme),
+                TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildMapView(theme, pendingOrders),
+                    _isRiderMode 
+                      ? _buildRiderOrdersList(theme, pendingOrders)
+                      : _buildStoreOrdersList(theme),
+                  ],
+                ),
+                // Botão flutuante de criar pedido (apenas para lojista)
+                if (!_isRiderMode)
+                  Positioned(
+                    bottom: 90, // Acima do menu inferior
+                    right: 16,
+                    child: FloatingActionButton.extended(
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => CreateDeliveryModal(
+                            userLat: _userLatitude,
+                            userLng: _userLongitude,
+                            onOrderCreated: () {
+                              _loadOrders();
+                              Navigator.pop(context);
+                            },
+                          ),
+                        );
+                      },
+                      backgroundColor: AppColors.racingOrange,
+                      icon: Icon(LucideIcons.plus),
+                      label: Text('Novo Pedido'),
+                      elevation: 8,
+                    ),
+                  ),
               ],
             ),
           ),
         ],
-      ),
-      floatingActionButton: _isRiderMode ? null : FloatingActionButton.extended(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (context) => CreateDeliveryModal(
-              userLat: _userLatitude,
-              userLng: _userLongitude,
-              onOrderCreated: () {
-                _loadOrders();
-                Navigator.pop(context);
-              },
-            ),
-          );
-        },
-        backgroundColor: AppColors.racingOrange,
-        icon: Icon(LucideIcons.plus),
-        label: Text('Novo Pedido'),
       ),
     );
   }

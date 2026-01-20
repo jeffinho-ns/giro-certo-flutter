@@ -314,3 +314,4 @@ class PartnerDetailModal extends StatelessWidget {
 }
 
 
+

@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 import '../../models/delivery_order.dart';
 import '../../models/partner.dart';
 import '../../services/mock_data_service.dart';
+import '../../providers/app_state_provider.dart';
 import '../../utils/colors.dart';
 
 class CreateDeliveryModal extends StatefulWidget {
@@ -35,6 +37,7 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   double? _deliveryLatitude;
   double? _deliveryLongitude;
   double? _deliveryFee;
+  bool _increaseFeeForUrgent = false;
 
   @override
   void dispose() {
@@ -55,9 +58,29 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
         _deliveryLatitude!,
         _deliveryLongitude!,
       );
+      var baseFee = 5.0 + (distance * 2.0);
+      
+      // Aumentar taxa se urgente e opção marcada
+      if (_selectedPriority == DeliveryPriority.urgent && _increaseFeeForUrgent) {
+        baseFee *= 1.5; // Aumenta 50%
+      }
+      
       setState(() {
-        _deliveryFee = 5.0 + (distance * 2.0);
+        _deliveryFee = baseFee;
       });
+    }
+  }
+  
+  Color _getPriorityColor(DeliveryPriority priority) {
+    switch (priority) {
+      case DeliveryPriority.urgent:
+        return Colors.red;
+      case DeliveryPriority.high:
+        return AppColors.racingOrange;
+      case DeliveryPriority.normal:
+        return Colors.blue;
+      case DeliveryPriority.low:
+        return Colors.grey;
     }
   }
 
@@ -85,11 +108,55 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    // Não definir loja inicial aqui - será feito no build
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final stores = MockDataService.getMockPartners()
         .where((p) => p.type == PartnerType.store)
         .toList();
+    
+    // Selecionar primeira loja por padrão se ainda não selecionada
+    if (_selectedStore == null && stores.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedStore = stores.first;
+          });
+        }
+      });
+    }
+    
+    // Verificar se a loja selecionada ainda existe na lista
+    if (_selectedStore != null && !stores.contains(_selectedStore)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedStore = stores.isNotEmpty ? stores.first : null;
+          });
+        }
+      });
+    }
+    
+    // Pré-preencher nome do destinatário se ainda não preenchido
+    try {
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      final user = appState.user;
+      
+      if (user != null && _recipientNameController.text.isEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _recipientNameController.text = user.name;
+          }
+        });
+      }
+    } catch (e) {
+      // Ignorar se não conseguir acessar o Provider
+    }
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -159,7 +226,9 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<Partner>(
-                        value: _selectedStore,
+                        value: _selectedStore != null && stores.contains(_selectedStore) 
+                            ? _selectedStore 
+                            : null,
                         decoration: InputDecoration(
                           hintText: 'Selecione a loja',
                           border: OutlineInputBorder(
@@ -167,7 +236,7 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                           ),
                         ),
                         items: stores.map((store) {
-                          return DropdownMenuItem(
+                          return DropdownMenuItem<Partner>(
                             value: store,
                             child: Text(store.name),
                           );
@@ -175,7 +244,13 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                         onChanged: (store) {
                           setState(() {
                             _selectedStore = store;
-                            _calculateDeliveryFee();
+                            if (store != null) {
+                              // Atualizar endereço da loja quando selecionar
+                              _deliveryAddressController.text = store.address;
+                              _deliveryLatitude = store.latitude;
+                              _deliveryLongitude = store.longitude;
+                              _calculateDeliveryFee();
+                            }
                           });
                         },
                         validator: (value) {
@@ -189,11 +264,33 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                       const SizedBox(height: 24),
                       
                       // Endereço de entrega
-                      Text(
-                        'Endereço de Entrega',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Endereço de Entrega',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          if (_selectedStore != null)
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _deliveryAddressController.text = _selectedStore!.address;
+                                  _deliveryLatitude = _selectedStore!.latitude;
+                                  _deliveryLongitude = _selectedStore!.longitude;
+                                  _calculateDeliveryFee();
+                                });
+                              },
+                              icon: Icon(LucideIcons.copy, size: 14),
+                              label: Text(
+                                'Usar endereço da loja',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       TextFormField(
@@ -300,31 +397,121 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                       ),
                       const SizedBox(height: 8),
                       SegmentedButton<DeliveryPriority>(
+                        style: SegmentedButton.styleFrom(
+                          selectedBackgroundColor: _getPriorityColor(_selectedPriority).withOpacity(0.2),
+                          selectedForegroundColor: _getPriorityColor(_selectedPriority),
+                          foregroundColor: theme.textTheme.bodyMedium?.color,
+                        ),
                         segments: [
                           ButtonSegment(
                             value: DeliveryPriority.low,
                             label: Text('Baixa'),
+                            icon: Icon(
+                              LucideIcons.circle,
+                              size: 12,
+                              color: _selectedPriority == DeliveryPriority.low
+                                  ? _getPriorityColor(DeliveryPriority.low)
+                                  : Colors.grey,
+                            ),
                           ),
                           ButtonSegment(
                             value: DeliveryPriority.normal,
                             label: Text('Normal'),
+                            icon: Icon(
+                              LucideIcons.circle,
+                              size: 12,
+                              color: _selectedPriority == DeliveryPriority.normal
+                                  ? _getPriorityColor(DeliveryPriority.normal)
+                                  : Colors.blue,
+                            ),
                           ),
                           ButtonSegment(
                             value: DeliveryPriority.high,
                             label: Text('Alta'),
+                            icon: Icon(
+                              LucideIcons.circle,
+                              size: 12,
+                              color: _selectedPriority == DeliveryPriority.high
+                                  ? _getPriorityColor(DeliveryPriority.high)
+                                  : AppColors.racingOrange,
+                            ),
                           ),
                           ButtonSegment(
                             value: DeliveryPriority.urgent,
                             label: Text('Urgente'),
+                            icon: Icon(
+                              LucideIcons.alertCircle,
+                              size: 12,
+                              color: _selectedPriority == DeliveryPriority.urgent
+                                  ? _getPriorityColor(DeliveryPriority.urgent)
+                                  : Colors.red,
+                            ),
                           ),
                         ],
                         selected: {_selectedPriority},
                         onSelectionChanged: (Set<DeliveryPriority> newSelection) {
                           setState(() {
                             _selectedPriority = newSelection.first;
+                            _calculateDeliveryFee();
                           });
                         },
                       ),
+                      
+                      // Opção para aumentar taxa se urgente
+                      if (_selectedPriority == DeliveryPriority.urgent) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.red.withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                LucideIcons.zap,
+                                color: Colors.red,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Aumentar Taxa de Entrega',
+                                      style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Aumenta 50% para atrair motociclistas mais rapidamente',
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: _increaseFeeForUrgent,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _increaseFeeForUrgent = value;
+                                    _calculateDeliveryFee();
+                                  });
+                                },
+                                activeColor: Colors.red,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       
                       const SizedBox(height: 16),
                       

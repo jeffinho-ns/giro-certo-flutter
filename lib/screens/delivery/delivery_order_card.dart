@@ -33,6 +33,19 @@ class DeliveryOrderCard extends StatelessWidget {
         return Colors.grey;
     }
   }
+  
+  IconData _getPriorityIcon(DeliveryPriority priority) {
+    switch (priority) {
+      case DeliveryPriority.urgent:
+        return LucideIcons.alertCircle;
+      case DeliveryPriority.high:
+        return LucideIcons.arrowUp;
+      case DeliveryPriority.normal:
+        return LucideIcons.circle;
+      case DeliveryPriority.low:
+        return LucideIcons.arrowDown;
+    }
+  }
 
   String _getPriorityLabel(DeliveryPriority priority) {
     switch (priority) {
@@ -155,14 +168,29 @@ class DeliveryOrderCard extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: _getPriorityColor(order.priority).withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _getPriorityLabel(order.priority),
-                              style: TextStyle(
-                                color: _getPriorityColor(order.priority),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                              border: Border.all(
+                                color: _getPriorityColor(order.priority).withOpacity(0.5),
+                                width: 1,
                               ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _getPriorityIcon(order.priority),
+                                  size: 12,
+                                  color: _getPriorityColor(order.priority),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _getPriorityLabel(order.priority),
+                                  style: TextStyle(
+                                    color: _getPriorityColor(order.priority),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
