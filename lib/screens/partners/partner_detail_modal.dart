@@ -312,3 +312,5 @@ class PartnerDetailModal extends StatelessWidget {
     );
   }
 }
+
+
