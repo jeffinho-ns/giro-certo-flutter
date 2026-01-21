@@ -56,18 +56,18 @@ class ModernHeader extends StatelessWidget {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              AppColors.racingOrange,
-                              AppColors.racingOrangeLight,
+                              theme.colorScheme.primary,
+                              theme.colorScheme.secondary,
                             ],
                           ),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AppColors.racingOrange.withOpacity(0.3),
+                            color: theme.colorScheme.primary.withOpacity(0.3),
                             width: 2,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.racingOrange.withOpacity(0.3),
+                              color: theme.colorScheme.primary.withOpacity(0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'colors.dart';
-import '../providers/theme_provider.dart';
 
 class AppTheme {
   static ThemeData getLightTheme({Color? primaryColor, Color? primaryLightColor}) {
@@ -72,11 +71,11 @@ class AppTheme {
         fillColor: AppColors.lightSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.black26),
+          borderSide: BorderSide(color: AppColors.lightTextSecondary.withOpacity(0.2)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.black26),
+          borderSide: BorderSide(color: AppColors.lightTextSecondary.withOpacity(0.2)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -92,7 +91,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
-          foregroundColor: AppColors.lightTextPrimary,
+          foregroundColor: Colors.white, // Sempre branco para melhor contraste
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(
@@ -201,7 +200,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
-          foregroundColor: AppColors.darkTextPrimary,
+          foregroundColor: Colors.white, // Sempre branco para melhor contraste
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(

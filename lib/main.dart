@@ -206,6 +206,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
@@ -223,18 +224,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
                       theme.scaffoldBackgroundColor,
                     ],
                   )
-                : const LinearGradient(
+                : LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Color(0xFFFFFFFF),
-                      Color(0xFFD2D2D2),
+                      AppColors.lightBackground,
+                      AppColors.lightSurface,
                     ],
                   ),
           ),
-          child: const Center(
+          child: Center(
             child: CircularProgressIndicator(
-              color: AppColors.racingOrange,
+              color: themeProvider.primaryColor,
             ),
           ),
         ),

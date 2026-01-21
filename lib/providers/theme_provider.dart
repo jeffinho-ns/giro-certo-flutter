@@ -31,13 +31,13 @@ class ThemeProvider extends ChangeNotifier {
       case AppThemeColor.orange:
         return AppColors.racingOrange;
       case AppThemeColor.blue:
-        return const Color(0xFF2196F3);
+        return const Color(0xFF5C9FD4); // Azul suave e confortável
       case AppThemeColor.green:
-        return const Color(0xFF4CAF50);
+        return const Color(0xFF6BAF7A); // Verde suave e natural
       case AppThemeColor.purple:
-        return const Color(0xFF9C27B0);
+        return const Color(0xFF9A7BAF); // Roxo suave e relaxante
       case AppThemeColor.red:
-        return const Color(0xFFF44336);
+        return const Color(0xFFD67B7B); // Vermelho suave e menos agressivo
     }
   }
 
@@ -46,13 +46,13 @@ class ThemeProvider extends ChangeNotifier {
       case AppThemeColor.orange:
         return AppColors.racingOrangeLight;
       case AppThemeColor.blue:
-        return const Color(0xFF64B5F6);
+        return const Color(0xFF7FB3D9); // Azul claro suave
       case AppThemeColor.green:
-        return const Color(0xFF81C784);
+        return const Color(0xFF8AC19A); // Verde claro suave
       case AppThemeColor.purple:
-        return const Color(0xFFBA68C8);
+        return const Color(0xFFB595C5); // Roxo claro suave
       case AppThemeColor.red:
-        return const Color(0xFFE57373);
+        return const Color(0xFFE59A9A); // Vermelho claro suave
     }
   }
 

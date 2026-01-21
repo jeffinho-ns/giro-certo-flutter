@@ -21,12 +21,12 @@ class DeliveryOrderCard extends StatelessWidget {
     this.showAcceptButton = false,
   });
 
-  Color _getPriorityColor(DeliveryPriority priority) {
+  Color _getPriorityColor(DeliveryPriority priority, ThemeData theme) {
     switch (priority) {
       case DeliveryPriority.urgent:
         return Colors.red;
       case DeliveryPriority.high:
-        return AppColors.racingOrange;
+        return theme.colorScheme.primary;
       case DeliveryPriority.normal:
         return Colors.blue;
       case DeliveryPriority.low:
@@ -60,14 +60,14 @@ class DeliveryOrderCard extends StatelessWidget {
     }
   }
 
-  Color _getStatusColor(DeliveryStatus status) {
+  Color _getStatusColor(DeliveryStatus status, ThemeData theme) {
     switch (status) {
       case DeliveryStatus.pending:
         return Colors.orange;
       case DeliveryStatus.accepted:
         return Colors.blue;
       case DeliveryStatus.inProgress:
-        return AppColors.racingOrange;
+        return theme.colorScheme.primary;
       case DeliveryStatus.completed:
         return AppColors.neonGreen;
       case DeliveryStatus.cancelled:
@@ -124,12 +124,12 @@ class DeliveryOrderCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.racingOrange.withOpacity(0.2),
+                    color: theme.colorScheme.primary.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     LucideIcons.store,
-                    color: AppColors.racingOrange,
+                    color: theme.colorScheme.primary,
                     size: 20,
                   ),
                 ),
@@ -150,13 +150,13 @@ class DeliveryOrderCard extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(order.status).withOpacity(0.2),
+                              color: _getStatusColor(order.status, theme).withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               _getStatusLabel(order.status),
                               style: TextStyle(
-                                color: _getStatusColor(order.status),
+                                color: _getStatusColor(order.status, theme),
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -166,10 +166,10 @@ class DeliveryOrderCard extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: _getPriorityColor(order.priority).withOpacity(0.2),
+                              color: _getPriorityColor(order.priority, theme).withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: _getPriorityColor(order.priority).withOpacity(0.5),
+                                color: _getPriorityColor(order.priority, theme).withOpacity(0.5),
                                 width: 1,
                               ),
                             ),
@@ -179,13 +179,13 @@ class DeliveryOrderCard extends StatelessWidget {
                                 Icon(
                                   _getPriorityIcon(order.priority),
                                   size: 12,
-                                  color: _getPriorityColor(order.priority),
+                                  color: _getPriorityColor(order.priority, theme),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   _getPriorityLabel(order.priority),
                                   style: TextStyle(
-                                    color: _getPriorityColor(order.priority),
+                                    color: _getPriorityColor(order.priority, theme),
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -231,14 +231,14 @@ class DeliveryOrderCard extends StatelessWidget {
                       width: 12,
                       height: 12,
                       decoration: BoxDecoration(
-                        color: AppColors.racingOrange,
+                        color: theme.colorScheme.primary,
                         shape: BoxShape.circle,
                       ),
                     ),
                     Container(
                       width: 2,
                       height: 20,
-                      color: AppColors.racingOrange.withOpacity(0.3),
+                      color: theme.colorScheme.primary.withOpacity(0.3),
                     ),
                     Container(
                       width: 12,
@@ -308,7 +308,7 @@ class DeliveryOrderCard extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: onAccept,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.racingOrange,
+                    backgroundColor: theme.colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../utils/colors.dart';
+import '../../providers/theme_provider.dart';
 
 class GarageIntroScreen extends StatefulWidget {
   final VoidCallback onContinue;
@@ -53,8 +55,12 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
     // O movimento será da esquerda para direita (valor negativo indo para zero)
     final currentOffset = startOffset + (progress * (endOffset - startOffset));
 
+    final theme = Theme.of(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,13 +72,15 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
                     'Minha',
                     style: TextStyle(
                       fontSize: 120,
                       fontWeight: FontWeight.w900,
-                      color: Color.fromARGB(255, 83, 81, 81),
+                      color: isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.lightTextSecondary,
                       height: 0.9,
                       letterSpacing: -1.5,
                     ),
@@ -82,18 +90,20 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
                     style: TextStyle(
                       fontSize: 120,
                       fontWeight: FontWeight.w900,
-                      color: Colors.black,
+                      color: theme.textTheme.displayLarge?.color ??
+                          AppColors.lightTextPrimary,
                       height: 0.9,
                       letterSpacing: -1.5,
                     ),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
                   Text(
                     'Vamos adicionar sua\nmoto para uma\nexperiencia completa\ndentro do APP',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: theme.textTheme.displayLarge?.color ??
+                          AppColors.lightTextPrimary,
                       height: 1.2,
                     ),
                   ),
@@ -137,7 +147,9 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
                 height: buttonHeight,
                 margin: const EdgeInsets.only(bottom: 30),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF0F0F0),
+                  color: isDark
+                      ? AppColors.darkSurface
+                      : AppColors.lightSurface.withOpacity(0.8),
                   borderRadius: BorderRadius.circular(40),
                 ),
                 child: Stack(
@@ -149,10 +161,11 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text(
+                            Text(
                               'CONTINUAR',
                               style: TextStyle(
-                                color: Colors.black,
+                                color: theme.textTheme.bodyLarge?.color ??
+                                    AppColors.lightTextPrimary,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 0.5,
@@ -160,9 +173,15 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
                             ),
                             const SizedBox(width: 4),
                             Icon(Icons.chevron_right,
-                                color: Colors.black.withOpacity(0.5), size: 24),
+                                color: (theme.textTheme.bodyLarge?.color ??
+                                        AppColors.lightTextPrimary)
+                                    .withOpacity(0.5),
+                                size: 24),
                             Icon(Icons.chevron_right,
-                                color: Colors.black.withOpacity(0.3), size: 24),
+                                color: (theme.textTheme.bodyLarge?.color ??
+                                        AppColors.lightTextPrimary)
+                                    .withOpacity(0.3),
+                                size: 24),
                           ],
                         ),
                       ),
@@ -206,9 +225,9 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
                         child: Container(
                           width: circleSize,
                           height: circleSize,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppColors.racingOrange,
+                            color: themeProvider.primaryColor,
                           ),
                         ),
                       ),

@@ -107,7 +107,7 @@ class _FloatingBottomNavState extends State<FloatingBottomNav>
                         width: itemWidth,
                         height: 54,
                         decoration: BoxDecoration(
-                          color: AppColors.racingOrange,
+                          color: theme.colorScheme.primary,
                           borderRadius: BorderRadius.circular(20),
                         ),
                       ),

@@ -50,7 +50,6 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final navProvider = Provider.of<NavigationProvider>(context);
     
     // Sincronizar o índice quando o NavigationProvider mudar
@@ -64,36 +63,39 @@ class _MainNavigationState extends State<MainNavigation> {
       });
     }
     
-    // Menu sempre visível em todas as telas
+    // Menu escondido nas páginas Marketplace (index 2) e Delivery (index 5)
+    final shouldHideMenu = _currentIndex == 2 || _currentIndex == 5;
+    
     return Scaffold(
       key: _scaffoldKey,
       drawerEnableOpenDragGesture: true,
       body: Stack(
         children: [
           _screens[_currentIndex],
-          // Bottom navigation flutuante (sempre visível)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: FloatingBottomNav(
-              currentIndex: _currentIndex == 5 ? 99 : _currentIndex, // 99 indica delivery ativo
-              onTap: (index) {
-                // Se clicar no botão de delivery (valor especial 99)
-                if (index == 99) {
-                  setState(() {
-                    _currentIndex = 5;
-                  });
-                  navProvider.navigateTo(5);
-                } else {
-                  setState(() {
-                    _currentIndex = index;
-                  });
-                  navProvider.navigateTo(index);
-                }
-              },
+          // Bottom navigation flutuante (escondido em Marketplace e Delivery)
+          if (!shouldHideMenu)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: FloatingBottomNav(
+                currentIndex: _currentIndex == 5 ? 99 : _currentIndex, // 99 indica delivery ativo
+                onTap: (index) {
+                  // Se clicar no botão de delivery (valor especial 99)
+                  if (index == 99) {
+                    setState(() {
+                      _currentIndex = 5;
+                    });
+                    navProvider.navigateTo(5);
+                  } else {
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                    navProvider.navigateTo(index);
+                  }
+                },
+              ),
             ),
-          ),
         ],
       ),
       endDrawer: const ProfileSidebar(),

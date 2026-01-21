@@ -243,7 +243,7 @@ class SettingsScreen extends StatelessWidget {
                                 theme: theme,
                                 color: AppThemeColor.blue,
                                 isSelected: themeProvider.themeColor == AppThemeColor.blue,
-                                primaryColor: const Color(0xFF2196F3),
+                                primaryColor: const Color(0xFF5C9FD4), // Azul suave
                                 onTap: () {
                                   themeProvider.setThemeColor(AppThemeColor.blue);
                                 },
@@ -253,7 +253,7 @@ class SettingsScreen extends StatelessWidget {
                                 theme: theme,
                                 color: AppThemeColor.green,
                                 isSelected: themeProvider.themeColor == AppThemeColor.green,
-                                primaryColor: const Color(0xFF4CAF50),
+                                primaryColor: const Color(0xFF6BAF7A), // Verde suave
                                 onTap: () {
                                   themeProvider.setThemeColor(AppThemeColor.green);
                                 },
@@ -263,7 +263,7 @@ class SettingsScreen extends StatelessWidget {
                                 theme: theme,
                                 color: AppThemeColor.purple,
                                 isSelected: themeProvider.themeColor == AppThemeColor.purple,
-                                primaryColor: const Color(0xFF9C27B0),
+                                primaryColor: const Color(0xFF9A7BAF), // Roxo suave
                                 onTap: () {
                                   themeProvider.setThemeColor(AppThemeColor.purple);
                                 },
@@ -273,7 +273,7 @@ class SettingsScreen extends StatelessWidget {
                                 theme: theme,
                                 color: AppThemeColor.red,
                                 isSelected: themeProvider.themeColor == AppThemeColor.red,
-                                primaryColor: const Color(0xFFF44336),
+                                primaryColor: const Color(0xFFD67B7B), // Vermelho suave
                                 onTap: () {
                                   themeProvider.setThemeColor(AppThemeColor.red);
                                 },
