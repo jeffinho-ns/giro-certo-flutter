@@ -1,40 +1,85 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../../utils/colors.dart';
+import '../../services/api_service.dart';
+import '../../providers/app_state_provider.dart';
 
-class NotificationsSidebar extends StatelessWidget {
+class NotificationsSidebar extends StatefulWidget {
   const NotificationsSidebar({super.key});
+
+  @override
+  State<NotificationsSidebar> createState() => _NotificationsSidebarState();
+}
+
+class _NotificationsSidebarState extends State<NotificationsSidebar> {
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _notifications = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final alerts = await ApiService.getAlerts(limit: 50);
+      
+      // Converter alertas para formato de notificação
+      final notifications = alerts.map((alert) {
+        return {
+          'id': alert['id'],
+          'title': alert['title'] ?? 'Alerta',
+          'message': alert['message'] ?? '',
+          'time': DateTime.parse(alert['createdAt'] as String),
+          'type': _mapAlertTypeToNotificationType(alert['type'] as String?),
+          'read': alert['isRead'] as bool? ?? false,
+        };
+      }).toList();
+
+      setState(() {
+        _notifications = notifications;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Erro ao carregar notificações: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _mapAlertTypeToNotificationType(String? alertType) {
+    switch (alertType) {
+      case 'DOCUMENT_EXPIRING':
+        return 'maintenance';
+      case 'MAINTENANCE_CRITICAL':
+        return 'maintenance';
+      case 'PAYMENT_OVERDUE':
+        return 'payment';
+      default:
+        return 'update';
+    }
+  }
+
+  Future<void> _markAsRead(String alertId) async {
+    try {
+      await ApiService.markAlertAsRead(alertId);
+      _loadNotifications(); // Recarregar
+    } catch (e) {
+      print('Erro ao marcar notificação como lida: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    // Notificações mockadas
-    final notifications = [
-      {
-        'title': 'Manutenção de Óleo',
-        'message': 'Está na hora de trocar o óleo da sua moto',
-        'time': DateTime.now().subtract(const Duration(hours: 2)),
-        'type': 'maintenance',
-        'read': false,
-      },
-      {
-        'title': 'Nova Peça Recomendada',
-        'message': 'Encontramos uma peça perfeita para sua ${'Honda CB 600F'}',
-        'time': DateTime.now().subtract(const Duration(days: 1)),
-        'type': 'recommendation',
-        'read': false,
-      },
-      {
-        'title': 'Atualização do App',
-        'message': 'Nova versão disponível com melhorias',
-        'time': DateTime.now().subtract(const Duration(days: 2)),
-        'type': 'update',
-        'read': true,
-      },
-    ];
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -98,10 +143,7 @@ class NotificationsSidebar extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${notifications.where((n) {
-                              final read = n['read'];
-                              return read is bool && read == false;
-                            }).length} não lidas',
+                            '${_notifications.where((n) => !(n['read'] as bool)).length} não lidas',
                             style: theme.textTheme.bodySmall?.copyWith(
                               fontSize: 13,
                             ),
@@ -119,23 +161,54 @@ class NotificationsSidebar extends StatelessWidget {
 
               // Lista de notificações
               Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  itemCount: notifications.length,
-                  itemBuilder: (context, index) {
-                    final notification = notifications[index];
-                    return _buildNotificationCard(
-                      context: context,
-                      theme: theme,
-                      title: notification['title'] as String,
-                      message: notification['message'] as String,
-                      time: notification['time'] as DateTime,
-                      type: notification['type'] as String,
-                      isRead: notification['read'] as bool,
-                    );
-                  },
-                ),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _notifications.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  LucideIcons.bell,
+                                  size: 48,
+                                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Nenhuma notificação',
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: scrollController,
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            itemCount: _notifications.length,
+                            itemBuilder: (context, index) {
+                              final notification = _notifications[index];
+                              final alertId = notification['id'] as String?;
+                              final isRead = notification['read'] as bool;
+                              
+                              return _buildNotificationCard(
+                                context: context,
+                                theme: theme,
+                                title: notification['title'] as String,
+                                message: notification['message'] as String,
+                                time: notification['time'] as DateTime,
+                                type: notification['type'] as String,
+                                isRead: isRead,
+                                alertId: alertId,
+                                onTap: () {
+                                  if (!isRead && alertId != null) {
+                                    _markAsRead(alertId);
+                                  }
+                                },
+                              );
+                            },
+                          ),
               ),
             ],
           ),
@@ -152,6 +225,8 @@ class NotificationsSidebar extends StatelessWidget {
     required DateTime time,
     required String type,
     required bool isRead,
+    String? alertId,
+    VoidCallback? onTap,
   }) {
     IconData icon;
     Color color;
@@ -176,9 +251,11 @@ class NotificationsSidebar extends StatelessWidget {
 
     final timeAgo = _getTimeAgo(time);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+    return GestureDetector(
+      onTap: onTap ?? () {},
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isRead ? theme.cardColor : theme.cardColor,
         borderRadius: BorderRadius.circular(20),
@@ -260,6 +337,7 @@ class NotificationsSidebar extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -25,14 +25,29 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const MaintenanceDetailScreen(),
-    const PartnersScreen(),
-    const RankingScreen(),
-    const CommunityScreen(),
-    const DeliveryScreen(),
-  ];
+  List<Widget> _getScreens(bool isPartner) {
+    if (isPartner) {
+      // Para lojistas: apenas Home e Delivery
+      return [
+        const HomeScreen(),
+        const SizedBox.shrink(), // Manutenção (oculto)
+        const SizedBox.shrink(), // Parceiros (oculto)
+        const SizedBox.shrink(), // Ranking (oculto)
+        const SizedBox.shrink(), // Comunidade (oculto)
+        const DeliveryScreen(),
+      ];
+    } else {
+      // Para motociclistas: todas as telas
+      return [
+        const HomeScreen(),
+        const MaintenanceDetailScreen(),
+        const PartnersScreen(),
+        const RankingScreen(),
+        const CommunityScreen(),
+        const DeliveryScreen(),
+      ];
+    }
+  }
 
   @override
   void initState() {
@@ -51,6 +66,8 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     final navProvider = Provider.of<NavigationProvider>(context);
+    final appState = Provider.of<AppStateProvider>(context);
+    final isPartner = appState.user?.isPartner ?? false;
     
     // Sincronizar o índice quando o NavigationProvider mudar
     if (navProvider.currentIndex != _currentIndex) {
@@ -63,15 +80,20 @@ class _MainNavigationState extends State<MainNavigation> {
       });
     }
     
-    // Menu escondido nas páginas Marketplace (index 2) e Delivery (index 5)
-    final shouldHideMenu = _currentIndex == 2 || _currentIndex == 5;
+    // Para lojistas, só mostrar menu na Home (index 0) e Delivery (index 5)
+    // Para motociclistas, esconder em Marketplace (index 2) e Delivery (index 5)
+    final shouldHideMenu = isPartner 
+        ? (_currentIndex != 0 && _currentIndex != 5)
+        : (_currentIndex == 2 || _currentIndex == 5);
+    
+    final screens = _getScreens(isPartner);
     
     return Scaffold(
       key: _scaffoldKey,
       drawerEnableOpenDragGesture: true,
       body: Stack(
         children: [
-          _screens[_currentIndex],
+          screens[_currentIndex],
           // Bottom navigation flutuante (escondido em Marketplace e Delivery)
           if (!shouldHideMenu)
             Positioned(

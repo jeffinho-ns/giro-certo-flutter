@@ -13,14 +13,23 @@ class MockDataService {
   static List<Part>? _cachedParts;
   static List<Post>? _cachedPosts;
 
-  static User getMockUser() {
-    if (_cachedUser != null) return _cachedUser!;
+  static User getMockUser({bool isPartner = false}) {
+    if (_cachedUser != null && _cachedUser!.isPartner == isPartner) {
+      return _cachedUser!;
+    }
+    
     _cachedUser = User(
       id: '1',
-      name: 'João Silva',
-      email: 'joao@example.com',
-      age: 28,
-      pilotProfile: 'Urbano',
+      name: isPartner ? 'Loja MotoPeças' : 'João Silva',
+      email: isPartner ? 'loja@example.com' : 'joao@example.com',
+      age: isPartner ? 0 : 28,
+      pilotProfile: isPartner ? 'URBANO' : 'URBANO',
+      role: UserRole.user,
+      partnerId: isPartner ? 'p1' : null,
+      isSubscriber: false,
+      hasVerifiedDocuments: !isPartner,
+      verificationBadge: false,
+      isOnline: true,
     );
     return _cachedUser!;
   }

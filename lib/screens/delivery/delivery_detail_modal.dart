@@ -11,6 +11,7 @@ class DeliveryDetailModal extends StatelessWidget {
   final double userLng;
   final VoidCallback? onAccept;
   final VoidCallback? onComplete;
+  final VoidCallback? onOrderUpdated;
   final bool isRider;
 
   const DeliveryDetailModal({
@@ -20,6 +21,7 @@ class DeliveryDetailModal extends StatelessWidget {
     required this.userLng,
     this.onAccept,
     this.onComplete,
+    this.onOrderUpdated,
     this.isRider = true,
   });
 
@@ -336,7 +338,10 @@ class DeliveryDetailModal extends StatelessWidget {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: onAccept,
+                          onPressed: () {
+                            onAccept?.call();
+                            onOrderUpdated?.call();
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.racingOrange,
                             foregroundColor: Colors.white,
@@ -368,7 +373,10 @@ class DeliveryDetailModal extends StatelessWidget {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: onComplete,
+                          onPressed: () {
+                            onComplete?.call();
+                            onOrderUpdated?.call();
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.neonGreen,
                             foregroundColor: Colors.white,

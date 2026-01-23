@@ -1,0 +1,489 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/user.dart';
+import '../models/delivery_order.dart';
+import '../models/partner.dart';
+
+class ApiService {
+  // TODO: Configurar via variável de ambiente
+  static const String baseUrl = 'https://giro-certo-api.onrender.com/api';
+  
+  // Cache do token
+  static String? _cachedToken;
+
+  // Obter token armazenado
+  static Future<String?> _getToken() async {
+    if (_cachedToken != null) return _cachedToken;
+    
+    final prefs = await SharedPreferences.getInstance();
+    _cachedToken = prefs.getString('auth_token');
+    return _cachedToken;
+  }
+
+  // Salvar token
+  static Future<void> _saveToken(String token) async {
+    _cachedToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_token', token);
+  }
+
+  // Remover token (logout)
+  static Future<void> _removeToken() async {
+    _cachedToken = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+  }
+
+  // Headers padrão com autenticação
+  static Future<Map<String, String>> _getHeaders({
+    bool includeAuth = true,
+    Map<String, String>? extraHeaders,
+  }) async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...?extraHeaders,
+    };
+
+    if (includeAuth) {
+      final token = await _getToken();
+      if (token != null) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    }
+
+    return headers;
+  }
+
+  // Tratamento de erros HTTP
+  static void _handleError(http.Response response) {
+    if (response.statusCode >= 400) {
+      try {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Erro na requisição');
+      } catch (e) {
+        throw Exception('Erro ${response.statusCode}: ${response.body}');
+      }
+    }
+  }
+
+  // ============================================
+  // AUTENTICAÇÃO
+  // ============================================
+
+  /// Login
+  static Future<Map<String, dynamic>> login(String email, String password) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/login'),
+      headers: await _getHeaders(includeAuth: false),
+      body: json.encode({
+        'email': email,
+        'password': password,
+      }),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    
+    // Salvar token
+    if (data['token'] != null) {
+      await _saveToken(data['token'] as String);
+    }
+
+    return data;
+  }
+
+  /// Registro
+  static Future<Map<String, dynamic>> register({
+    required String name,
+    required String email,
+    required String password,
+    required int age,
+    String? pilotProfile,
+    String? photoUrl,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/register'),
+      headers: await _getHeaders(includeAuth: false),
+      body: json.encode({
+        'name': name,
+        'email': email,
+        'password': password,
+        'age': age,
+        if (pilotProfile != null) 'pilotProfile': pilotProfile,
+        if (photoUrl != null) 'photoUrl': photoUrl,
+      }),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    
+    // Salvar token
+    if (data['token'] != null) {
+      await _saveToken(data['token'] as String);
+    }
+
+    return data;
+  }
+
+  /// Logout
+  static Future<void> logout() async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/auth/logout'),
+        headers: await _getHeaders(),
+      );
+    } catch (e) {
+      // Ignorar erro, mas remover token localmente
+    } finally {
+      await _removeToken();
+    }
+  }
+
+  /// Obter usuário atual
+  static Future<User> getCurrentUser() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/users/me'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    return User.fromJson(data);
+  }
+
+  // ============================================
+  // DELIVERY ORDERS
+  // ============================================
+
+  /// Listar pedidos
+  static Future<List<DeliveryOrder>> getDeliveryOrders({
+    String? status,
+    String? storeId,
+    String? riderId,
+  }) async {
+    final queryParams = <String, String>{};
+    if (status != null) queryParams['status'] = status;
+    if (storeId != null) queryParams['storeId'] = storeId;
+    if (riderId != null) queryParams['riderId'] = riderId;
+
+    final uri = Uri.parse('$baseUrl/delivery/orders').replace(
+      queryParameters: queryParams.isEmpty ? null : queryParams,
+    );
+
+    final response = await http.get(
+      uri,
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final List<dynamic> orders = data is List ? data : (data['orders'] ?? []);
+    
+    return orders.map((json) => _deliveryOrderFromJson(json)).toList();
+  }
+
+  /// Criar pedido (lojista)
+  static Future<DeliveryOrder> createDeliveryOrder({
+    required String storeId,
+    required String storeName,
+    required String storeAddress,
+    required double storeLatitude,
+    required double storeLongitude,
+    required String deliveryAddress,
+    required double deliveryLatitude,
+    required double deliveryLongitude,
+    String? recipientName,
+    String? recipientPhone,
+    String? notes,
+    required double value,
+    required double deliveryFee,
+    String? priority,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/delivery/orders'),
+      headers: await _getHeaders(),
+      body: json.encode({
+        'storeId': storeId,
+        'storeName': storeName,
+        'storeAddress': storeAddress,
+        'storeLatitude': storeLatitude,
+        'storeLongitude': storeLongitude,
+        'deliveryAddress': deliveryAddress,
+        'deliveryLatitude': deliveryLatitude,
+        'deliveryLongitude': deliveryLongitude,
+        if (recipientName != null) 'recipientName': recipientName,
+        if (recipientPhone != null) 'recipientPhone': recipientPhone,
+        if (notes != null) 'notes': notes,
+        'value': value,
+        'deliveryFee': deliveryFee,
+        if (priority != null) 'priority': priority,
+      }),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    return _deliveryOrderFromJson(data);
+  }
+
+  /// Aceitar corrida (motociclista)
+  static Future<DeliveryOrder> acceptOrder(String orderId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/delivery/orders/$orderId/accept'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    return _deliveryOrderFromJson(data);
+  }
+
+  /// Concluir corrida
+  static Future<DeliveryOrder> completeOrder(String orderId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/delivery/orders/$orderId/complete'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    return _deliveryOrderFromJson(data);
+  }
+
+  /// Obter detalhes do pedido
+  static Future<DeliveryOrder> getDeliveryOrder(String orderId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/delivery/orders/$orderId'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    return _deliveryOrderFromJson(data);
+  }
+
+  // Converter JSON da API para DeliveryOrder
+  static DeliveryOrder _deliveryOrderFromJson(Map<String, dynamic> json) {
+    return DeliveryOrder(
+      id: json['id'] as String,
+      storeId: json['storeId'] as String,
+      storeName: json['storeName'] as String,
+      storeAddress: json['storeAddress'] as String,
+      storeLatitude: (json['storeLatitude'] as num).toDouble(),
+      storeLongitude: (json['storeLongitude'] as num).toDouble(),
+      deliveryAddress: json['deliveryAddress'] as String,
+      deliveryLatitude: (json['deliveryLatitude'] as num).toDouble(),
+      deliveryLongitude: (json['deliveryLongitude'] as num).toDouble(),
+      recipientName: json['recipientName'] as String?,
+      recipientPhone: json['recipientPhone'] as String?,
+      notes: json['notes'] as String?,
+      value: (json['value'] as num).toDouble(),
+      deliveryFee: (json['deliveryFee'] as num).toDouble(),
+      status: _parseDeliveryStatus(json['status'] as String),
+      priority: _parseDeliveryPriority(json['priority'] as String? ?? 'normal'),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      acceptedAt: json['acceptedAt'] != null
+          ? DateTime.parse(json['acceptedAt'] as String)
+          : null,
+      completedAt: json['completedAt'] != null
+          ? DateTime.parse(json['completedAt'] as String)
+          : null,
+      riderId: json['riderId'] as String?,
+      riderName: json['riderName'] as String?,
+      distance: json['distance'] != null
+          ? (json['distance'] as num).toDouble()
+          : null,
+      estimatedTime: json['estimatedTime'] != null
+          ? (json['estimatedTime'] as num).toInt()
+          : null,
+    );
+  }
+
+  static DeliveryStatus _parseDeliveryStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return DeliveryStatus.pending;
+      case 'accepted':
+        return DeliveryStatus.accepted;
+      case 'inprogress':
+        return DeliveryStatus.inProgress;
+      case 'completed':
+        return DeliveryStatus.completed;
+      case 'cancelled':
+        return DeliveryStatus.cancelled;
+      default:
+        return DeliveryStatus.pending;
+    }
+  }
+
+  static DeliveryPriority _parseDeliveryPriority(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'low':
+        return DeliveryPriority.low;
+      case 'normal':
+        return DeliveryPriority.normal;
+      case 'high':
+        return DeliveryPriority.high;
+      case 'urgent':
+        return DeliveryPriority.urgent;
+      default:
+        return DeliveryPriority.normal;
+    }
+  }
+
+  // ============================================
+  // PARTNERS
+  // ============================================
+
+  /// Listar parceiros
+  static Future<List<Partner>> getPartners({
+    String? type,
+  }) async {
+    final queryParams = <String, String>{};
+    if (type != null) queryParams['type'] = type;
+
+    final uri = Uri.parse('$baseUrl/partners').replace(
+      queryParameters: queryParams.isEmpty ? null : queryParams,
+    );
+
+    final response = await http.get(
+      uri,
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final List<dynamic> partners = data is List ? data : (data['partners'] ?? []);
+    
+    return partners.map((json) => _partnerFromJson(json)).toList();
+  }
+
+  /// Obter parceiro por ID
+  static Future<Partner> getPartner(String partnerId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/partners/$partnerId'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    return _partnerFromJson(data);
+  }
+
+  // Converter JSON da API para Partner
+  static Partner _partnerFromJson(Map<String, dynamic> json) {
+    return Partner(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      type: _parsePartnerType(json['type'] as String),
+      address: json['address'] as String,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
+      isTrusted: json['isTrusted'] as bool? ?? false,
+      specialties: (json['specialties'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+      activePromotions: [], // TODO: Implementar quando a API retornar
+    );
+  }
+
+  static PartnerType _parsePartnerType(String type) {
+    switch (type.toUpperCase()) {
+      case 'MECHANIC':
+        return PartnerType.mechanic;
+      case 'STORE':
+      default:
+        return PartnerType.store;
+    }
+  }
+
+  // ============================================
+  // USERS
+  // ============================================
+
+  /// Atualizar localização do usuário
+  static Future<void> updateUserLocation({
+    required double latitude,
+    required double longitude,
+    bool? isOnline,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/users/me/location'),
+      headers: await _getHeaders(),
+      body: json.encode({
+        'latitude': latitude,
+        'longitude': longitude,
+        if (isOnline != null) 'isOnline': isOnline,
+      }),
+    );
+
+    _handleError(response);
+  }
+
+  // ============================================
+  // ALERTS / NOTIFICATIONS
+  // ============================================
+
+  /// Listar alertas do usuário
+  static Future<List<Map<String, dynamic>>> getAlerts({
+    String? type,
+    String? severity,
+    bool? isRead,
+    int? limit,
+  }) async {
+    final queryParams = <String, String>{};
+    if (type != null) queryParams['type'] = type;
+    if (severity != null) queryParams['severity'] = severity;
+    if (isRead != null) queryParams['isRead'] = isRead.toString();
+    if (limit != null) queryParams['limit'] = limit.toString();
+
+    // Usar endpoint /me para buscar alertas do próprio usuário
+    final uri = Uri.parse('$baseUrl/alerts/me').replace(
+      queryParameters: queryParams.isEmpty ? null : queryParams,
+    );
+
+    final response = await http.get(
+      uri,
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final List<dynamic> alerts = data is List ? data : (data['alerts'] ?? []);
+    
+    return alerts.map((alert) => alert as Map<String, dynamic>).toList();
+  }
+
+  /// Marcar alerta como lido
+  static Future<void> markAlertAsRead(String alertId) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/alerts/$alertId/read'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+  }
+
+  /// Marcar todos os alertas como lidos
+  static Future<void> markAllAlertsAsRead() async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/alerts/read-all'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+  }
+}

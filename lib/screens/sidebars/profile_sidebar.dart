@@ -2,18 +2,58 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/app_state_provider.dart';
+import '../../services/api_service.dart';
+import '../../models/user.dart';
 import '../../utils/colors.dart';
 import '../settings/settings_screen.dart';
 
-class ProfileSidebar extends StatelessWidget {
+class ProfileSidebar extends StatefulWidget {
   const ProfileSidebar({super.key});
+
+  @override
+  State<ProfileSidebar> createState() => _ProfileSidebarState();
+}
+
+class _ProfileSidebarState extends State<ProfileSidebar> {
+  bool _isLoading = false;
+  User? _currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = await ApiService.getCurrentUser();
+      setState(() {
+        _currentUser = user;
+        _isLoading = false;
+      });
+      
+      // Atualizar o AppStateProvider
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      appState.setUser(user);
+    } catch (e) {
+      print('Erro ao carregar dados do usuário: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
-    final user = appState.user;
+    final user = _currentUser ?? appState.user;
     final bike = appState.bike;
     final theme = Theme.of(context);
+    final isPartner = user?.isPartner ?? false;
 
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.85,
@@ -96,8 +136,8 @@ class ProfileSidebar extends StatelessWidget {
                 ),
               ),
 
-              // Informações da moto
-              if (bike != null)
+              // Informações da conta (apenas para motociclistas)
+              if (!isPartner && bike != null)
                 Container(
                   margin: const EdgeInsets.all(20),
                   padding: const EdgeInsets.all(20),
@@ -173,6 +213,76 @@ class ProfileSidebar extends StatelessWidget {
                   ),
                 ),
 
+              // Informações da loja (apenas para lojistas)
+              if (isPartner)
+                Container(
+                  margin: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: theme.cardColor,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: theme.dividerColor.withOpacity(0.5),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.neonGreen,
+                                  AppColors.neonGreen.withOpacity(0.7),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              LucideIcons.store,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Minha Loja',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildInfoRow(
+                        theme: theme,
+                        icon: LucideIcons.mail,
+                        label: 'Email',
+                        value: user?.email ?? 'N/A',
+                      ),
+                      const SizedBox(height: 16),
+                      _buildInfoRow(
+                        theme: theme,
+                        icon: LucideIcons.shield,
+                        label: 'Status',
+                        value: user?.verificationBadge == true ? 'Verificado' : 'Pendente',
+                      ),
+                    ],
+                  ),
+                ),
+
               // Menu de opções
               Expanded(
                 child: ListView(
@@ -240,9 +350,22 @@ class ProfileSidebar extends StatelessWidget {
                       title: 'Sair',
                       subtitle: 'Fazer logout da conta',
                       color: AppColors.alertRed,
-                      onTap: () {
+                      onTap: () async {
                         Navigator.pop(context);
-                        // Implementar logout
+                        try {
+                          await ApiService.logout();
+                          final appState = Provider.of<AppStateProvider>(context, listen: false);
+                          appState.logout();
+                          // Navegar para login
+                          if (context.mounted) {
+                            Navigator.of(context).pushNamedAndRemoveUntil(
+                              '/login',
+                              (route) => false,
+                            );
+                          }
+                        } catch (e) {
+                          print('Erro ao fazer logout: $e');
+                        }
                       },
                     ),
                   ],

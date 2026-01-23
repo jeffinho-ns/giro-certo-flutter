@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../../models/delivery_order.dart';
 import '../../models/rider_stats.dart';
 import '../../services/mock_data_service.dart';
+import '../../services/api_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../providers/theme_provider.dart';
@@ -27,15 +28,21 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
   TabController? _tabController;
   final MapController _mapController = MapController();
   
-  // Localização simulada do usuário (São Paulo centro)
-  final double _userLatitude = -23.5505;
-  final double _userLongitude = -46.6333;
+  // Localização do usuário (TODO: obter via GPS)
+  double _userLatitude = -23.5505;
+  double _userLongitude = -46.6333;
   
-  bool _isRiderMode = true; // true = motociclista, false = lojista
+  bool _isLoading = false;
   List<DeliveryOrder> _orders = [];
   List<DeliveryOrder> _myOrders = []; // Corridas aceitas pelo usuário
   List<DeliveryOrder> _completedOrders = []; // Corridas concluídas
   RiderStats? _riderStats;
+
+  // Determina se é motociclista ou lojista baseado no usuário logado
+  bool get _isRiderMode {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    return appState.user?.isRider ?? true; // Default para motociclista
+  }
 
   @override
   void initState() {
@@ -46,34 +53,14 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
 
   void _initializeTabController() {
     _tabController?.dispose();
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final isRider = appState.user?.isRider ?? true;
+    
     _tabController = TabController(
-      length: _isRiderMode ? 3 : 2, 
+      length: isRider ? 3 : 2, 
       vsync: this,
       initialIndex: 0,
     );
-  }
-  
-  void _switchMode(bool isRiderMode) {
-    if (_isRiderMode != isRiderMode) {
-      // Dispose do controller antigo ANTES do setState
-      final oldController = _tabController;
-      _tabController = null; // Limpar referência
-      
-      // Dispose fora do setState para evitar problemas
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        oldController?.dispose();
-      });
-      
-      setState(() {
-        _isRiderMode = isRiderMode;
-        // Criar novo TabController
-        _tabController = TabController(
-          length: _isRiderMode ? 3 : 2, 
-          vsync: this,
-          initialIndex: 0,
-        );
-      });
-    }
   }
 
   @override
@@ -83,12 +70,87 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
     super.dispose();
   }
 
-  void _loadOrders() {
+  Future<void> _loadOrders() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      final user = appState.user;
+      
+      if (user == null) {
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Integrar com API real
+      if (_isRiderMode) {
+        // Motociclista: buscar pedidos disponíveis e seus próprios pedidos
+        final allOrders = await ApiService.getDeliveryOrders();
+        final myOrders = await ApiService.getDeliveryOrders(riderId: user.id);
+        
+        setState(() {
+          _orders = allOrders.where((o) => o.status == DeliveryStatus.pending).toList();
+          _myOrders = myOrders.where((o) => 
+            o.status == DeliveryStatus.accepted || 
+            o.status == DeliveryStatus.inProgress
+          ).toList();
+          _completedOrders = myOrders.where((o) => o.status == DeliveryStatus.completed).toList();
+          _riderStats = RiderStats.fromOrders(_completedOrders);
+          _isLoading = false;
+        });
+      } else {
+        // Lojista: buscar apenas seus próprios pedidos
+        if (user.partnerId != null) {
+          final myOrders = await ApiService.getDeliveryOrders(storeId: user.partnerId);
+          
+          setState(() {
+            _orders = myOrders.where((o) => o.status == DeliveryStatus.pending).toList();
+            _myOrders = myOrders.where((o) => 
+              o.status == DeliveryStatus.accepted || 
+              o.status == DeliveryStatus.inProgress
+            ).toList();
+            _completedOrders = myOrders.where((o) => o.status == DeliveryStatus.completed).toList();
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _orders = [];
+            _myOrders = [];
+            _completedOrders = [];
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Em caso de erro, usar dados mockados
+      _loadMockOrders();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao carregar pedidos: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _loadMockOrders() {
     final orders = MockDataService.getMockDeliveryOrders(_userLatitude, _userLongitude);
     
     // Adicionar algumas corridas concluídas para demonstração
     final completedOrders = List<DeliveryOrder>.from([
-      // Corridas concluídas de hoje
       DeliveryOrder(
         id: 'd_completed_1',
         storeId: 'p1',
@@ -156,33 +218,49 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
     });
   }
 
-  void _acceptOrder(DeliveryOrder order) {
+  Future<void> _acceptOrder(DeliveryOrder order) async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final userName = appState.user?.name ?? 'Você';
     
-    setState(() {
-      final index = _orders.indexWhere((o) => o.id == order.id);
-      if (index != -1) {
-        _orders[index] = order.copyWith(
-          status: DeliveryStatus.accepted,
-          riderId: 'current_user',
-          riderName: userName,
-          acceptedAt: DateTime.now(),
-        );
-        _myOrders.add(_orders[index]);
-      }
+    try {
+      // TODO: Integrar com API real
+      // final updatedOrder = await ApiService.acceptOrder(order.id);
       
-      // Atualizar estatísticas
-      _updateStats();
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Corrida aceita! Ganhos estimados: R\$ ${order.deliveryFee.toStringAsFixed(2)}'),
-        backgroundColor: AppColors.neonGreen,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+      setState(() {
+        final index = _orders.indexWhere((o) => o.id == order.id);
+        if (index != -1) {
+          _orders[index] = order.copyWith(
+            status: DeliveryStatus.accepted,
+            riderId: 'current_user',
+            riderName: userName,
+            acceptedAt: DateTime.now(),
+          );
+          _myOrders.add(_orders[index]);
+        }
+        
+        // Atualizar estatísticas
+        _updateStats();
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Corrida aceita! Ganhos estimados: R\$ ${order.deliveryFee.toStringAsFixed(2)}'),
+            backgroundColor: AppColors.neonGreen,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao aceitar corrida: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
   
   void _updateStats() {
@@ -192,30 +270,46 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
     }
   }
 
-  void _completeOrder(DeliveryOrder order) {
-    setState(() {
-      final index = _orders.indexWhere((o) => o.id == order.id);
-      if (index != -1) {
-        final completedOrder = _orders[index].copyWith(
-          status: DeliveryStatus.completed,
-          completedAt: DateTime.now(),
-        );
-        _orders[index] = completedOrder;
-        _myOrders.removeWhere((o) => o.id == order.id);
-        _completedOrders.insert(0, completedOrder);
-      }
+  Future<void> _completeOrder(DeliveryOrder order) async {
+    try {
+      // TODO: Integrar com API real
+      // final updatedOrder = await ApiService.completeOrder(order.id);
       
-      // Atualizar estatísticas
-      _updateStats();
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Corrida concluída! Ganhos: R\$ ${order.deliveryFee.toStringAsFixed(2)}'),
-        backgroundColor: AppColors.neonGreen,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+      setState(() {
+        final index = _orders.indexWhere((o) => o.id == order.id);
+        if (index != -1) {
+          final completedOrder = _orders[index].copyWith(
+            status: DeliveryStatus.completed,
+            completedAt: DateTime.now(),
+          );
+          _orders[index] = completedOrder;
+          _myOrders.removeWhere((o) => o.id == order.id);
+          _completedOrders.insert(0, completedOrder);
+        }
+        
+        // Atualizar estatísticas
+        _updateStats();
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Corrida concluída! Ganhos: R\$ ${order.deliveryFee.toStringAsFixed(2)}'),
+            backgroundColor: AppColors.neonGreen,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao concluir corrida: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -229,45 +323,8 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
       body: Column(
         children: [
           ModernHeader(
-            title: 'Delivery',
+            title: _isRiderMode ? 'Corridas' : 'Meus Pedidos',
             showBackButton: false,
-          ),
-          
-          // Toggle entre Motociclista e Lojista
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: theme.dividerColor,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                  Expanded(
-                    child: _buildModeButton(
-                      theme,
-                      primaryColor: primaryColor,
-                      label: 'Motociclista',
-                      icon: LucideIcons.bike,
-                      isSelected: _isRiderMode,
-                      onTap: () => _switchMode(true),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildModeButton(
-                      theme,
-                      primaryColor: primaryColor,
-                      label: 'Lojista',
-                      icon: LucideIcons.store,
-                      isSelected: !_isRiderMode,
-                      onTap: () => _switchMode(false),
-                    ),
-                  ),
-              ],
-            ),
           ),
           
           // Tabs - Verificar que TabController existe e tem o tamanho correto
@@ -308,113 +365,73 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
           
           // Conteúdo - Verificar que TabController existe e tem o tamanho correto
           Expanded(
-            child: _tabController != null && _tabController!.length == (_isRiderMode ? 3 : 2)
-              ? Stack(
-                  children: [
-                    TabBarView(
-                      controller: _tabController!,
-                      children: _isRiderMode
-                        ? [
-                            _buildMapView(theme, pendingOrders, primaryColor),
-                            _buildRiderOrdersList(theme, pendingOrders, primaryColor),
-                            _buildMyDeliveriesView(theme),
-                          ]
-                        : [
-                            _buildMapView(theme, pendingOrders, primaryColor),
-                            _buildStoreOrdersList(theme),
-                          ],
-                    ),
-                    // Botão flutuante de criar pedido (apenas para lojista)
-                    if (!_isRiderMode)
-                      Positioned(
-                        bottom: 90, // Acima do menu inferior
-                        right: 16,
-                        child: FloatingActionButton.extended(
-                          onPressed: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => CreateDeliveryModal(
-                                userLat: _userLatitude,
-                                userLng: _userLongitude,
-                                onOrderCreated: () {
-                                  _loadOrders();
-                                  Navigator.pop(context);
-                                },
-                              ),
-                            );
-                          },
-                          backgroundColor: primaryColor,
-                          icon: Icon(LucideIcons.plus),
-                          label: Text('Novo Pedido'),
-                          elevation: 8,
-                        ),
-                      ),
-                  ],
-                )
-              : Center(
+            child: _isLoading
+              ? Center(
                   child: CircularProgressIndicator(
                     color: primaryColor,
                   ),
-                ),
+                )
+              : _tabController != null && _tabController!.length == (_isRiderMode ? 3 : 2)
+                ? Stack(
+                    children: [
+                      TabBarView(
+                        controller: _tabController!,
+                        children: _isRiderMode
+                          ? [
+                              _buildMapView(theme, pendingOrders, primaryColor),
+                              _buildRiderOrdersList(theme, pendingOrders, primaryColor),
+                              _buildMyDeliveriesView(theme),
+                            ]
+                          : [
+                              _buildMapView(theme, pendingOrders, primaryColor),
+                              _buildStoreOrdersList(theme),
+                            ],
+                      ),
+                      // Botão flutuante de criar pedido (apenas para lojista)
+                      if (!_isRiderMode)
+                        Positioned(
+                          bottom: 90, // Acima do menu inferior
+                          right: 16,
+                          child: FloatingActionButton.extended(
+                            onPressed: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (context) => CreateDeliveryModal(
+                                  userLat: _userLatitude,
+                                  userLng: _userLongitude,
+                                  onOrderCreated: () {
+                                    _loadOrders();
+                                    Navigator.pop(context);
+                                  },
+                                ),
+                              );
+                            },
+                            backgroundColor: primaryColor,
+                            icon: Icon(LucideIcons.plus),
+                            label: Text('Novo Pedido'),
+                            elevation: 8,
+                          ),
+                        ),
+                    ],
+                  )
+                : Center(
+                    child: CircularProgressIndicator(
+                      color: primaryColor,
+                    ),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildModeButton(ThemeData theme, {
-    required Color primaryColor,
-    required String label,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? primaryColor.withOpacity(0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                color: isSelected
-                    ? primaryColor
-                    : theme.iconTheme.color?.withOpacity(0.5),
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected
-                      ? primaryColor
-                      : theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildMapView(ThemeData theme, List<DeliveryOrder> orders, Color primaryColor) {
     final userLocation = LatLng(_userLatitude, _userLongitude);
-    final hotZones = MockDataService.getHotDeliveryZones();
+    // TODO: Implementar hot zones via API quando disponível
+    final hotZones = <Map<String, dynamic>>[];
     
     return Stack(
       children: [
@@ -666,9 +683,13 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
   }
 
   Widget _buildStoreOrdersList(ThemeData theme) {
-    final myStoreOrders = _orders.where((o) => 
-      o.storeId == 'p1' || o.storeId == 'p2' || o.storeId == 'p3'
-    ).toList();
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final partnerId = appState.user?.partnerId;
+    
+    // Filtrar apenas pedidos do parceiro logado
+    final myStoreOrders = partnerId != null
+        ? _orders.where((o) => o.storeId == partnerId).toList()
+        : _orders; // Fallback: mostrar todos se não houver partnerId
 
     if (myStoreOrders.isEmpty) {
       return Center(

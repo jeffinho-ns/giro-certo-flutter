@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../utils/colors.dart';
+import '../providers/app_state_provider.dart';
 
 class FloatingBottomNav extends StatefulWidget {
   final int currentIndex;
@@ -63,8 +65,13 @@ class _FloatingBottomNavState extends State<FloatingBottomNav>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final normalizedIndex = _getNormalizedIndex(widget.currentIndex);
+    
+    // Verificar se é lojista
+    final appState = Provider.of<AppStateProvider>(context);
+    final isPartner = appState.user?.isPartner ?? false;
 
-    final navItems = [
+    // Menu para motociclistas
+    final riderNavItems = [
       {'icon': LucideIcons.home, 'label': 'Home', 'index': 0},
       {'icon': LucideIcons.wrench, 'label': 'Manutenção', 'index': 1},
       {'icon': LucideIcons.store, 'label': 'Parceiros', 'index': 2},
@@ -72,6 +79,14 @@ class _FloatingBottomNavState extends State<FloatingBottomNav>
       {'icon': LucideIcons.users, 'label': 'Comunidade', 'index': 4},
       {'icon': LucideIcons.package, 'label': 'Delivery', 'index': 5},
     ];
+
+    // Menu para lojistas (apenas Home e Delivery)
+    final partnerNavItems = [
+      {'icon': LucideIcons.home, 'label': 'Home', 'index': 0},
+      {'icon': LucideIcons.package, 'label': 'Pedidos', 'index': 5},
+    ];
+
+    final navItems = isPartner ? partnerNavItems : riderNavItems;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -92,7 +107,21 @@ class _FloatingBottomNavState extends State<FloatingBottomNav>
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final itemWidth = constraints.maxWidth / 6;
+              final itemWidth = constraints.maxWidth / navItems.length;
+              
+              // Mapear índice real para índice no menu filtrado
+              int getFilteredIndex(int realIndex) {
+                if (isPartner) {
+                  // Para lojistas: 0 = Home, 5 = Delivery
+                  if (realIndex == 0) return 0;
+                  if (realIndex == 5) return 1;
+                  return 0; // Default
+                } else {
+                  return realIndex;
+                }
+              }
+              
+              final filteredIndex = getFilteredIndex(normalizedIndex);
               
               return Stack(
                 children: [
@@ -100,7 +129,7 @@ class _FloatingBottomNavState extends State<FloatingBottomNav>
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeInOutCubic,
-                    left: itemWidth * normalizedIndex,
+                    left: itemWidth * filteredIndex,
                     child: ScaleTransition(
                       scale: _scaleAnimation,
                       child: Container(
@@ -119,17 +148,19 @@ class _FloatingBottomNavState extends State<FloatingBottomNav>
                     children: navItems.asMap().entries.map((entry) {
                       final index = entry.key;
                       final item = entry.value;
-                      final isSelected = normalizedIndex == index;
+                      final realIndex = item['index'] as int;
+                      final isSelected = normalizedIndex == realIndex;
 
                       return Expanded(
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
-                              if (index == 5) {
+                              final targetIndex = item['index'] as int;
+                              if (targetIndex == 5) {
                                 widget.onTap(99); // Valor especial para delivery
                               } else {
-                                widget.onTap(index);
+                                widget.onTap(targetIndex);
                               }
                             },
                             borderRadius: BorderRadius.circular(20),
