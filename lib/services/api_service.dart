@@ -145,14 +145,20 @@ class ApiService {
   /// Obter usuário atual
   static Future<User> getCurrentUser() async {
     final response = await http.get(
-      Uri.parse('$baseUrl/users/me'),
+      Uri.parse('$baseUrl/users/me/profile'),
       headers: await _getHeaders(),
     );
 
     _handleError(response);
 
     final data = json.decode(response.body);
-    return User.fromJson(data);
+    
+    // A API retorna { user: {...} }
+    if (data['user'] == null) {
+      throw Exception('Resposta da API não contém dados do usuário');
+    }
+    
+    return User.fromJson(data['user']);
   }
 
   // ============================================
@@ -164,13 +170,15 @@ class ApiService {
     String? status,
     String? storeId,
     String? riderId,
+    int? limit,
   }) async {
     final queryParams = <String, String>{};
     if (status != null) queryParams['status'] = status;
     if (storeId != null) queryParams['storeId'] = storeId;
     if (riderId != null) queryParams['riderId'] = riderId;
+    if (limit != null) queryParams['limit'] = limit.toString();
 
-    final uri = Uri.parse('$baseUrl/delivery/orders').replace(
+    final uri = Uri.parse('$baseUrl/delivery').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
 
@@ -204,37 +212,54 @@ class ApiService {
     required double deliveryFee,
     String? priority,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/delivery/orders'),
-      headers: await _getHeaders(),
-      body: json.encode({
-        'storeId': storeId,
-        'storeName': storeName,
-        'storeAddress': storeAddress,
-        'storeLatitude': storeLatitude,
-        'storeLongitude': storeLongitude,
-        'deliveryAddress': deliveryAddress,
-        'deliveryLatitude': deliveryLatitude,
-        'deliveryLongitude': deliveryLongitude,
-        if (recipientName != null) 'recipientName': recipientName,
-        if (recipientPhone != null) 'recipientPhone': recipientPhone,
-        if (notes != null) 'notes': notes,
-        'value': value,
-        'deliveryFee': deliveryFee,
-        if (priority != null) 'priority': priority,
-      }),
-    );
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/delivery'),
+          headers: await _getHeaders(),
+          body: json.encode({
+            'storeId': storeId,
+            'storeName': storeName,
+            'storeAddress': storeAddress,
+            'storeLatitude': storeLatitude,
+            'storeLongitude': storeLongitude,
+            'deliveryAddress': deliveryAddress,
+            'deliveryLatitude': deliveryLatitude,
+            'deliveryLongitude': deliveryLongitude,
+            if (recipientName != null) 'recipientName': recipientName,
+            if (recipientPhone != null) 'recipientPhone': recipientPhone,
+            if (notes != null) 'notes': notes,
+            'value': value,
+            'deliveryFee': deliveryFee,
+            if (priority != null) 'priority': priority,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw Exception('Tempo esgotado. Verifique a conexão e tente novamente.');
+          },
+        );
 
+    if (response.statusCode >= 400) {
+      print('❌ API create order: ${response.statusCode} ${response.body}');
+    }
     _handleError(response);
 
-    final data = json.decode(response.body);
-    return _deliveryOrderFromJson(data);
+    try {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final orderJson = data['order'] as Map<String, dynamic>? ?? data;
+      return _deliveryOrderFromJson(orderJson);
+    } catch (e) {
+      print('❌ Parse create order response: $e');
+      print('Response body: ${response.body}');
+      rethrow;
+    }
   }
 
   /// Aceitar corrida (motociclista)
   static Future<DeliveryOrder> acceptOrder(String orderId) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/delivery/orders/$orderId/accept'),
+      Uri.parse('$baseUrl/delivery/$orderId/accept'),
       headers: await _getHeaders(),
     );
 
@@ -246,9 +271,10 @@ class ApiService {
 
   /// Concluir corrida
   static Future<DeliveryOrder> completeOrder(String orderId) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/delivery/orders/$orderId/complete'),
+    final response = await http.patch(
+      Uri.parse('$baseUrl/delivery/$orderId/status'),
       headers: await _getHeaders(),
+      body: json.encode({'status': 'completed'}),
     );
 
     _handleError(response);
@@ -260,7 +286,7 @@ class ApiService {
   /// Obter detalhes do pedido
   static Future<DeliveryOrder> getDeliveryOrder(String orderId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/delivery/orders/$orderId'),
+      Uri.parse('$baseUrl/delivery/$orderId'),
       headers: await _getHeaders(),
     );
 
@@ -378,6 +404,35 @@ class ApiService {
 
     final data = json.decode(response.body);
     return _partnerFromJson(data);
+  }
+
+  /// Obter própria loja (para lojistas)
+  static Future<Partner> getMyPartner() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/partners/me'),
+        headers: await _getHeaders(),
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Tempo de espera esgotado ao buscar loja');
+        },
+      );
+
+      _handleError(response);
+
+      final data = json.decode(response.body);
+      if (data['partner'] == null) {
+        throw Exception('Resposta da API não contém dados da loja');
+      }
+      return _partnerFromJson(data['partner']);
+    } catch (e) {
+      // Re-throw com mensagem mais clara
+      if (e.toString().contains('403') || e.toString().contains('restrito')) {
+        throw Exception('Acesso negado. A rota /partners/me pode não estar disponível ainda.');
+      }
+      rethrow;
+    }
   }
 
   // Converter JSON da API para Partner

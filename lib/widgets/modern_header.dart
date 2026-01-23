@@ -5,8 +5,9 @@ import '../providers/app_state_provider.dart';
 import '../providers/drawer_provider.dart';
 import '../utils/colors.dart';
 import '../screens/sidebars/notifications_sidebar.dart';
+import '../services/api_service.dart';
 
-class ModernHeader extends StatelessWidget {
+class ModernHeader extends StatefulWidget {
   final String title;
   final bool showBackButton;
   final VoidCallback? onBackPressed;
@@ -17,6 +18,34 @@ class ModernHeader extends StatelessWidget {
     this.showBackButton = false,
     this.onBackPressed,
   });
+
+  @override
+  State<ModernHeader> createState() => _ModernHeaderState();
+}
+
+class _ModernHeaderState extends State<ModernHeader> {
+  int _unreadNotificationsCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationsCount();
+  }
+
+  Future<void> _loadNotificationsCount() async {
+    try {
+      final alerts = await ApiService.getAlerts(limit: 100);
+      final unreadCount = alerts.where((alert) => !(alert['isRead'] as bool? ?? false)).length;
+      
+      if (mounted) {
+        setState(() {
+          _unreadNotificationsCount = unreadCount;
+        });
+      }
+    } catch (e) {
+      print('Erro ao carregar contagem de notificações: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,13 +149,15 @@ class ModernHeader extends StatelessWidget {
                 Stack(
                   children: [
                     GestureDetector(
-                      onTap: () {
-                        showModalBottomSheet(
+                      onTap: () async {
+                        await showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
                           backgroundColor: Colors.transparent,
                           builder: (context) => const NotificationsSidebar(),
                         );
+                        // Recarregar contagem após fechar o modal
+                        _loadNotificationsCount();
                       },
                       child: Container(
                         width: 48,
@@ -146,50 +177,51 @@ class ModernHeader extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Badge de notificação
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: AppColors.alertRed,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: theme.scaffoldBackgroundColor,
-                            width: 2,
+                    // Badge de notificação (só mostra se houver notificações não lidas)
+                    if (_unreadNotificationsCount > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          width: _unreadNotificationsCount > 99 ? 24 : 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: AppColors.alertRed,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: theme.scaffoldBackgroundColor,
+                              width: 2,
+                            ),
                           ),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            '3',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
+                          child: Center(
+                            child: Text(
+                              _unreadNotificationsCount > 99 ? '99+' : '$_unreadNotificationsCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ],
             ),
-            if (title.isNotEmpty) ...[
+            if (widget.title.isNotEmpty) ...[
               const SizedBox(height: 16),
               Row(
                 children: [
-                  if (showBackButton)
+                  if (widget.showBackButton)
                     IconButton(
                       icon: const Icon(LucideIcons.arrowLeft),
-                      onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
+                      onPressed: widget.onBackPressed ?? () => Navigator.of(context).pop(),
                       color: theme.iconTheme.color,
                     ),
                   Expanded(
                     child: Text(
-                      title,
+                      widget.title,
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,

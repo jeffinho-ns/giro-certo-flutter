@@ -4,7 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../models/delivery_order.dart';
 import '../../models/partner.dart';
-import '../../services/mock_data_service.dart';
+import '../../services/api_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../utils/colors.dart';
 
@@ -33,6 +33,8 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   final _valueController = TextEditingController();
   
   Partner? _selectedStore;
+  List<Partner> _stores = [];
+  bool _isLoadingStores = false;
   DeliveryPriority _selectedPriority = DeliveryPriority.normal;
   double? _deliveryLatitude;
   double? _deliveryLongitude;
@@ -58,15 +60,21 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
         _deliveryLatitude!,
         _deliveryLongitude!,
       );
-      var baseFee = 5.0 + (distance * 2.0);
+      final baseFee = 5.0 + (distance * 2.0);
       
-      // Aumentar taxa se urgente e opção marcada
-      if (_selectedPriority == DeliveryPriority.urgent && _increaseFeeForUrgent) {
-        baseFee *= 1.5; // Aumenta 50%
-      }
+      // Se urgente e opção marcada, entregador recebe 50% a mais
+      // Ex: se baseFee = 6, entregador recebe 9 (6 + 50% de 6)
+      final calculatedFee = (_selectedPriority == DeliveryPriority.urgent && _increaseFeeForUrgent)
+          ? baseFee * 1.5 // Aumenta 50% para o entregador
+          : baseFee;
       
       setState(() {
-        _deliveryFee = baseFee;
+        _deliveryFee = calculatedFee;
+      });
+    } else if (_selectedStore != null) {
+      // Se tiver loja mas não tiver endereço de entrega, calcular taxa mínima
+      setState(() {
+        _deliveryFee = 5.0; // Taxa base mínima
       });
     }
   }
@@ -99,64 +107,313 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
 
   double _toRadians(double degrees) => degrees * (math.pi / 180.0);
 
-  void _createOrder() {
-    if (_formKey.currentState!.validate() && _selectedStore != null && _deliveryFee != null) {
-      // Aqui você criaria o pedido na API
-      // Por enquanto, apenas chamamos o callback
+  String _priorityToString(DeliveryPriority priority) {
+    switch (priority) {
+      case DeliveryPriority.low:
+        return 'low';
+      case DeliveryPriority.normal:
+        return 'normal';
+      case DeliveryPriority.high:
+        return 'high';
+      case DeliveryPriority.urgent:
+        return 'urgent';
+    }
+  }
+
+  Future<void> _createOrder() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_selectedStore == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecione uma loja'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Validar endereço de entrega
+    if (_deliveryAddressController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Informe o endereço de entrega'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Se não tiver coordenadas, usar coordenadas simuladas baseadas na loja
+    if (_deliveryLatitude == null || _deliveryLongitude == null) {
+      if (_selectedStore != null) {
+        // Simular coordenadas próximas à loja
+        setState(() {
+          _deliveryLatitude = _selectedStore!.latitude + 0.01;
+          _deliveryLongitude = _selectedStore!.longitude + 0.01;
+        });
+        _calculateDeliveryFee();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao calcular localização. Tente novamente.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Garantir que a taxa foi calculada
+    if (_deliveryFee == null) {
+      _calculateDeliveryFee();
+      if (_deliveryFee == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao calcular taxa de entrega'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Validar valor do pedido
+    final valueText = _valueController.text.trim();
+    if (valueText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Informe o valor do pedido'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final value = double.tryParse(valueText.replaceAll(',', '.'));
+    if (value == null || value <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Valor do pedido inválido'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Mostrar loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    var loadingDismissed = false;
+    void dismissLoading() {
+      if (!loadingDismissed && mounted) {
+        loadingDismissed = true;
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
+    try {
+      // Debug: log antes de criar
+      print('🚀 Criar pedido: store=${_selectedStore!.id} ${_selectedStore!.name}, '
+          'endereço=${_deliveryAddressController.text.trim().length} chars, '
+          'valor=$value, taxa=${_deliveryFee}');
+
+      // Criar pedido na API
+      await ApiService.createDeliveryOrder(
+        storeId: _selectedStore!.id,
+        storeName: _selectedStore!.name,
+        storeAddress: _selectedStore!.address,
+        storeLatitude: _selectedStore!.latitude,
+        storeLongitude: _selectedStore!.longitude,
+        deliveryAddress: _deliveryAddressController.text.trim(),
+        deliveryLatitude: _deliveryLatitude!,
+        deliveryLongitude: _deliveryLongitude!,
+        recipientName: _recipientNameController.text.trim().isNotEmpty
+            ? _recipientNameController.text.trim()
+            : null,
+        recipientPhone: _recipientPhoneController.text.trim().isNotEmpty
+            ? _recipientPhoneController.text.trim()
+            : null,
+        notes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : null,
+        value: value,
+        deliveryFee: _deliveryFee!,
+        priority: _priorityToString(_selectedPriority),
+      );
+
+      print('✅ Pedido criado com sucesso');
+      dismissLoading();
+      if (!mounted) return;
+
+      // Atualizar lista na home antes de fechar
       widget.onOrderCreated();
+
+      // Mostrar sucesso (context ainda válido)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pedido criado com sucesso!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+
+      // Fechar modal (bottom sheet) pelo root navigator
+      Navigator.of(context, rootNavigator: true).pop();
+    } catch (e, st) {
+      print('❌ Erro ao criar pedido: $e');
+      print('$st');
+      dismissLoading();
+      if (!mounted) return;
+
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao criar pedido: $msg'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
     }
   }
 
   @override
   void initState() {
     super.initState();
-    // Não definir loja inicial aqui - será feito no build
+    _loadStores();
+  }
+
+  Future<void> _loadStores() async {
+    setState(() {
+      _isLoadingStores = true;
+    });
+
+    try {
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      final user = appState.user;
+      
+      if (user?.partnerId != null) {
+        // Buscar a loja do usuário logado usando o endpoint /me
+        try {
+          final partner = await ApiService.getMyPartner().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Tempo de espera esgotado. Verifique sua conexão.');
+            },
+          );
+          
+          setState(() {
+            _stores = [partner];
+            _selectedStore = partner;
+            _isLoadingStores = false;
+          });
+          
+          // Calcular taxa inicial (mesmo sem endereço, mostra taxa mínima)
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _calculateDeliveryFee();
+            }
+          });
+        } catch (e) {
+          print('Erro ao buscar loja do usuário: $e');
+          
+          // Se falhar, criar uma loja temporária com dados do usuário
+          // para não travar a tela
+          final errorMessage = e.toString();
+          final is403 = errorMessage.contains('403') || errorMessage.contains('restrito');
+          
+          if (is403) {
+            // Se for erro 403, a API ainda não tem a rota /me implementada
+            // Criar loja temporária com dados básicos
+            final tempPartner = Partner(
+              id: user!.partnerId!,
+              name: user.name, // Usar nome do usuário como nome da loja temporariamente
+              type: PartnerType.store,
+              address: 'Endereço não disponível',
+              latitude: -23.5505, // Coordenadas padrão (São Paulo)
+              longitude: -46.6333,
+              rating: 0.0,
+              isTrusted: false,
+              specialties: [],
+              activePromotions: [],
+            );
+            
+            setState(() {
+              _stores = [tempPartner];
+              _selectedStore = tempPartner;
+              _isLoadingStores = false;
+            });
+            
+            // Calcular taxa inicial
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _calculateDeliveryFee();
+              }
+            });
+            
+            // Mostrar aviso ao usuário
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Atenção: Alguns dados da loja podem estar incompletos. Entre em contato com o suporte.'),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            }
+          } else {
+            // Outro tipo de erro
+            setState(() {
+              _isLoadingStores = false;
+            });
+            
+            // Mostrar erro ao usuário
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Erro ao carregar dados da loja. Tente novamente.'),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+        }
+      } else {
+        // Se não for lojista, não deveria estar aqui, mas vamos tratar
+        setState(() {
+          _isLoadingStores = false;
+        });
+      }
+    } catch (e) {
+      print('Erro ao carregar lojas: $e');
+      setState(() {
+        _isLoadingStores = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao carregar dados. Tente novamente.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final stores = MockDataService.getMockPartners()
-        .where((p) => p.type == PartnerType.store)
-        .toList();
-    
-    // Selecionar primeira loja por padrão se ainda não selecionada
-    if (_selectedStore == null && stores.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _selectedStore = stores.first;
-          });
-        }
-      });
-    }
-    
-    // Verificar se a loja selecionada ainda existe na lista
-    if (_selectedStore != null && !stores.contains(_selectedStore)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _selectedStore = stores.isNotEmpty ? stores.first : null;
-          });
-        }
-      });
-    }
-    
-    // Pré-preencher nome do destinatário se ainda não preenchido
-    try {
-      final appState = Provider.of<AppStateProvider>(context, listen: false);
-      final user = appState.user;
-      
-      if (user != null && _recipientNameController.text.isEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _recipientNameController.text = user.name;
-          }
-        });
-      }
-    } catch (e) {
-      // Ignorar se não conseguir acessar o Provider
-    }
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -184,10 +441,17 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
               Expanded(
                 child: Form(
                   key: _formKey,
-                  child: ListView(
+                  child: SingleChildScrollView(
                     controller: scrollController,
-                    padding: const EdgeInsets.all(24),
-                    children: [
+                    padding: EdgeInsets.only(
+                      left: 24,
+                      right: 24,
+                      top: 24,
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       // Header
                       Row(
                         children: [
@@ -225,41 +489,127 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<Partner>(
-                        value: _selectedStore != null && stores.contains(_selectedStore) 
-                            ? _selectedStore 
-                            : null,
-                        decoration: InputDecoration(
-                          hintText: 'Selecione a loja',
-                          border: OutlineInputBorder(
+                      _isLoadingStores
+                          ? const Center(child: CircularProgressIndicator())
+                          : _stores.isEmpty
+                              ? Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: theme.cardColor,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: theme.dividerColor,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Carregando loja...',
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                )
+                              : _stores.length == 1
+                                  ? // Se tiver apenas uma loja, mostrar como campo de texto (não editável)
+                                  Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: theme.cardColor,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: theme.dividerColor,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            LucideIcons.store,
+                                            color: AppColors.racingOrange,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  _selectedStore?.name ?? 'Loja',
+                                                  style: theme.textTheme.titleMedium?.copyWith(
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                if (_selectedStore != null)
+                                                  Text(
+                                                    _selectedStore!.address,
+                                                    style: theme.textTheme.bodySmall?.copyWith(
+                                                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : // Se tiver múltiplas lojas, mostrar dropdown
+                                  DropdownButtonFormField<Partner>(
+                                      value: _selectedStore != null && _stores.contains(_selectedStore) 
+                                          ? _selectedStore 
+                                          : (_stores.isNotEmpty ? _stores.first : null),
+                                      decoration: InputDecoration(
+                                        hintText: 'Selecione a loja',
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      items: _stores.map((store) {
+                                        return DropdownMenuItem<Partner>(
+                                          value: store,
+                                          child: Text(store.name),
+                                        );
+                                      }).toList(),
+                                      onChanged: (store) {
+                                        setState(() {
+                                          _selectedStore = store;
+                                          if (store != null) {
+                                            _calculateDeliveryFee();
+                                          }
+                                        });
+                                      },
+                                      validator: (value) {
+                                        if (value == null) {
+                                          return 'Selecione uma loja';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                      // Mostrar endereço da loja selecionada se tiver múltiplos endereços
+                      if (_selectedStore != null && _stores.length > 1) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.cardColor,
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: theme.dividerColor.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                LucideIcons.mapPin,
+                                size: 16,
+                                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _selectedStore!.address,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        items: stores.map((store) {
-                          return DropdownMenuItem<Partner>(
-                            value: store,
-                            child: Text(store.name),
-                          );
-                        }).toList(),
-                        onChanged: (store) {
-                          setState(() {
-                            _selectedStore = store;
-                            if (store != null) {
-                              // Atualizar endereço da loja quando selecionar
-                              _deliveryAddressController.text = store.address;
-                              _deliveryLatitude = store.latitude;
-                              _deliveryLongitude = store.longitude;
-                              _calculateDeliveryFee();
-                            }
-                          });
-                        },
-                        validator: (value) {
-                          if (value == null) {
-                            return 'Selecione uma loja';
-                          }
-                          return null;
-                        },
-                      ),
+                      ],
                       
                       const SizedBox(height: 24),
                       
@@ -309,13 +659,22 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                           return null;
                         },
                         onChanged: (value) {
-                          // Simular geocodificação
-                          if (value.length > 10) {
+                          // Simular geocodificação - usar coordenadas da loja como base
+                          if (value.length > 10 && _selectedStore != null) {
                             setState(() {
-                              _deliveryLatitude = widget.userLat + 0.01;
-                              _deliveryLongitude = widget.userLng + 0.01;
-                              _calculateDeliveryFee();
+                              // Simular coordenadas próximas à loja
+                              _deliveryLatitude = _selectedStore!.latitude + 0.01;
+                              _deliveryLongitude = _selectedStore!.longitude + 0.01;
                             });
+                            // Calcular taxa após atualizar coordenadas
+                            _calculateDeliveryFee();
+                          } else if (value.isEmpty) {
+                            // Se limpar o endereço, limpar coordenadas mas manter taxa mínima
+                            setState(() {
+                              _deliveryLatitude = null;
+                              _deliveryLongitude = null;
+                            });
+                            _calculateDeliveryFee();
                           }
                         },
                       ),
@@ -503,7 +862,12 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                                 onChanged: (value) {
                                   setState(() {
                                     _increaseFeeForUrgent = value;
-                                    _calculateDeliveryFee();
+                                    // Recalcular taxa quando mudar o switch
+                                    if (_selectedStore != null && 
+                                        _deliveryLatitude != null && 
+                                        _deliveryLongitude != null) {
+                                      _calculateDeliveryFee();
+                                    }
                                   });
                                 },
                                 activeColor: Colors.red,
@@ -526,6 +890,8 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                           ),
                         ),
                         maxLines: 3,
+                        textInputAction: TextInputAction.newline,
+                        keyboardType: TextInputType.multiline,
                       ),
                       
                       const SizedBox(height: 24),
@@ -595,7 +961,8 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                       ),
                       
                       const SizedBox(height: 24),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

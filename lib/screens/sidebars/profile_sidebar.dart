@@ -299,18 +299,21 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         // Navegar para edição de perfil
                       },
                     ),
-                    const SizedBox(height: 8),
-                    _buildMenuItem(
-                      context: context,
-                      theme: theme,
-                      icon: LucideIcons.bike,
-                      title: 'Minha Garagem',
-                      subtitle: 'Gerenciar motos cadastradas',
-                      onTap: () {
-                        Navigator.pop(context);
-                        // Navegar para garagem
-                      },
-                    ),
+                    // Ocultar "Minha Garagem" para lojistas
+                    if (!isPartner) ...[
+                      const SizedBox(height: 8),
+                      _buildMenuItem(
+                        context: context,
+                        theme: theme,
+                        icon: LucideIcons.bike,
+                        title: 'Minha Garagem',
+                        subtitle: 'Gerenciar motos cadastradas',
+                        onTap: () {
+                          Navigator.pop(context);
+                          // Navegar para garagem
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     _buildMenuItem(
                       context: context,

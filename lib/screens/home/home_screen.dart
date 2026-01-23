@@ -104,6 +104,13 @@ class _HomeScreenState extends State<HomeScreen> {
     // Determinar se é motociclista ou lojista
     final isRider = user?.isRider ?? true;
     
+    // Debug: verificar dados do usuário
+    if (user != null) {
+      print('🔍 Home - User: ${user.email}, partnerId: ${user.partnerId}, isPartner: ${user.isPartner}, isRider: ${user.isRider}');
+    } else {
+      print('⚠️ Home - User é null!');
+    }
+    
     final theme = Theme.of(context);
     
     return Column(
