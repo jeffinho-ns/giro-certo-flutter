@@ -16,9 +16,52 @@ class MaintenanceDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
-    final bike = appState.bike!;
-    final maintenances = MockDataService.getMockMaintenances(bike.currentKm);
+    final bike = appState.bike;
     final theme = Theme.of(context);
+
+    // Se não houver bike, mostrar mensagem
+    if (bike == null) {
+      return SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const ModernHeader(
+              title: 'Manutenção Detalhada',
+              showBackButton: false,
+            ),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      LucideIcons.bike,
+                      size: 64,
+                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Configure sua moto na garagem',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Para visualizar as manutenções, você precisa cadastrar uma moto.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final maintenances = MockDataService.getMockMaintenances(bike.currentKm);
 
     return SafeArea(
       bottom: false,

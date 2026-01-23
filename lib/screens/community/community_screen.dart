@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:intl/intl.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/mock_data_service.dart';
 import '../../models/post.dart';
@@ -14,9 +13,52 @@ class CommunityScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
-    final bike = appState.bike!;
-    final posts = MockDataService.getMockPosts(bike.model);
+    final bike = appState.bike;
     final theme = Theme.of(context);
+
+    // Se não houver bike, mostrar mensagem
+    if (bike == null) {
+      return SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const ModernHeader(
+              title: 'Comunidade',
+              showBackButton: false,
+            ),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      LucideIcons.bike,
+                      size: 64,
+                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Configure sua moto na garagem',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Para visualizar a comunidade, você precisa cadastrar uma moto.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final posts = MockDataService.getMockPosts(bike.model);
 
     return SafeArea(
       bottom: false,

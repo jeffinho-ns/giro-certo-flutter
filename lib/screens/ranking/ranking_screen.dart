@@ -27,8 +27,6 @@ class _RankingScreenState extends State<RankingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<AppStateProvider>(context);
-    final bike = appState.bike!;
     var parts = MockDataService.getMockParts();
     
     if (_selectedCategory != 'Todas') {
