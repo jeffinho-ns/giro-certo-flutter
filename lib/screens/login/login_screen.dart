@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../utils/colors.dart';
+import '../../services/api_service.dart';
+import '../../providers/app_state_provider.dart';
+import '../../models/user.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onLogin;
@@ -20,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -28,9 +33,74 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
-    if (_formKey.currentState!.validate()) {
-      widget.onLogin();
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Fazer login via API
+      final loginResponse = await ApiService.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+      
+      print('🔍 Login - Resposta do login: $loginResponse');
+      
+      // Verificar se o login retornou o usuário diretamente
+      User? user;
+      if (loginResponse['user'] != null) {
+        // Se o login retornou o usuário, usar ele
+        user = User.fromJson(loginResponse['user']);
+        print('🔍 Login - User do login response: ${user.email}, partnerId: ${user.partnerId}');
+      } else {
+        // Caso contrário, buscar do endpoint /users/me
+        try {
+          user = await ApiService.getCurrentUser();
+          print('🔍 Login - User do getCurrentUser: ${user.email}, partnerId: ${user.partnerId}');
+        } catch (e) {
+          print('⚠️ Erro ao buscar usuário: $e');
+          throw Exception('Não foi possível obter dados do usuário: $e');
+        }
+      }
+      
+      // Debug: verificar dados do usuário recebido
+      print('🔍 Login - User final: ${user.email}, partnerId: ${user.partnerId}, isPartner: ${user.isPartner}, isRider: ${user.isRider}');
+      
+      // Salvar usuário no AppStateProvider
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      appState.setUser(user);
+      appState.completeLogin();
+      appState.completeSetup();
+      
+      // Debug: verificar após salvar
+      print('🔍 Login - User salvo no AppState: ${appState.user?.email}, partnerId: ${appState.user?.partnerId}');
+
+      // Navegar para a home
+      if (mounted) {
+        widget.onLogin();
+      }
+    } catch (e) {
+      print('❌ Erro no login: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao fazer login: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -197,7 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   SizedBox(
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _handleLogin,
+                      onPressed: _isLoading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.racingOrange,
                         foregroundColor: Colors.white,
@@ -210,7 +280,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      child: const Text('Entrar'),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text('Entrar'),
                     ),
                   ),
                   

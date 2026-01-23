@@ -117,8 +117,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _handleLogin() {
-    final appState = Provider.of<AppStateProvider>(context, listen: false);
-    appState.initializeMockData();
+    // O LoginScreen agora faz o login e salva o usuário diretamente
+    // Apenas navegar para a home
     setState(() {
       _currentStep = 999;
     });

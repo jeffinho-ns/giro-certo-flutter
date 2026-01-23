@@ -13,6 +13,7 @@ import '../widgets/floating_bottom_nav.dart';
 import 'sidebars/profile_sidebar.dart';
 import '../providers/drawer_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/app_state_provider.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
