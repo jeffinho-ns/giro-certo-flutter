@@ -47,7 +47,8 @@ class MyApp extends StatelessWidget {
               primaryColor: themeProvider.primaryColor,
               primaryLightColor: themeProvider.primaryLightColor,
             ),
-            themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+            themeMode:
+                themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
             debugShowCheckedModeBanner: false,
             home: const AuthWrapper(),
           );
@@ -88,9 +89,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _preloadAssets() async {
     // Aguardar o primeiro frame antes de pré-carregar
     await Future.delayed(const Duration(milliseconds: 50));
-    
+
     if (!mounted) return;
-    
+
     // Pré-carregar todos os assets com timeout
     try {
       await AppPreloadService.preloadAllAssets(context).timeout(
@@ -102,7 +103,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     } catch (e) {
       // Continua mesmo se houver erro
     }
-    
+
     if (mounted) {
       setState(() {
         _isPreloading = false;
@@ -130,7 +131,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     });
   }
 
-  void _handleRegisterComplete(String name, String email, String password, int age) {
+  void _handleRegisterComplete(
+      String name, String email, String password, int age) {
     setState(() {
       _userName = name;
       _userEmail = email;
@@ -169,7 +171,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   void _finalizeSetup() {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
-    
+
     final user = User(
       id: '1',
       name: _userName,
@@ -177,11 +179,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
       age: _userAge,
       pilotProfile: _pilotProfile,
     );
-    
+
     final bikeParts = _bikeModel.split(' ');
     final brand = bikeParts.isNotEmpty ? bikeParts[0] : 'Desconhecida';
-    final model = bikeParts.length > 1 ? bikeParts.sublist(1).join(' ') : _bikeModel;
-    
+    final model =
+        bikeParts.length > 1 ? bikeParts.sublist(1).join(' ') : _bikeModel;
+
     final bike = Bike(
       id: '1',
       model: model,
@@ -192,12 +195,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
       frontTirePressure: _frontTirePressure,
       rearTirePressure: _rearTirePressure,
     );
-    
+
     appState.setUser(user);
     appState.setBike(bike);
     appState.completeLogin();
     appState.completeSetup();
-    
+
     setState(() {
       _currentStep = 999;
     });
@@ -209,7 +212,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
+
     if (_isPreloading) {
       return Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
@@ -241,7 +244,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         ),
       );
     }
-    
+
     if (!appState.isLoggedIn) {
       return LoginScreen(
         onLogin: _handleLogin,
