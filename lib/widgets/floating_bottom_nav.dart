@@ -46,72 +46,46 @@ class _FloatingBottomNavState extends State<FloatingBottomNav> {
                 color: (isDark ? Colors.black : Colors.white).withOpacity(0.2),
                 borderRadius: BorderRadius.circular(28),
               ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final barWidth = constraints.maxWidth;
-                  final itemWidth = barWidth / _navItems.length;
-                  final pillWidth = itemWidth - 12;
-                  final pillLeft = 6 + currentIndex * itemWidth + (itemWidth - pillWidth) / 2;
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: _navItems.asMap().entries.map((entry) {
+                  final item = entry.value;
+                  final isSelected = currentIndex == item.index;
+                  final iconColor = isSelected
+                      ? theme.colorScheme.primary
+                      : (isDark
+                          ? Colors.white.withOpacity(0.5)
+                          : Colors.black.withOpacity(0.5));
 
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
-                        left: pillLeft,
-                        top: 6,
-                        child: Container(
-                          width: pillWidth,
+                  return Expanded(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => widget.onTap(item.index),
+                        borderRadius: BorderRadius.circular(22),
+                        splashColor: theme.colorScheme.primary.withOpacity(0.15),
+                        highlightColor: theme.colorScheme.primary.withOpacity(0.08),
+                        child: SizedBox(
+                          width: double.infinity,
                           height: 48,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withOpacity(0.9),
-                            borderRadius: BorderRadius.circular(22),
-                            boxShadow: [
-                              BoxShadow(
-                                color: theme.colorScheme.primary.withOpacity(0.25),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
+                          child: Center(
+                            child: AnimatedScale(
+                              scale: isSelected ? 1.3 : 1.0,
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              child: Icon(
+                                item.icon,
+                                size: 22,
+                                color: iconColor,
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                      Row(
-                        children: _navItems.asMap().entries.map((entry) {
-                          final item = entry.value;
-                          final isSelected = currentIndex == item.index;
-                          final iconColor = isSelected
-                              ? Colors.white
-                              : (isDark
-                                  ? Colors.white.withOpacity(0.5)
-                                  : Colors.black.withOpacity(0.5));
-
-                          return Expanded(
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () => widget.onTap(item.index),
-                                borderRadius: BorderRadius.circular(22),
-                                splashColor: theme.colorScheme.primary.withOpacity(0.15),
-                                highlightColor: theme.colorScheme.primary.withOpacity(0.08),
-                                child: Container(
-                                  height: 48,
-                                  alignment: Alignment.center,
-                                  child: Icon(
-                                    item.icon,
-                                    size: 22,
-                                    color: iconColor,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
+                    ),
                   );
-                },
+                }).toList(),
               ),
             ),
           ),

@@ -47,6 +47,25 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadPartnerData();
     _pollPendingDeliveriesForRider();
   }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Atualizar estilo do mapa quando o tema mudar
+    _updateMapStyle();
+  }
+  
+  Future<void> _updateMapStyle() async {
+    if (_mapController == null) return;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final mapStyle = isDark ? _darkMapStyle : _lightMapStyle;
+    if (mapStyle != null) {
+      await _mapController!.setMapStyle(mapStyle);
+    } else {
+      await _mapController!.setMapStyle(null);
+    }
+  }
 
   Future<void> _loadQuickMessages() async {
     try {
@@ -162,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _onMapCreated(GoogleMapController controller) {
+  void _onMapCreated(GoogleMapController controller) async {
     _mapController = controller;
     if (_currentPosition != null) {
       controller.animateCamera(
@@ -170,7 +189,208 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: _cameraAnimationDuration,
       );
     }
+    
+    // Aplicar estilo do mapa baseado no tema atual
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final mapStyle = isDark ? _darkMapStyle : _lightMapStyle;
+    if (mapStyle != null) {
+      await controller.setMapStyle(mapStyle);
+    }
   }
+  
+  // Estilo do mapa para modo claro
+  static const String? _lightMapStyle = null; // Usa estilo padrão do Google Maps
+  
+  // Estilo do mapa para modo escuro
+  static const String? _darkMapStyle = '''
+[
+  {
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#212121"
+      }
+    ]
+  },
+  {
+    "elementType": "labels.icon",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#757575"
+      }
+    ]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      {
+        "color": "#212121"
+      }
+    ]
+  },
+  {
+    "featureType": "administrative",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#757575"
+      }
+    ]
+  },
+  {
+    "featureType": "administrative.country",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#9e9e9e"
+      }
+    ]
+  },
+  {
+    "featureType": "administrative.land_parcel",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "administrative.locality",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#bdbdbd"
+      }
+    ]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#757575"
+      }
+    ]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#181818"
+      }
+    ]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#616161"
+      }
+    ]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      {
+        "color": "#1b1b1b"
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry.fill",
+    "stylers": [
+      {
+        "color": "#2c2c2c"
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#8a8a8a"
+      }
+    ]
+  },
+  {
+    "featureType": "road.arterial",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#373737"
+      }
+    ]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#3c3c3c"
+      }
+    ]
+  },
+  {
+    "featureType": "road.highway.controlled_access",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#4e4e4e"
+      }
+    ]
+  },
+  {
+    "featureType": "road.local",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#616161"
+      }
+    ]
+  },
+  {
+    "featureType": "transit",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#757575"
+      }
+    ]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#000000"
+      }
+    ]
+  },
+  {
+    "featureType": "water",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#3d3d3d"
+      }
+    ]
+  }
+]
+''';
 
   void _recenterMap() {
     if (_mapController == null || _currentPosition == null) return;
@@ -301,6 +521,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final appState = Provider.of<AppStateProvider>(context);
     final user = appState.user;
     final isRider = user?.isRider ?? true;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     final initialPosition = _currentPosition ?? _defaultCenter;
 
@@ -349,7 +571,7 @@ class _HomeScreenState extends State<HomeScreen> {
           left: 0,
           right: 0,
           child: ModernHeader(
-            title: isRider ? 'Mapa' : 'Minha Loja',
+            title: isRider ? '' : 'Minha Loja', // Removido "Mapa" pois está na Home
             transparentOverMap: true,
           ),
         ),
@@ -357,7 +579,6 @@ class _HomeScreenState extends State<HomeScreen> {
         // 3. Mensagens Rápidas – canto inferior esquerdo (acima do menu)
         Positioned(
           left: 16,
-          right: 100,
           bottom: 100,
           child: QuickMessagesCard(
             items: _quickMessages,
@@ -437,18 +658,18 @@ class _MapControlsOverlay extends StatelessWidget {
     final theme = Theme.of(context);
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
         decoration: BoxDecoration(
           color: theme.brightness == Brightness.dark
               ? Colors.black.withOpacity(0.35)
               : Colors.white.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
-              blurRadius: 12,
-              offset: const Offset(0, 3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
@@ -461,7 +682,7 @@ class _MapControlsOverlay extends StatelessWidget {
             ),
             Container(
               height: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 12),
+              margin: const EdgeInsets.symmetric(horizontal: 8),
               color: theme.dividerColor.withOpacity(0.5),
             ),
             _ControlButton(
@@ -470,7 +691,7 @@ class _MapControlsOverlay extends StatelessWidget {
             ),
             Container(
               height: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 12),
+              margin: const EdgeInsets.symmetric(horizontal: 8),
               color: theme.dividerColor.withOpacity(0.5),
             ),
             _MapTypeChip(
@@ -513,9 +734,9 @@ class _ControlButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(icon, size: 20, color: theme.iconTheme.color?.withOpacity(0.85)),
+          width: 32,
+          height: 32,
+          child: Icon(icon, size: 16, color: theme.iconTheme.color?.withOpacity(0.85)),
         ),
       ),
     );
@@ -544,7 +765,7 @@ class _MapTypeChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -561,7 +782,7 @@ class _MapTypeChip extends StatelessWidget {
               Text(
                 label,
                 style: theme.textTheme.labelSmall?.copyWith(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                   color: selected ? AppColors.racingOrange.withOpacity(0.95) : theme.textTheme.bodySmall?.color?.withOpacity(0.75),
                 ),
