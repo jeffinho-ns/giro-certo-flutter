@@ -242,6 +242,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
     
+    if (!appState.isLoggedIn) {
+      return LoginScreen(
+        onLogin: _handleLogin,
+        onRegister: _handleRegister,
+      );
+    }
     if (appState.isLoggedIn && appState.hasCompletedSetup) {
       return const MainNavigation();
     }

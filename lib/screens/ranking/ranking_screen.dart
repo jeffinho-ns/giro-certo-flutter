@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/app_state_provider.dart';
+import '../../providers/navigation_provider.dart';
 import '../../services/mock_data_service.dart';
 import '../../models/part.dart';
 import '../../utils/colors.dart';
@@ -43,9 +44,12 @@ class _RankingScreenState extends State<RankingScreen> {
       child: Column(
         children: [
           // Header
-          const ModernHeader(
+          ModernHeader(
             title: 'Ranking de Peças',
-            showBackButton: false,
+            showBackButton: true,
+            onBackPressed: () {
+              Provider.of<NavigationProvider>(context, listen: false).navigateTo(2);
+            },
           ),
           
           // Filtros

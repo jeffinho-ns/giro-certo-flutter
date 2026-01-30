@@ -6,6 +6,9 @@ import '../../services/api_service.dart';
 import '../../models/user.dart';
 import '../../utils/colors.dart';
 import '../settings/settings_screen.dart';
+import '../profile/edit_profile_screen.dart';
+import '../help/help_screen.dart';
+import '../../providers/navigation_provider.dart';
 
 class ProfileSidebar extends StatefulWidget {
   const ProfileSidebar({super.key});
@@ -296,7 +299,12 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                       subtitle: 'Atualizar informações pessoais',
                       onTap: () {
                         Navigator.pop(context);
-                        // Navegar para edição de perfil
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const EditProfileScreen(),
+                          ),
+                        );
                       },
                     ),
                     // Ocultar "Minha Garagem" para lojistas
@@ -310,7 +318,7 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         subtitle: 'Gerenciar motos cadastradas',
                         onTap: () {
                           Navigator.pop(context);
-                          // Navegar para garagem
+                          Provider.of<NavigationProvider>(context, listen: false).navigateTo(4);
                         },
                       ),
                     ],
@@ -340,7 +348,12 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                       subtitle: 'Central de suporte',
                       onTap: () {
                         Navigator.pop(context);
-                        // Navegar para ajuda
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HelpScreen(),
+                          ),
+                        );
                       },
                     ),
                     const SizedBox(height: 24),
@@ -357,18 +370,10 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         Navigator.pop(context);
                         try {
                           await ApiService.logout();
-                          final appState = Provider.of<AppStateProvider>(context, listen: false);
-                          appState.logout();
-                          // Navegar para login
-                          if (context.mounted) {
-                            Navigator.of(context).pushNamedAndRemoveUntil(
-                              '/login',
-                              (route) => false,
-                            );
-                          }
-                        } catch (e) {
-                          print('Erro ao fazer logout: $e');
-                        }
+                        } catch (_) {}
+                        final appState = Provider.of<AppStateProvider>(context, listen: false);
+                        appState.logout();
+                        // AuthWrapper reage a isLoggedIn e mostra LoginScreen
                       },
                     ),
                   ],

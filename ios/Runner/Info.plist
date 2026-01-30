@@ -41,6 +41,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>io.flutter.embedded_views_preview</key>
+	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>O Giro Certo usa a sua localização para mostrar o mapa e corridas próximas.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>O Giro Certo usa Face ID para entrar na sua conta de forma rápida e segura.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

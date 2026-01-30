@@ -1,22 +1,23 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/drawer_provider.dart';
-import '../utils/colors.dart';
-import '../screens/sidebars/notifications_sidebar.dart';
-import '../services/api_service.dart';
 
 class ModernHeader extends StatefulWidget {
   final String title;
   final bool showBackButton;
   final VoidCallback? onBackPressed;
+  /// Se true, usa layout compacto para sobrepor o mapa (sem fundo sólido).
+  final bool transparentOverMap;
 
   const ModernHeader({
     super.key,
     required this.title,
     this.showBackButton = false,
     this.onBackPressed,
+    this.transparentOverMap = false,
   });
 
   @override
@@ -24,27 +25,28 @@ class ModernHeader extends StatefulWidget {
 }
 
 class _ModernHeaderState extends State<ModernHeader> {
-  int _unreadNotificationsCount = 0;
+  late Timer _clockTimer;
+  String _timeStr = '';
 
   @override
   void initState() {
     super.initState();
-    _loadNotificationsCount();
+    _updateTime();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) => _updateTime());
   }
 
-  Future<void> _loadNotificationsCount() async {
-    try {
-      final alerts = await ApiService.getAlerts(limit: 100);
-      final unreadCount = alerts.where((alert) => !(alert['isRead'] as bool? ?? false)).length;
-      
-      if (mounted) {
-        setState(() {
-          _unreadNotificationsCount = unreadCount;
-        });
-      }
-    } catch (e) {
-      print('Erro ao carregar contagem de notificações: $e');
+  void _updateTime() {
+    final now = DateTime.now();
+    final str = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    if (str != _timeStr && mounted) {
+      setState(() => _timeStr = str);
     }
+  }
+
+  @override
+  void dispose() {
+    _clockTimer.cancel();
+    super.dispose();
   }
 
   @override
@@ -52,19 +54,26 @@ class _ModernHeaderState extends State<ModernHeader> {
     final appState = Provider.of<AppStateProvider>(context);
     final drawerProvider = Provider.of<DrawerProvider>(context, listen: false);
     final user = appState.user;
+    final bike = appState.bike;
     final theme = Theme.of(context);
 
+    final kmStr = bike != null
+        ? '${bike.currentKm.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')} km'
+        : '-- km';
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: widget.transparentOverMap ? Colors.transparent : theme.scaffoldBackgroundColor,
+        boxShadow: widget.transparentOverMap
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: SafeArea(
         bottom: false,
@@ -72,11 +81,9 @@ class _ModernHeaderState extends State<ModernHeader> {
           children: [
             Row(
               children: [
-                // Foto e nome do usuário (clicável para abrir sidebar)
+                // Foto e saudação ao piloto (esquerda)
                 GestureDetector(
-                  onTap: () {
-                    drawerProvider.openProfileDrawer();
-                  },
+                  onTap: () => drawerProvider.openProfileDrawer(),
                   child: Row(
                     children: [
                       Container(
@@ -91,14 +98,14 @@ class _ModernHeaderState extends State<ModernHeader> {
                           ),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: theme.colorScheme.primary.withOpacity(0.3),
-                            width: 2,
+                            color: theme.colorScheme.primary.withOpacity(0.2),
+                            width: 1.5,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: theme.colorScheme.primary.withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
+                              color: theme.colorScheme.primary.withOpacity(0.15),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
@@ -111,7 +118,9 @@ class _ModernHeaderState extends State<ModernHeader> {
                               )
                             : Center(
                                 child: Text(
-                                  user?.name[0].toUpperCase() ?? 'U',
+                                  user?.name.isNotEmpty == true
+                                      ? user!.name[0].toUpperCase()
+                                      : 'U',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 20,
@@ -145,72 +154,67 @@ class _ModernHeaderState extends State<ModernHeader> {
                   ),
                 ),
                 const Spacer(),
-                // Botão de notificações
-                Stack(
-                  children: [
-                    GestureDetector(
-                      onTap: () async {
-                        await showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (context) => const NotificationsSidebar(),
-                        );
-                        // Recarregar contagem após fechar o modal
-                        _loadNotificationsCount();
-                      },
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: theme.cardColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: theme.dividerColor,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Icon(
-                          LucideIcons.bell,
-                          color: theme.iconTheme.color,
-                          size: 22,
+                // Display [Hora] | [KM da Moto] (direita) – fundo escuro, bordas arredondadas, opacidade
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.35),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.12),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        LucideIcons.clock,
+                        size: 14,
+                        color: Colors.white.withOpacity(0.85),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _timeStr,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.3,
                         ),
                       ),
-                    ),
-                    // Badge de notificação (só mostra se houver notificações não lidas)
-                    if (_unreadNotificationsCount > 0)
-                      Positioned(
-                        right: 0,
-                        top: 0,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Container(
-                          width: _unreadNotificationsCount > 99 ? 24 : 18,
-                          height: 18,
-                          decoration: BoxDecoration(
-                            color: AppColors.alertRed,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: theme.scaffoldBackgroundColor,
-                              width: 2,
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              _unreadNotificationsCount > 99 ? '99+' : '$_unreadNotificationsCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
+                          width: 1,
+                          height: 14,
+                          color: Colors.white.withOpacity(0.3),
                         ),
                       ),
-                  ],
+                      Icon(
+                        LucideIcons.gauge,
+                        size: 14,
+                        color: Colors.white.withOpacity(0.85),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        kmStr,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
             if (widget.title.isNotEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   if (widget.showBackButton)

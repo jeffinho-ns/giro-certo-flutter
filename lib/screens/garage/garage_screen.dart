@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/app_state_provider.dart';
+import '../../providers/navigation_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 
@@ -22,9 +23,12 @@ class GarageScreen extends StatelessWidget {
           bottom: false,
           child: Column(
             children: [
-              const ModernHeader(
+              ModernHeader(
                 title: 'Garagem',
-                showBackButton: false,
+                showBackButton: true,
+                onBackPressed: () {
+                  Provider.of<NavigationProvider>(context, listen: false).navigateTo(2);
+                },
               ),
               Expanded(
                 child: Center(
@@ -66,9 +70,12 @@ class GarageScreen extends StatelessWidget {
         child: Column(
           children: [
             // Header
-            const ModernHeader(
+            ModernHeader(
               title: 'Garagem',
-              showBackButton: false,
+              showBackButton: true,
+              onBackPressed: () {
+                Provider.of<NavigationProvider>(context, listen: false).navigateTo(2);
+              },
             ),
             
             // Conteúdo

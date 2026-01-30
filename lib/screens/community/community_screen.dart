@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/app_state_provider.dart';
+import '../../providers/navigation_provider.dart';
 import '../../services/mock_data_service.dart';
 import '../../models/post.dart';
 import '../../utils/colors.dart';
@@ -22,9 +23,12 @@ class CommunityScreen extends StatelessWidget {
         bottom: false,
         child: Column(
           children: [
-            const ModernHeader(
+            ModernHeader(
               title: 'Comunidade',
-              showBackButton: false,
+              showBackButton: true,
+              onBackPressed: () {
+                Provider.of<NavigationProvider>(context, listen: false).navigateTo(2);
+              },
             ),
             Expanded(
               child: Center(
@@ -65,9 +69,12 @@ class CommunityScreen extends StatelessWidget {
       child: Column(
           children: [
             // Header
-            const ModernHeader(
+            ModernHeader(
               title: 'Comunidade',
-              showBackButton: false,
+              showBackButton: true,
+              onBackPressed: () {
+                Provider.of<NavigationProvider>(context, listen: false).navigateTo(2);
+              },
             ),
             
             // Lista de posts

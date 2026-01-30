@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:local_auth/local_auth.dart';
 import '../../utils/colors.dart';
 import '../../services/api_service.dart';
+import '../../services/credentials_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../models/user.dart';
 
@@ -23,8 +25,62 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _localAuth = LocalAuthentication();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _saveCredentials = true;
+  bool _hasSavedCredentials = false;
+  bool _canCheckBiometrics = false;
+  String _biometricTypeLabel = 'biometria';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+    _checkBiometricSupport();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    final has = await CredentialsService.hasSavedCredentials();
+    if (!mounted) return;
+    String? email;
+    if (has) {
+      email = await CredentialsService.getSavedEmail();
+    }
+    if (!mounted) return;
+    setState(() {
+      _hasSavedCredentials = has;
+      if (email != null) _emailController.text = email;
+    });
+  }
+
+  Future<void> _checkBiometricSupport() async {
+    try {
+      final isDeviceSupported = await _localAuth.isDeviceSupported();
+      if (!isDeviceSupported) return;
+      final canCheck = await _localAuth.canCheckBiometrics;
+      if (!canCheck) return;
+      final available = await _localAuth.getAvailableBiometrics();
+      String label = 'biometria';
+      if (available.contains(BiometricType.face)) {
+        label = 'Face ID';
+      } else if (available.contains(BiometricType.fingerprint)) {
+        label = 'impressão digital';
+      } else if (available.isNotEmpty) {
+        label = 'biometria';
+      }
+      if (!mounted) return;
+      setState(() {
+        _canCheckBiometrics = available.isNotEmpty;
+        _biometricTypeLabel = label;
+      });
+    } catch (e) {
+      // Emulador ou dispositivo sem biometria; ignorar
+      if (mounted) {
+        setState(() => _canCheckBiometrics = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -80,6 +136,25 @@ class _LoginScreenState extends State<LoginScreen> {
       // Debug: verificar após salvar
       print('🔍 Login - User salvo no AppState: ${appState.user?.email}, partnerId: ${appState.user?.partnerId}');
 
+      // Guardar credenciais se o utilizador marcou a opção
+      try {
+        await CredentialsService.saveCredentials(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          save: _saveCredentials,
+        );
+      } catch (_) {
+        // Falha ao guardar não impede o login
+        if (mounted && _saveCredentials) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login concluído, mas não foi possível guardar as credenciais.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+
       // Navegar para a home
       if (mounted) {
         widget.onLogin();
@@ -101,6 +176,86 @@ class _LoginScreenState extends State<LoginScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _handleBiometricLogin() async {
+    if (!_hasSavedCredentials) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Faça login com e-mail e senha e marque "Guardar e-mail e senha" para usar biometria depois.')),
+        );
+      }
+      return;
+    }
+    String? email;
+    String? password;
+    try {
+      email = await CredentialsService.getSavedEmail();
+      password = await CredentialsService.getSavedPassword();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível ler as credenciais guardadas. Faça login manualmente.')),
+        );
+      }
+      return;
+    }
+    if (email == null || password == null || email.isEmpty || password.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Credenciais guardadas inválidas. Faça login com e-mail e senha.')),
+        );
+      }
+      return;
+    }
+    try {
+      final authenticated = await _localAuth.authenticate(
+        localizedReason: 'Use $_biometricTypeLabel para entrar no Giro Certo',
+        options: const AuthenticationOptions(
+          biometricOnly: false,
+          stickyAuth: true,
+        ),
+      );
+      if (!authenticated) return;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().contains('Canceled') || e.toString().contains('canceled')
+                  ? 'Autenticação cancelada.'
+                  : 'Biometria indisponível. Tente entrar com e-mail e senha.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final loginResponse = await ApiService.login(email, password);
+      User? user;
+      if (loginResponse['user'] != null) {
+        user = User.fromJson(loginResponse['user']);
+      } else {
+        user = await ApiService.getCurrentUser();
+      }
+      if (!mounted) return;
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      appState.setUser(user);
+      appState.completeLogin();
+      appState.completeSetup();
+      widget.onLogin();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao entrar: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -261,7 +416,38 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 16),
+                  
+                  // Guardar e-mail e senha
+                  Row(
+                    children: [
+                      SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: Checkbox(
+                          value: _saveCredentials,
+                          onChanged: (v) => setState(() => _saveCredentials = v ?? true),
+                          activeColor: AppColors.racingOrange,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () => setState(() => _saveCredentials = !_saveCredentials),
+                        child: Text(
+                          'Guardar e-mail e senha',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 14,
+                            color: theme.textTheme.bodyMedium?.color?.withOpacity(0.9),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 24),
                   
                   // Botão Entrar
                   SizedBox(
@@ -292,6 +478,33 @@ class _LoginScreenState extends State<LoginScreen> {
                           : const Text('Entrar'),
                     ),
                   ),
+                  
+                  if (_hasSavedCredentials && _canCheckBiometrics) ...[
+                    const SizedBox(height: 20),
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _handleBiometricLogin,
+                      icon: Icon(
+                        _biometricTypeLabel.contains('Face') ? Icons.face : Icons.fingerprint,
+                        size: 22,
+                        color: AppColors.racingOrange,
+                      ),
+                      label: Text(
+                        'Entrar com $_biometricTypeLabel',
+                        style: const TextStyle(
+                          color: AppColors.racingOrange,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.racingOrange),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
                   
                   const SizedBox(height: 32),
                   

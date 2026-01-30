@@ -597,9 +597,9 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
               elevation: 4,
               child: InkWell(
                 onTap: () {
-                  // Navegar para a home usando o NavigationProvider
                   final navProvider = Provider.of<NavigationProvider>(context, listen: false);
-                  navProvider.navigateToHome();
+                  Navigator.of(context).pop();
+                  navProvider.navigateTo(2);
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
