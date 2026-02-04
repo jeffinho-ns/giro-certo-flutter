@@ -54,7 +54,12 @@ class MotorcycleModel {
     // Substitui espaços por hífens e deixa em minúsculas
     // Ex: "CG 125" -> "cg-125.png"
     final modelFileName = model.toLowerCase().replaceAll(' ', '-');
-    final brandFolder = brand.toLowerCase().replaceAll(' ', '_').replaceAll('(', '').replaceAll(')', '').trim();
+    final brandFolder = brand
+        .toLowerCase()
+        .replaceAll(' ', '_')
+        .replaceAll('(', '')
+        .replaceAll(')', '')
+        .trim();
     return 'assets/marca/$brandFolder/$modelFileName.png';
   }
 }

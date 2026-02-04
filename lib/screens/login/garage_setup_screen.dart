@@ -47,7 +47,7 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
 
   void _onSearchChanged() {
     final query = _searchController.text.trim();
-    
+
     if (query.isEmpty) {
       setState(() {
         _selectedBrand = null;
@@ -58,11 +58,11 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
     }
 
     final results = MotorcycleDataService.searchMotorcycles(query);
-    
+
     // Agrupar por marca
     final brands = results.map((m) => m.brand).toSet();
     String? foundBrand;
-    
+
     // Verificar se a busca corresponde a uma marca
     for (final brand in brands) {
       if (brand.toLowerCase().contains(query.toLowerCase())) {
@@ -100,7 +100,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
         .replaceAll('(', '')
         .replaceAll(')', '')
         .trim();
-    final modelFile = motorcycle.model.replaceAll(' ', '-').replaceAll('/', '-');
+    final modelFile =
+        motorcycle.model.replaceAll(' ', '-').replaceAll('/', '-');
 
     final candidates = <String>[
       'assets/marca/$brandFolder/$modelFile.png',
@@ -182,7 +183,7 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                   },
                 ),
               ),
-              
+
               // Campo de busca
               Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -216,16 +217,18 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                   ),
                 ),
               ),
-              
+
               // Conteúdo principal
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
                       // Lista de modelos da marca (quando não há seleção)
-                      if (_brandModels.isNotEmpty && _selectedMotorcycle == null)
+                      if (_brandModels.isNotEmpty &&
+                          _selectedMotorcycle == null)
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -244,7 +247,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                 return InkWell(
                                   onTap: () => _selectMotorcycle(moto),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12, horizontal: 16),
                                     margin: const EdgeInsets.only(bottom: 8),
                                     decoration: BoxDecoration(
                                       color: Colors.white,
@@ -274,11 +278,11 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                             ],
                           ),
                         ),
-                      
+
                       // Layout com logo, nome do modelo e imagem (quando selecionada)
                       if (_selectedMotorcycle != null) ...[
                         const SizedBox(height: 24),
-                        
+
                         // Logo da marca (no topo, centralizado)
                         Center(
                           child: Image.asset(
@@ -289,9 +293,9 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                             },
                           ),
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Nome do modelo (em vermelho)
                         Center(
                           child: Text(
@@ -310,10 +314,11 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                             padding: const EdgeInsets.only(top: 8.0),
                             child: Text(
                               _resolvedModelImagePath!,
-                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.black54),
                             ),
                           ),
-                        
+
                         // Container com fundo cinza escuro e imagem da moto
                         Stack(
                           alignment: Alignment.bottomCenter,
@@ -322,7 +327,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                             Padding(
                               padding: const EdgeInsets.only(top: 10),
                               child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 40),
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 40),
                                 height: 180,
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF2C2C2C),
@@ -333,7 +339,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                   children: [
                                     // Indicadores de cor
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         // Círculo vermelho (selecionado)
                                         Container(
@@ -379,35 +386,41 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                 ),
                               ),
                             ),
-                            
+
                             // Imagem da moto (largura total da tela, sobrepondo o container)
                             SizedBox(
                               width: double.infinity,
                               child: Image.asset(
-                                _resolvedModelImagePath ?? 'assets/images/moto-black.png',
+                                _resolvedModelImagePath ??
+                                    'assets/images/moto-black.png',
                                 fit: BoxFit.fitWidth,
                               ),
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 32),
-                        
+
                         // Especificações detalhadas
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildSpecRow('Displacement', _selectedMotorcycle!.displacement),
+                              _buildSpecRow('Displacement',
+                                  _selectedMotorcycle!.displacement),
                               const SizedBox(height: 14),
-                              _buildSpecRow('Horse Power', _getHorsePower(_selectedMotorcycle!)),
+                              _buildSpecRow('Horse Power',
+                                  _getHorsePower(_selectedMotorcycle!)),
                               const SizedBox(height: 14),
-                              _buildSpecRow('Torque', _getTorque(_selectedMotorcycle!)),
+                              _buildSpecRow(
+                                  'Torque', _getTorque(_selectedMotorcycle!)),
                               const SizedBox(height: 14),
-                              _buildSpecRow('Dry Weight', _getDryWeight(_selectedMotorcycle!)),
+                              _buildSpecRow('Dry Weight',
+                                  _getDryWeight(_selectedMotorcycle!)),
                               const SizedBox(height: 14),
-                              _buildSpecRow('Seat Height', _getSeatHeight(_selectedMotorcycle!)),
+                              _buildSpecRow('Seat Height',
+                                  _getSeatHeight(_selectedMotorcycle!)),
                               const SizedBox(height: 14),
                               _buildSpecRow('Safety', _selectedMotorcycle!.abs),
                             ],
@@ -418,7 +431,7 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                   ),
                 ),
               ),
-              
+
               // Botão CONTINUAR
               if (_selectedMotorcycle != null)
                 Padding(
