@@ -4,6 +4,7 @@ class MotorcycleModel {
   final String model;
   final String displacement;
   final String abs;
+  final String? imageUrl;
   final List<String> availableColors;
 
   MotorcycleModel({
@@ -12,6 +13,7 @@ class MotorcycleModel {
     required this.model,
     required this.displacement,
     required this.abs,
+    this.imageUrl,
     this.availableColors = const ['red', 'black', 'white'],
   });
 
@@ -45,5 +47,14 @@ class MotorcycleModel {
       'Piaggio': 'piaggio',
     };
     return 'assets/marca/${brandMap[brand] ?? 'honda'}.png';
+  }
+
+  // Gerar caminho da imagem baseado no modelo
+  String get modelImagePath {
+    // Substitui espaços por hífens e deixa em minúsculas
+    // Ex: "CG 125" -> "cg-125.png"
+    final modelFileName = model.toLowerCase().replaceAll(' ', '-');
+    final brandFolder = brand.toLowerCase().replaceAll(' ', '_').replaceAll('(', '').replaceAll(')', '').trim();
+    return 'assets/marca/$brandFolder/$modelFileName.png';
   }
 }

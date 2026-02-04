@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../utils/colors.dart';
 import '../../models/motorcycle_model.dart';
@@ -29,6 +30,7 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
   MotorcycleModel? _selectedMotorcycle;
   String? _selectedBrand;
   List<MotorcycleModel> _brandModels = [];
+  String? _resolvedModelImagePath;
 
   @override
   void initState() {
@@ -86,6 +88,57 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
   void _selectMotorcycle(MotorcycleModel motorcycle) {
     setState(() {
       _selectedMotorcycle = motorcycle;
+      _resolvedModelImagePath = null;
+    });
+    _resolveModelImagePath(motorcycle);
+  }
+
+  Future<void> _resolveModelImagePath(MotorcycleModel motorcycle) async {
+    final brandFolder = motorcycle.brand
+        .toLowerCase()
+        .replaceAll(' ', '_')
+        .replaceAll('(', '')
+        .replaceAll(')', '')
+        .trim();
+    final modelFile = motorcycle.model.replaceAll(' ', '-').replaceAll('/', '-');
+
+    final candidates = <String>[
+      'assets/marca/$brandFolder/$modelFile.png',
+      'assets/marca/$brandFolder/${modelFile.toLowerCase()}.png',
+      'assets/marca/$brandFolder/${modelFile.toUpperCase()}.png',
+      'assets/marca/$modelFile.png',
+      'assets/marca/${modelFile.toLowerCase()}.png',
+      'assets/marca/${modelFile.toUpperCase()}.png',
+    ];
+
+    for (final path in candidates) {
+      try {
+        // debug
+        // ignore: avoid_print
+        print('[MotorcycleImage] trying asset: $path');
+        await rootBundle.load(path);
+        // debug
+        // ignore: avoid_print
+        print('[MotorcycleImage] found asset: $path');
+        if (!mounted) return;
+        setState(() {
+          _resolvedModelImagePath = path;
+        });
+        return;
+      } catch (e) {
+        // debug
+        // ignore: avoid_print
+        print('[MotorcycleImage] not found: $path -> $e');
+        // continuar para o próximo candidato
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _resolvedModelImagePath = 'assets/images/moto-black.png';
+      // debug
+      // ignore: avoid_print
+      print('[MotorcycleImage] fallback to default image');
     });
   }
 
@@ -251,6 +304,15 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                             ),
                           ),
                         ),
+                        // Caminho resolvido (debug)
+                        if (_resolvedModelImagePath != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              _resolvedModelImagePath!,
+                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                            ),
+                          ),
                         
                         // Container com fundo cinza escuro e imagem da moto
                         Stack(
@@ -322,7 +384,7 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                             SizedBox(
                               width: double.infinity,
                               child: Image.asset(
-                                'assets/images/moto-black.png',
+                                _resolvedModelImagePath ?? 'assets/images/moto-black.png',
                                 fit: BoxFit.fitWidth,
                               ),
                             ),

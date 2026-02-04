@@ -245,12 +245,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    if (!appState.isLoggedIn) {
-      return LoginScreen(
-        onLogin: _handleLogin,
-        onRegister: _handleRegister,
-      );
-    }
+    // Fluxo de navegação correto: SplashScreen → Login → Setup → Home
     if (appState.isLoggedIn && appState.hasCompletedSetup) {
       return const MainNavigation();
     }
@@ -272,7 +267,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
       case 6:
         return PilotProfileScreen(onSelectProfile: _handlePilotProfile);
       default:
-        return const MainNavigation();
+        return LoginScreen(
+          onLogin: _handleLogin,
+          onRegister: _handleRegister,
+        );
     }
   }
 }
