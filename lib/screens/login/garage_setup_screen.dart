@@ -7,6 +7,8 @@ import '../../services/motorcycle_data_service.dart';
 
 class GarageSetupScreen extends StatefulWidget {
   final Function({
+    required MotorcycleModel motorcycle,
+    String? resolvedImagePath,
     required String brand,
     required String model,
     required String plate,
@@ -146,6 +148,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
   void _handleContinue() {
     if (_selectedMotorcycle != null) {
       widget.onComplete(
+        motorcycle: _selectedMotorcycle!,
+        resolvedImagePath: _resolvedModelImagePath,
         brand: _selectedMotorcycle!.brand,
         model: _selectedMotorcycle!.model,
         plate: 'ABC-1234',

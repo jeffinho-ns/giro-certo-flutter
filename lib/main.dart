@@ -10,11 +10,16 @@ import 'screens/login/login_screen.dart';
 import 'screens/login/register_screen.dart';
 import 'screens/login/garage_intro_screen.dart';
 import 'screens/login/garage_setup_screen.dart';
-import 'screens/login/pilot_profile_screen.dart';
+import 'screens/login/pilot_profile_select_screen.dart';
+import 'screens/login/garage_setup_detail_screen.dart';
+import 'screens/login/delivery_registration_screen.dart';
 import 'screens/main_navigation.dart';
 import 'models/user.dart';
 import 'models/bike.dart';
+import 'models/motorcycle_model.dart';
+import 'models/pilot_profile.dart';
 import 'services/app_preload_service.dart';
+import 'services/onboarding_service.dart';
 import 'services/motorcycle_data_service.dart';
 import 'utils/colors.dart';
 
@@ -66,14 +71,28 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  int _currentStep = 0;
+  static const int _stepSplash = 0;
+  static const int _stepLogin = 1;
+  static const int _stepRegister = 2;
+  static const int _stepGarageIntro = 4;
+  static const int _stepGarageSelect = 5;
+  static const int _stepPilotProfile = 6;
+  static const int _stepGarageDetail = 7;
+  static const int _stepDeliveryRegistration = 8;
+  static const int _stepHome = 999;
+
+  int _currentStep = _stepSplash;
   String _userName = '';
   String _userEmail = '';
   String _userPassword = '';
   int _userAge = 0;
+  String _bikeBrand = '';
   String _bikeModel = '';
-  String _pilotProfile = 'Urbano';
-  String _plate = '';
+  String _pilotProfile = 'Diario';
+  PilotProfileType? _pilotProfileType;
+  MotorcycleModel? _selectedMotorcycle;
+  String? _selectedMotorcycleImagePath;
+  String _plate = 'ABC-1234';
   int _currentKm = 12450;
   String _oilType = '10W-40 Sintético';
   double _frontTirePressure = 2.5;
@@ -111,24 +130,65 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
-  void _goToNextStep() {
+  void _setStep(int step) {
     setState(() {
-      _currentStep++;
+      _currentStep = step;
     });
+    if (step >= _stepGarageIntro && step != _stepHome) {
+      OnboardingService.saveStep(step);
+    }
+  }
+
+  void _goToNextStep() {
+    _setStep(_currentStep + 1);
   }
 
   void _handleLogin() {
-    // O LoginScreen agora faz o login e salva o usuário diretamente
-    // Apenas navegar para a home
-    setState(() {
-      _currentStep = 999;
-    });
+    _handleLoginAsync();
+  }
+
+  Future<void> _handleLoginAsync() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+
+    if (appState.hasCompletedSetup) {
+      setState(() => _currentStep = _stepHome);
+      return;
+    }
+
+    final savedStep = await OnboardingService.getSavedStep();
+    final restoredStep =
+        (savedStep != null && savedStep >= _stepGarageIntro)
+            ? savedStep
+            : _stepGarageIntro;
+
+    final savedMotorcycleId = await OnboardingService.getSelectedMotorcycleId();
+    if (savedMotorcycleId != null) {
+      _selectedMotorcycle =
+          MotorcycleDataService.findMotorcycleById(savedMotorcycleId);
+      _selectedMotorcycleImagePath =
+          await OnboardingService.getSelectedMotorcycleImagePath();
+      _bikeBrand = _selectedMotorcycle?.brand ?? _bikeBrand;
+      _bikeModel = _selectedMotorcycle?.model ?? _bikeModel;
+    }
+
+    if (!mounted) return;
+    _setStep(restoredStep);
+
+    final savedPilotType = await OnboardingService.getPilotType();
+    if (savedPilotType != null) {
+      _pilotProfileType = savedPilotType;
+      appState.setPilotProfileType(savedPilotType);
+      _pilotProfile = savedPilotType.label;
+    }
+
+    final savedDeliveryStatus = await OnboardingService.getDeliveryStatus();
+    if (savedDeliveryStatus != null) {
+      appState.setDeliveryModerationStatus(savedDeliveryStatus);
+    }
   }
 
   void _handleRegister() {
-    setState(() {
-      _currentStep = 2;
-    });
+    _setStep(_stepRegister);
   }
 
   void _handleRegisterComplete(
@@ -138,11 +198,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
       _userEmail = email;
       _userPassword = password;
       _userAge = age;
-      _currentStep = 4;
     });
+    _setStep(_stepGarageIntro);
   }
 
   void _handleGarageSetup({
+    required MotorcycleModel motorcycle,
+    String? resolvedImagePath,
     required String brand,
     required String model,
     required String plate,
@@ -152,38 +214,83 @@ class _AuthWrapperState extends State<AuthWrapper> {
     required double rearTirePressure,
   }) {
     setState(() {
-      _bikeModel = '$brand $model';
+      _bikeBrand = brand;
+      _bikeModel = model;
       _plate = plate;
       _currentKm = currentKm;
       _oilType = oilType;
       _frontTirePressure = frontTirePressure;
       _rearTirePressure = rearTirePressure;
-      _currentStep++;
+      _selectedMotorcycle = motorcycle;
+      _selectedMotorcycleImagePath = resolvedImagePath;
     });
-  }
-
-  void _handlePilotProfile(String profile) {
-    setState(() {
-      _pilotProfile = profile;
-      _finalizeSetup();
-    });
-  }
-
-  void _finalizeSetup() {
-    final appState = Provider.of<AppStateProvider>(context, listen: false);
-
-    final user = User(
-      id: '1',
-      name: _userName,
-      email: _userEmail,
-      age: _userAge,
-      pilotProfile: _pilotProfile,
+    OnboardingService.saveMotorcycleSelection(
+      motorcycleId: motorcycle.id,
+      imagePath: resolvedImagePath,
     );
+    _setStep(_stepPilotProfile);
+  }
 
-    final bikeParts = _bikeModel.split(' ');
-    final brand = bikeParts.isNotEmpty ? bikeParts[0] : 'Desconhecida';
-    final model =
-        bikeParts.length > 1 ? bikeParts.sublist(1).join(' ') : _bikeModel;
+  void _handlePilotProfileContinue(PilotProfileType profileType) {
+    _pilotProfileType = profileType;
+    _pilotProfile = profileType.label;
+    OnboardingService.savePilotType(profileType);
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    appState.setPilotProfileType(profileType);
+    if (profileType.isDelivery) {
+      _setStep(_stepDeliveryRegistration);
+    } else {
+      _setStep(_stepGarageDetail);
+    }
+  }
+
+  void _handleGarageDetailComplete(GarageSetupDetails details) {
+    _handleGarageDetailCompleteAsync(details);
+  }
+
+  Future<void> _handleGarageDetailCompleteAsync(
+      GarageSetupDetails details) async {
+    await _finalizeSetup(
+      garageDetails: details,
+      deliveryStatus: DeliveryModerationStatus.approved,
+    );
+  }
+
+  void _handleDeliveryRegistrationComplete(DeliveryRegistrationDetails _) {
+    _handleDeliveryRegistrationCompleteAsync();
+  }
+
+  Future<void> _handleDeliveryRegistrationCompleteAsync() async {
+    await _finalizeSetup(
+      deliveryStatus: DeliveryModerationStatus.pending,
+    );
+  }
+
+  Future<void> _finalizeSetup({
+    required DeliveryModerationStatus deliveryStatus,
+    GarageSetupDetails? garageDetails,
+  }) async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final resolvedProfile =
+        _pilotProfileType ?? appState.pilotProfileType ?? PilotProfileType.diario;
+
+    final existingUser = appState.user;
+    final user = existingUser != null
+        ? existingUser.copyWith(pilotProfile: resolvedProfile.label)
+        : User(
+            id: '1',
+            name: _userName,
+            email: _userEmail,
+            age: _userAge,
+            pilotProfile: resolvedProfile.label,
+          );
+
+    final brand = _bikeBrand.isNotEmpty
+        ? _bikeBrand
+        : _selectedMotorcycle?.brand ?? 'Desconhecida';
+    final model = _bikeModel.isNotEmpty
+        ? _bikeModel
+        : _selectedMotorcycle?.model ?? 'Modelo';
 
     final bike = Bike(
       id: '1',
@@ -194,16 +301,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
       oilType: _oilType,
       frontTirePressure: _frontTirePressure,
       rearTirePressure: _rearTirePressure,
+      nickname: garageDetails?.nickname ?? model,
+      ridingStyle: garageDetails?.ridingStyle,
+      accessories: garageDetails?.accessories ?? const [],
+      nextUpgrade: garageDetails?.nextUpgrade,
+      preferredColor: garageDetails?.colorLabel,
     );
 
     appState.setUser(user);
     appState.setBike(bike);
+    appState.setPilotProfileType(resolvedProfile);
+    appState.setDeliveryModerationStatus(deliveryStatus);
     appState.completeLogin();
     appState.completeSetup();
+    await OnboardingService.completeOnboarding();
+    await OnboardingService.saveDeliveryStatus(deliveryStatus);
 
-    setState(() {
-      _currentStep = 999;
-    });
+    if (mounted) {
+      setState(() {
+        _currentStep = _stepHome;
+      });
+    }
   }
 
   @override
@@ -250,27 +368,75 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return const MainNavigation();
     }
 
+    Widget stepScreen;
     switch (_currentStep) {
-      case 0:
-        return SplashScreen(onComplete: _goToNextStep);
-      case 1:
-        return LoginScreen(
+      case _stepSplash:
+        stepScreen = SplashScreen(onComplete: _goToNextStep);
+        break;
+      case _stepLogin:
+        stepScreen = LoginScreen(
           onLogin: _handleLogin,
           onRegister: _handleRegister,
         );
-      case 2:
-        return RegisterScreen(onRegister: _handleRegisterComplete);
-      case 4:
-        return GarageIntroScreen(onContinue: _goToNextStep);
-      case 5:
-        return GarageSetupScreen(onComplete: _handleGarageSetup);
-      case 6:
-        return PilotProfileScreen(onSelectProfile: _handlePilotProfile);
+        break;
+      case _stepRegister:
+        stepScreen = RegisterScreen(onRegister: _handleRegisterComplete);
+        break;
+      case _stepGarageIntro:
+        stepScreen = GarageIntroScreen(onContinue: _goToNextStep);
+        break;
+      case _stepGarageSelect:
+        stepScreen = GarageSetupScreen(onComplete: _handleGarageSetup);
+        break;
+      case _stepPilotProfile:
+        stepScreen = PilotProfileSelectScreen(
+          initialSelection: _pilotProfileType ?? appState.pilotProfileType,
+          onContinue: _handlePilotProfileContinue,
+        );
+        break;
+      case _stepGarageDetail:
+        if (_selectedMotorcycle == null) {
+          stepScreen = GarageSetupScreen(onComplete: _handleGarageSetup);
+        } else {
+          stepScreen = GarageSetupDetailScreen(
+            motorcycle: _selectedMotorcycle!,
+            motorcycleImagePath: _selectedMotorcycleImagePath,
+            pilotType: _pilotProfileType ?? PilotProfileType.diario,
+            onFinish: _handleGarageDetailComplete,
+            onBack: () => _setStep(_stepPilotProfile),
+          );
+        }
+        break;
+      case _stepDeliveryRegistration:
+        stepScreen = DeliveryRegistrationScreen(
+          pilotType: _pilotProfileType ?? PilotProfileType.delivery,
+          onSubmit: _handleDeliveryRegistrationComplete,
+          onBack: () => _setStep(_stepPilotProfile),
+        );
+        break;
       default:
-        return LoginScreen(
+        stepScreen = LoginScreen(
           onLogin: _handleLogin,
           onRegister: _handleRegister,
         );
     }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (child, animation) {
+        final slide = Tween<Offset>(
+          begin: const Offset(0, 0.03),
+          end: Offset.zero,
+        ).animate(animation);
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(position: slide, child: child),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<int>(_currentStep),
+        child: stepScreen,
+      ),
+    );
   }
 }

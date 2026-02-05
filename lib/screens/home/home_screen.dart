@@ -8,6 +8,7 @@ import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/map_service.dart';
 import '../../models/delivery_order.dart';
+import '../../models/pilot_profile.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/quick_messages_card.dart';
@@ -523,6 +524,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final isRider = user?.isRider ?? true;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isDeliveryProfile =
+        appState.pilotProfileType?.isDelivery ??
+            (user?.pilotProfile.toLowerCase().contains('delivery') ?? false);
+    final showDeliveryPendingBanner =
+        appState.deliveryModerationStatus == DeliveryModerationStatus.pending &&
+            isDeliveryProfile;
 
     final initialPosition = _currentPosition ?? _defaultCenter;
 
@@ -575,6 +582,14 @@ class _HomeScreenState extends State<HomeScreen> {
             transparentOverMap: true,
           ),
         ),
+
+        if (showDeliveryPendingBanner)
+          const Positioned(
+            top: 96,
+            left: 16,
+            right: 16,
+            child: _DeliveryPendingBanner(),
+          ),
 
         // 3. Mensagens Rápidas – canto inferior esquerdo (acima do menu)
         Positioned(
@@ -714,6 +729,63 @@ class _MapControlsOverlay extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DeliveryPendingBanner extends StatelessWidget {
+  const _DeliveryPendingBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = AppColors.statusWarning;
+    final bgColor = theme.brightness == Brightness.dark
+        ? AppColors.darkSurface.withOpacity(0.92)
+        : AppColors.lightSurface.withOpacity(0.95);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: accent.withOpacity(0.3),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              LucideIcons.info,
+              size: 18,
+              color: accent,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Seu perfil de entregador esta sendo analisado. Algumas funcoes estao limitadas.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

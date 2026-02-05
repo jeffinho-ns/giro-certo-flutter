@@ -8,6 +8,11 @@ class Bike {
   final double frontTirePressure;
   final double rearTirePressure;
   final String? photoUrl;
+  final String? nickname;
+  final String? ridingStyle;
+  final List<String> accessories;
+  final String? nextUpgrade;
+  final String? preferredColor;
 
   Bike({
     required this.id,
@@ -19,5 +24,10 @@ class Bike {
     required this.frontTirePressure,
     required this.rearTirePressure,
     this.photoUrl,
+    this.nickname,
+    this.ridingStyle,
+    this.accessories = const [],
+    this.nextUpgrade,
+    this.preferredColor,
   });
 }

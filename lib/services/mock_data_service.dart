@@ -23,7 +23,7 @@ class MockDataService {
       name: isPartner ? 'Loja MotoPeças' : 'João Silva',
       email: isPartner ? 'loja@example.com' : 'joao@example.com',
       age: isPartner ? 0 : 28,
-      pilotProfile: isPartner ? 'URBANO' : 'URBANO',
+      pilotProfile: isPartner ? 'Diario' : 'Diario',
       role: UserRole.user,
       partnerId: isPartner ? 'p1' : null,
       isSubscriber: false,

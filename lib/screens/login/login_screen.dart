@@ -6,6 +6,7 @@ import '../../services/api_service.dart';
 import '../../services/credentials_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../models/user.dart';
+import '../../services/onboarding_service.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onLogin;
@@ -131,7 +132,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       appState.setUser(user);
       appState.completeLogin();
-      appState.completeSetup();
+      final hasCompletedOnboarding =
+          await OnboardingService.hasCompletedOnboarding();
+      appState.setSetupCompleted(hasCompletedOnboarding);
       
       // Debug: verificar após salvar
       print('🔍 Login - User salvo no AppState: ${appState.user?.email}, partnerId: ${appState.user?.partnerId}');
@@ -246,7 +249,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       appState.setUser(user);
       appState.completeLogin();
-      appState.completeSetup();
+      final hasCompletedOnboarding =
+          await OnboardingService.hasCompletedOnboarding();
+      appState.setSetupCompleted(hasCompletedOnboarding);
       widget.onLogin();
     } catch (e) {
       if (mounted) {
