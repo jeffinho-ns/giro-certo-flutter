@@ -36,7 +36,8 @@ class DeliveryRegistrationScreen extends StatefulWidget {
       _DeliveryRegistrationScreenState();
 }
 
-class _DeliveryRegistrationScreenState extends State<DeliveryRegistrationScreen> {
+class _DeliveryRegistrationScreenState
+    extends State<DeliveryRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _documentController = TextEditingController();
   final _imagePicker = ImagePicker();
@@ -262,14 +263,15 @@ class _DeliveryRegistrationScreenState extends State<DeliveryRegistrationScreen>
                   Text(
                     'Complete as informacoes para validar seu perfil profissional.',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                      color:
+                          theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
                     ),
                   ),
                   const SizedBox(height: 24),
                   OnboardingSectionCard(
                     title: 'Documento do piloto',
                     subtitle: 'Informe CPF ou CNH para validacao.',
-                    icon: LucideIcons.idCard,
+                    icon: LucideIcons.fileBadge,
                     accentColor: accent,
                     child: OnboardingTextField(
                       label: 'CPF/CNH',
@@ -412,7 +414,8 @@ class _DocumentUploadCard extends StatelessWidget {
                     Text(
                       file == null ? 'Selecionar arquivo' : file!.name,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.65),
+                        color: theme.textTheme.bodyMedium?.color
+                            ?.withOpacity(0.65),
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
