@@ -162,6 +162,36 @@ class ApiService {
   }
 
   // ============================================
+  // ONBOARDING
+  // ============================================
+
+  static Future<Map<String, dynamic>> getOnboardingStatus() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/users/me/onboarding'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+    return json.decode(response.body) as Map<String, dynamic>;
+  }
+
+  static Future<void> updateOnboardingStatus({
+    bool? completed,
+    int? step,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/users/me/onboarding'),
+      headers: await _getHeaders(),
+      body: json.encode({
+        if (completed != null) 'onboardingCompleted': completed,
+        if (step != null) 'onboardingStep': step,
+      }),
+    );
+
+    _handleError(response);
+  }
+
+  // ============================================
   // DELIVERY ORDERS
   // ============================================
 
@@ -485,6 +515,38 @@ class ApiService {
     );
 
     _handleError(response);
+  }
+
+  // ============================================
+  // COURIER DOCUMENTS
+  // ============================================
+
+  static Future<Map<String, dynamic>> uploadCourierDocument({
+    required String documentType,
+    required String filePath,
+    DateTime? expirationDate,
+  }) async {
+    final uri = Uri.parse('$baseUrl/courier-documents/upload');
+    final token = await _getToken();
+
+    final request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    request.fields['documentType'] = documentType;
+    if (expirationDate != null) {
+      request.fields['expirationDate'] = expirationDate.toIso8601String();
+    }
+    request.files.add(await http.MultipartFile.fromPath('document', filePath));
+
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+    if (response.statusCode >= 400) {
+      throw Exception(responseBody.isNotEmpty
+          ? responseBody
+          : 'Erro ao enviar documento');
+    }
+    return json.decode(responseBody) as Map<String, dynamic>;
   }
 
   // ============================================

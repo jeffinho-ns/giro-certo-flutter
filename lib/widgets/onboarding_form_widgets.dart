@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class OnboardingPrimaryButton extends StatelessWidget {
   final String label;
@@ -52,6 +53,10 @@ class OnboardingTextField extends StatelessWidget {
   final TextEditingController controller;
   final TextInputType keyboardType;
   final int maxLines;
+  final List<TextInputFormatter>? inputFormatters;
+  final String? Function(String?)? validator;
+  final ValueChanged<String>? onChanged;
+  final TextInputAction? textInputAction;
 
   const OnboardingTextField({
     super.key,
@@ -61,6 +66,10 @@ class OnboardingTextField extends StatelessWidget {
     this.icon,
     this.keyboardType = TextInputType.text,
     this.maxLines = 1,
+    this.inputFormatters,
+    this.validator,
+    this.onChanged,
+    this.textInputAction,
   });
 
   @override
@@ -76,10 +85,14 @@ class OnboardingTextField extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        TextField(
+        TextFormField(
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
+          inputFormatters: inputFormatters,
+          validator: validator,
+          onChanged: onChanged,
+          textInputAction: textInputAction,
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: icon != null ? Icon(icon) : null,

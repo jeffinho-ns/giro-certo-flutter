@@ -47,6 +47,10 @@
 	<string>O Giro Certo usa a sua localização para mostrar o mapa e corridas próximas.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>O Giro Certo usa Face ID para entrar na sua conta de forma rápida e segura.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O Giro Certo precisa da câmera para fotografar documentos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O Giro Certo precisa acessar a galeria para enviar documentos.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

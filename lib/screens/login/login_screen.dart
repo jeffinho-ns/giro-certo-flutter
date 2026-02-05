@@ -6,7 +6,7 @@ import '../../services/api_service.dart';
 import '../../services/credentials_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../models/user.dart';
-import '../../services/onboarding_service.dart';
+import '../../models/pilot_profile.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onLogin;
@@ -132,9 +132,16 @@ class _LoginScreenState extends State<LoginScreen> {
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       appState.setUser(user);
       appState.completeLogin();
-      final hasCompletedOnboarding =
-          await OnboardingService.hasCompletedOnboarding();
-      appState.setSetupCompleted(hasCompletedOnboarding);
+      appState.setSetupCompleted(user.onboardingCompleted);
+      final pilotType = _mapPilotProfileType(user.pilotProfile);
+      if (pilotType != null) {
+        appState.setPilotProfileType(pilotType);
+      }
+      appState.setDeliveryModerationStatus(
+        user.hasVerifiedDocuments
+            ? DeliveryModerationStatus.approved
+            : DeliveryModerationStatus.pending,
+      );
       
       // Debug: verificar após salvar
       print('🔍 Login - User salvo no AppState: ${appState.user?.email}, partnerId: ${appState.user?.partnerId}');
@@ -249,9 +256,16 @@ class _LoginScreenState extends State<LoginScreen> {
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       appState.setUser(user);
       appState.completeLogin();
-      final hasCompletedOnboarding =
-          await OnboardingService.hasCompletedOnboarding();
-      appState.setSetupCompleted(hasCompletedOnboarding);
+      appState.setSetupCompleted(user.onboardingCompleted);
+      final pilotType = _mapPilotProfileType(user.pilotProfile);
+      if (pilotType != null) {
+        appState.setPilotProfileType(pilotType);
+      }
+      appState.setDeliveryModerationStatus(
+        user.hasVerifiedDocuments
+            ? DeliveryModerationStatus.approved
+            : DeliveryModerationStatus.pending,
+      );
       widget.onLogin();
     } catch (e) {
       if (mounted) {
@@ -544,5 +558,23 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  PilotProfileType? _mapPilotProfileType(String? profile) {
+    if (profile == null) return null;
+    final normalized = profile.toLowerCase();
+    if (normalized.contains('trabalho') || normalized.contains('delivery')) {
+      return PilotProfileType.delivery;
+    }
+    if (normalized.contains('pista') || normalized.contains('racing')) {
+      return PilotProfileType.racing;
+    }
+    if (normalized.contains('fim') || normalized.contains('semana')) {
+      return PilotProfileType.casual;
+    }
+    if (normalized.contains('urbano') || normalized.contains('diario')) {
+      return PilotProfileType.diario;
+    }
+    return null;
   }
 }

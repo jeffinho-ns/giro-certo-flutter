@@ -524,9 +524,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final isRider = user?.isRider ?? true;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isDeliveryProfile =
-        appState.pilotProfileType?.isDelivery ??
-            (user?.pilotProfile.toLowerCase().contains('delivery') ?? false);
+    final isDeliveryProfile = appState.pilotProfileType?.isDelivery ??
+        (() {
+          final profile = user?.pilotProfile.toLowerCase() ?? '';
+          return profile.contains('delivery') || profile.contains('trabalho');
+        })();
     final showDeliveryPendingBanner =
         appState.deliveryModerationStatus == DeliveryModerationStatus.pending &&
             isDeliveryProfile;

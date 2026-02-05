@@ -41,6 +41,8 @@ class User {
   final bool hasVerifiedDocuments;
   final bool verificationBadge;
   final bool isOnline;
+  final bool onboardingCompleted;
+  final int onboardingStep;
   final double? currentLat;
   final double? currentLng;
 
@@ -57,6 +59,8 @@ class User {
     this.hasVerifiedDocuments = false,
     this.verificationBadge = false,
     this.isOnline = false,
+    this.onboardingCompleted = false,
+    this.onboardingStep = 0,
     this.currentLat,
     this.currentLng,
   });
@@ -84,6 +88,8 @@ class User {
       hasVerifiedDocuments: json['hasVerifiedDocuments'] as bool? ?? false,
       verificationBadge: json['verificationBadge'] as bool? ?? false,
       isOnline: json['isOnline'] as bool? ?? false,
+      onboardingCompleted: json['onboardingCompleted'] as bool? ?? false,
+      onboardingStep: json['onboardingStep'] as int? ?? 0,
       currentLat: json['currentLat'] != null
           ? (json['currentLat'] as num).toDouble()
           : null,
@@ -108,6 +114,8 @@ class User {
       'hasVerifiedDocuments': hasVerifiedDocuments,
       'verificationBadge': verificationBadge,
       'isOnline': isOnline,
+      'onboardingCompleted': onboardingCompleted,
+      'onboardingStep': onboardingStep,
       'currentLat': currentLat,
       'currentLng': currentLng,
     };
@@ -127,6 +135,8 @@ class User {
     bool? hasVerifiedDocuments,
     bool? verificationBadge,
     bool? isOnline,
+    bool? onboardingCompleted,
+    int? onboardingStep,
     double? currentLat,
     double? currentLng,
   }) {
@@ -143,6 +153,8 @@ class User {
       hasVerifiedDocuments: hasVerifiedDocuments ?? this.hasVerifiedDocuments,
       verificationBadge: verificationBadge ?? this.verificationBadge,
       isOnline: isOnline ?? this.isOnline,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      onboardingStep: onboardingStep ?? this.onboardingStep,
       currentLat: currentLat ?? this.currentLat,
       currentLng: currentLng ?? this.currentLng,
     );

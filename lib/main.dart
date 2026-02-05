@@ -21,6 +21,7 @@ import 'models/pilot_profile.dart';
 import 'services/app_preload_service.dart';
 import 'services/onboarding_service.dart';
 import 'services/motorcycle_data_service.dart';
+import 'services/api_service.dart';
 import 'utils/colors.dart';
 
 void main() {
@@ -136,6 +137,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
     });
     if (step >= _stepGarageIntro && step != _stepHome) {
       OnboardingService.saveStep(step);
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      if (appState.isLoggedIn) {
+        ApiService.updateOnboardingStatus(step: step);
+      }
     }
   }
 
@@ -155,7 +160,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return;
     }
 
-    final savedStep = await OnboardingService.getSavedStep();
+    int? serverStep;
+    try {
+      final onboarding = await ApiService.getOnboardingStatus();
+      final completed = onboarding['onboardingCompleted'] as bool? ?? false;
+      if (completed) {
+        appState.setSetupCompleted(true);
+        if (mounted) {
+          setState(() => _currentStep = _stepHome);
+        }
+        return;
+      }
+      serverStep = onboarding['onboardingStep'] as int?;
+    } catch (_) {
+      // fallback para armazenamento local
+    }
+
+    final savedStep = serverStep ?? await OnboardingService.getSavedStep();
     final restoredStep =
         (savedStep != null && savedStep >= _stepGarageIntro)
             ? savedStep
@@ -171,6 +192,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       _bikeModel = _selectedMotorcycle?.model ?? _bikeModel;
     }
 
+    if (!mounted) return;
     if (!mounted) return;
     _setStep(restoredStep);
 
@@ -316,6 +338,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
     appState.completeSetup();
     await OnboardingService.completeOnboarding();
     await OnboardingService.saveDeliveryStatus(deliveryStatus);
+    await ApiService.updateOnboardingStatus(
+      completed: true,
+      step: _stepHome,
+    );
 
     if (mounted) {
       setState(() {
