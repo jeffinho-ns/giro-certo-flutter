@@ -178,10 +178,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     final savedStep = serverStep ?? await OnboardingService.getSavedStep();
-    final restoredStep =
-        (savedStep != null && savedStep >= _stepGarageIntro)
-            ? savedStep
-            : _stepGarageIntro;
+    final restoredStep = (savedStep != null && savedStep >= _stepGarageIntro)
+        ? savedStep
+        : _stepGarageIntro;
 
     final savedMotorcycleId = await OnboardingService.getSelectedMotorcycleId();
     if (savedMotorcycleId != null) {
@@ -231,7 +230,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     try {
       print('📝 Iniciando registro de usuário: $email');
-      
+
       // Chamar API de registro
       final registerResponse = await ApiService.register(
         name: name,
@@ -239,12 +238,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
         password: password,
         age: age,
       );
-      
+
       print('✅ Registro realizado com sucesso: $registerResponse');
 
       // Extrair usuário e token da resposta
       final appState = Provider.of<AppStateProvider>(context, listen: false);
-      
+
       if (registerResponse['user'] != null) {
         final user = User.fromJson(registerResponse['user']);
         appState.setUser(user);
@@ -344,8 +343,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
     GarageSetupDetails? garageDetails,
   }) async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
-    final resolvedProfile =
-        _pilotProfileType ?? appState.pilotProfileType ?? PilotProfileType.diario;
+    final resolvedProfile = _pilotProfileType ??
+        appState.pilotProfileType ??
+        PilotProfileType.diario;
 
     final existingUser = appState.user;
     final user = existingUser != null

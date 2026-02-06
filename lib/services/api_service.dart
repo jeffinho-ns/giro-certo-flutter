@@ -16,19 +16,21 @@ class ApiService {
   // Obter token armazenado
   static Future<String?> _getToken() async {
     if (_cachedToken != null) {
-      print('✅ Token recuperado do cache: ${_cachedToken!.substring(0, 20)}...');
+      print(
+          '✅ Token recuperado do cache: ${_cachedToken!.substring(0, 20)}...');
       return _cachedToken;
     }
 
     final prefs = await SharedPreferences.getInstance();
     _cachedToken = prefs.getString('auth_token');
-    
+
     if (_cachedToken != null) {
-      print('✅ Token recuperado de SharedPreferences: ${_cachedToken!.substring(0, 20)}...');
+      print(
+          '✅ Token recuperado de SharedPreferences: ${_cachedToken!.substring(0, 20)}...');
     } else {
       print('❌ Nenhum token encontrado em SharedPreferences');
     }
-    
+
     return _cachedToken;
   }
 
@@ -103,10 +105,12 @@ class ApiService {
 
     // Salvar token
     if (data['token'] != null) {
-      print('✅ Token encontrado na resposta: ${(data['token'] as String).substring(0, 20)}...');
+      print(
+          '✅ Token encontrado na resposta: ${(data['token'] as String).substring(0, 20)}...');
       await _saveToken(data['token'] as String);
     } else {
-      print('❌ Nenhum token na resposta de login. Chaves disponíveis: ${data.keys.toList()}');
+      print(
+          '❌ Nenhum token na resposta de login. Chaves disponíveis: ${data.keys.toList()}');
     }
 
     return data;
@@ -141,10 +145,12 @@ class ApiService {
 
     // Salvar token
     if (data['token'] != null) {
-      print('✅ Token encontrado na resposta: ${(data['token'] as String).substring(0, 20)}...');
+      print(
+          '✅ Token encontrado na resposta: ${(data['token'] as String).substring(0, 20)}...');
       await _saveToken(data['token'] as String);
     } else {
-      print('❌ Nenhum token na resposta de registro. Chaves disponíveis: ${data.keys.toList()}');
+      print(
+          '❌ Nenhum token na resposta de registro. Chaves disponíveis: ${data.keys.toList()}');
     }
 
     return data;
@@ -614,8 +620,9 @@ class ApiService {
       print('❌ Nenhum token disponível para autenticação');
       throw Exception('Você precisa estar autenticado. Faça login novamente.');
     }
-    
-    print('✅ Token disponível para criação de registro: ${token.substring(0, 20)}...');
+
+    print(
+        '✅ Token disponível para criação de registro: ${token.substring(0, 20)}...');
 
     // Helper para converter arquivo para base64
     Future<String?> fileToBase64(String? filePath) async {
