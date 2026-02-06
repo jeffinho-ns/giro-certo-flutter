@@ -15,18 +15,30 @@ class ApiService {
 
   // Obter token armazenado
   static Future<String?> _getToken() async {
-    if (_cachedToken != null) return _cachedToken;
+    if (_cachedToken != null) {
+      print('✅ Token recuperado do cache: ${_cachedToken!.substring(0, 20)}...');
+      return _cachedToken;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     _cachedToken = prefs.getString('auth_token');
+    
+    if (_cachedToken != null) {
+      print('✅ Token recuperado de SharedPreferences: ${_cachedToken!.substring(0, 20)}...');
+    } else {
+      print('❌ Nenhum token encontrado em SharedPreferences');
+    }
+    
     return _cachedToken;
   }
 
   // Salvar token
   static Future<void> _saveToken(String token) async {
+    print('💾 Salvando token no SharedPreferences...');
     _cachedToken = token;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
+    print('✅ Token salvo com sucesso: ${token.substring(0, 20)}...');
   }
 
   // Remover token (logout)
@@ -87,10 +99,14 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
+    print('🔐 Login response recebido: $data');
 
     // Salvar token
     if (data['token'] != null) {
+      print('✅ Token encontrado na resposta: ${(data['token'] as String).substring(0, 20)}...');
       await _saveToken(data['token'] as String);
+    } else {
+      print('❌ Nenhum token na resposta de login. Chaves disponíveis: ${data.keys.toList()}');
     }
 
     return data;
@@ -121,10 +137,14 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
+    print('🔐 Register response recebido: $data');
 
     // Salvar token
     if (data['token'] != null) {
+      print('✅ Token encontrado na resposta: ${(data['token'] as String).substring(0, 20)}...');
       await _saveToken(data['token'] as String);
+    } else {
+      print('❌ Nenhum token na resposta de registro. Chaves disponíveis: ${data.keys.toList()}');
     }
 
     return data;
@@ -181,16 +201,27 @@ class ApiService {
     bool? completed,
     int? step,
   }) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/users/me/onboarding'),
-      headers: await _getHeaders(),
-      body: json.encode({
-        if (completed != null) 'onboardingCompleted': completed,
-        if (step != null) 'onboardingStep': step,
-      }),
-    );
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/users/me/onboarding'),
+        headers: await _getHeaders(),
+        body: json.encode({
+          if (completed != null) 'onboardingCompleted': completed,
+          if (step != null) 'onboardingStep': step,
+        }),
+      );
 
-    _handleError(response);
+      // Ignorar erro 404 silenciosamente (endpoint opcional)
+      if (response.statusCode == 404) {
+        print('⚠️ Endpoint /users/me/onboarding não disponível (opcional)');
+        return;
+      }
+
+      _handleError(response);
+    } catch (e) {
+      // Ignorar erros de atualização de onboarding (não são críticos)
+      print('⚠️ Erro ao atualizar onboarding status: $e');
+    }
   }
 
   // ============================================
@@ -578,6 +609,14 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/delivery-registration');
     final token = await _getToken();
 
+    // Validar se token está disponível
+    if (token == null || token.isEmpty) {
+      print('❌ Nenhum token disponível para autenticação');
+      throw Exception('Você precisa estar autenticado. Faça login novamente.');
+    }
+    
+    print('✅ Token disponível para criação de registro: ${token.substring(0, 20)}...');
+
     // Helper para converter arquivo para base64
     Future<String?> fileToBase64(String? filePath) async {
       if (filePath == null || filePath.isEmpty) return null;
@@ -623,7 +662,7 @@ class ApiService {
         uri,
         headers: {
           'Content-Type': 'application/json',
-          if (token != null) 'Authorization': 'Bearer $token',
+          'Authorization': 'Bearer $token',
         },
         body: json.encode(body),
       );

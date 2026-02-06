@@ -99,6 +99,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   double _frontTirePressure = 2.5;
   double _rearTirePressure = 2.8;
   bool _isPreloading = true;
+  bool _isRegisteringInProgress = false;
 
   @override
   void initState() {
@@ -215,13 +216,63 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   void _handleRegisterComplete(
       String name, String email, String password, int age) {
-    setState(() {
-      _userName = name;
-      _userEmail = email;
-      _userPassword = password;
-      _userAge = age;
-    });
-    _setStep(_stepGarageIntro);
+    _handleRegisterCompleteAsync(name, email, password, age);
+  }
+
+  Future<void> _handleRegisterCompleteAsync(
+      String name, String email, String password, int age) async {
+    // Prevenir múltiplos registros simultâneos
+    if (_isRegisteringInProgress) {
+      print('⚠️ Registro já em andamento, ignorando nova requisição');
+      return;
+    }
+
+    _isRegisteringInProgress = true;
+
+    try {
+      print('📝 Iniciando registro de usuário: $email');
+      
+      // Chamar API de registro
+      final registerResponse = await ApiService.register(
+        name: name,
+        email: email,
+        password: password,
+        age: age,
+      );
+      
+      print('✅ Registro realizado com sucesso: $registerResponse');
+
+      // Extrair usuário e token da resposta
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      
+      if (registerResponse['user'] != null) {
+        final user = User.fromJson(registerResponse['user']);
+        appState.setUser(user);
+        appState.completeLogin();
+        print('🔐 Usuário salvo no AppState: ${user.email}');
+      }
+
+      // Salvar dados locais
+      setState(() {
+        _userName = name;
+        _userEmail = email;
+        _userPassword = password;
+        _userAge = age;
+      });
+
+      if (mounted) {
+        _setStep(_stepGarageIntro);
+      }
+    } catch (e) {
+      print('❌ Erro ao registrar: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao registrar: $e')),
+        );
+      }
+    } finally {
+      _isRegisteringInProgress = false;
+    }
   }
 
   void _handleGarageSetup({
