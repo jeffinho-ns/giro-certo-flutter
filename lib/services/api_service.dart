@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 import '../models/user.dart';
 import '../models/delivery_order.dart';
 import '../models/partner.dart';
@@ -8,14 +9,14 @@ import '../models/partner.dart';
 class ApiService {
   // TODO: Configurar via variável de ambiente
   static const String baseUrl = 'https://giro-certo-api.onrender.com/api';
-  
+
   // Cache do token
   static String? _cachedToken;
 
   // Obter token armazenado
   static Future<String?> _getToken() async {
     if (_cachedToken != null) return _cachedToken;
-    
+
     final prefs = await SharedPreferences.getInstance();
     _cachedToken = prefs.getString('auth_token');
     return _cachedToken;
@@ -72,7 +73,8 @@ class ApiService {
   // ============================================
 
   /// Login
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  static Future<Map<String, dynamic>> login(
+      String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/login'),
       headers: await _getHeaders(includeAuth: false),
@@ -85,7 +87,7 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
-    
+
     // Salvar token
     if (data['token'] != null) {
       await _saveToken(data['token'] as String);
@@ -119,7 +121,7 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
-    
+
     // Salvar token
     if (data['token'] != null) {
       await _saveToken(data['token'] as String);
@@ -152,12 +154,12 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
-    
+
     // A API retorna { user: {...} }
     if (data['user'] == null) {
       throw Exception('Resposta da API não contém dados do usuário');
     }
-    
+
     return User.fromJson(data['user']);
   }
 
@@ -221,7 +223,7 @@ class ApiService {
 
     final data = json.decode(response.body);
     final List<dynamic> orders = data is List ? data : (data['orders'] ?? []);
-    
+
     return orders.map((json) => _deliveryOrderFromJson(json)).toList();
   }
 
@@ -244,31 +246,32 @@ class ApiService {
   }) async {
     final response = await http
         .post(
-          Uri.parse('$baseUrl/delivery'),
-          headers: await _getHeaders(),
-          body: json.encode({
-            'storeId': storeId,
-            'storeName': storeName,
-            'storeAddress': storeAddress,
-            'storeLatitude': storeLatitude,
-            'storeLongitude': storeLongitude,
-            'deliveryAddress': deliveryAddress,
-            'deliveryLatitude': deliveryLatitude,
-            'deliveryLongitude': deliveryLongitude,
-            if (recipientName != null) 'recipientName': recipientName,
-            if (recipientPhone != null) 'recipientPhone': recipientPhone,
-            if (notes != null) 'notes': notes,
-            'value': value,
-            'deliveryFee': deliveryFee,
-            if (priority != null) 'priority': priority,
-          }),
-        )
+      Uri.parse('$baseUrl/delivery'),
+      headers: await _getHeaders(),
+      body: json.encode({
+        'storeId': storeId,
+        'storeName': storeName,
+        'storeAddress': storeAddress,
+        'storeLatitude': storeLatitude,
+        'storeLongitude': storeLongitude,
+        'deliveryAddress': deliveryAddress,
+        'deliveryLatitude': deliveryLatitude,
+        'deliveryLongitude': deliveryLongitude,
+        if (recipientName != null) 'recipientName': recipientName,
+        if (recipientPhone != null) 'recipientPhone': recipientPhone,
+        if (notes != null) 'notes': notes,
+        'value': value,
+        'deliveryFee': deliveryFee,
+        if (priority != null) 'priority': priority,
+      }),
+    )
         .timeout(
-          const Duration(seconds: 15),
-          onTimeout: () {
-            throw Exception('Tempo esgotado. Verifique a conexão e tente novamente.');
-          },
-        );
+      const Duration(seconds: 15),
+      onTimeout: () {
+        throw Exception(
+            'Tempo esgotado. Verifique a conexão e tente novamente.');
+      },
+    );
 
     if (response.statusCode >= 400) {
       print('❌ API create order: ${response.statusCode} ${response.body}');
@@ -418,8 +421,9 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
-    final List<dynamic> partners = data is List ? data : (data['partners'] ?? []);
-    
+    final List<dynamic> partners =
+        data is List ? data : (data['partners'] ?? []);
+
     return partners.map((json) => _partnerFromJson(json)).toList();
   }
 
@@ -439,10 +443,12 @@ class ApiService {
   /// Obter própria loja (para lojistas)
   static Future<Partner> getMyPartner() async {
     try {
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse('$baseUrl/partners/me'),
         headers: await _getHeaders(),
-      ).timeout(
+      )
+          .timeout(
         const Duration(seconds: 10),
         onTimeout: () {
           throw Exception('Tempo de espera esgotado ao buscar loja');
@@ -459,7 +465,8 @@ class ApiService {
     } catch (e) {
       // Re-throw com mensagem mais clara
       if (e.toString().contains('403') || e.toString().contains('restrito')) {
-        throw Exception('Acesso negado. A rota /partners/me pode não estar disponível ainda.');
+        throw Exception(
+            'Acesso negado. A rota /partners/me pode não estar disponível ainda.');
       }
       rethrow;
     }
@@ -542,11 +549,117 @@ class ApiService {
     final response = await request.send();
     final responseBody = await response.stream.bytesToString();
     if (response.statusCode >= 400) {
-      throw Exception(responseBody.isNotEmpty
-          ? responseBody
-          : 'Erro ao enviar documento');
+      throw Exception(
+          responseBody.isNotEmpty ? responseBody : 'Erro ao enviar documento');
     }
     return json.decode(responseBody) as Map<String, dynamic>;
+  }
+
+  // ============================================
+  // DELIVERY REGISTRATION
+  // ============================================
+
+  /// Criar novo registro de delivery (entregador)
+  static Future<Map<String, dynamic>> createDeliveryRegistration({
+    required String documentId,
+    required String plateLicense,
+    required int currentKilometers,
+    DateTime? lastOilChangeDate,
+    int? lastOilChangeKm,
+    String? emergencyPhone,
+    bool consentImages = true,
+    // Caminhos dos arquivos (serão convertidos para base64)
+    String? selfieWithDocPath,
+    String? motoWithPlatePath,
+    String? platePlateCloseupPath,
+    String? cnhPhotoPath,
+    String? crlvPhotoPath,
+  }) async {
+    final uri = Uri.parse('$baseUrl/delivery-registration');
+    final token = await _getToken();
+
+    // Helper para converter arquivo para base64
+    Future<String?> fileToBase64(String? filePath) async {
+      if (filePath == null || filePath.isEmpty) return null;
+      try {
+        final bytes = await File(filePath).readAsBytes();
+        return base64Encode(bytes);
+      } catch (e) {
+        print('Erro ao converter arquivo para base64: $e');
+        return null;
+      }
+    }
+
+    try {
+      // Converter todos os arquivos para base64
+      final [selfieBase64, motoBase64, plateBase64, cnhBase64, crlvBase64] =
+          await Future.wait([
+        fileToBase64(selfieWithDocPath),
+        fileToBase64(motoWithPlatePath),
+        fileToBase64(platePlateCloseupPath),
+        fileToBase64(cnhPhotoPath),
+        fileToBase64(crlvPhotoPath),
+      ]);
+
+      final body = {
+        'documentId': documentId,
+        'plateLicense': plateLicense,
+        'currentKilometers': currentKilometers,
+        'consentImages': consentImages,
+        if (lastOilChangeDate != null)
+          'lastOilChangeDate': lastOilChangeDate.toIso8601String(),
+        if (lastOilChangeKm != null) 'lastOilChangeKm': lastOilChangeKm,
+        if (emergencyPhone != null && emergencyPhone.isNotEmpty)
+          'emergencyPhone': emergencyPhone,
+        // Base64 das imagens
+        if (selfieBase64 != null) 'selfieWithDocBase64': selfieBase64,
+        if (motoBase64 != null) 'motoWithPlateBase64': motoBase64,
+        if (plateBase64 != null) 'platePlateCloseupBase64': plateBase64,
+        if (cnhBase64 != null) 'cnhPhotoBase64': cnhBase64,
+        if (crlvBase64 != null) 'crlvPhotoBase64': crlvBase64,
+      };
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: json.encode(body),
+      );
+
+      if (response.statusCode >= 400) {
+        throw Exception(response.body.isNotEmpty
+            ? response.body
+            : 'Erro ao criar registro de delivery');
+      }
+
+      return json.decode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      throw Exception('Erro ao enviar registro: $e');
+    }
+  }
+
+  /// Obter status do registro de delivery do usuário
+  static Future<Map<String, dynamic>?> getDeliveryRegistrationStatus() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/delivery-registration/user/mine'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 404) {
+      return null; // Sem registro
+    }
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final registrations = data['registrations'] as List?;
+    
+    if (registrations?.isNotEmpty == true) {
+      return registrations?.first as Map<String, dynamic>;
+    }
+    return null;
   }
 
   // ============================================
@@ -580,7 +693,7 @@ class ApiService {
 
     final data = json.decode(response.body);
     final List<dynamic> alerts = data is List ? data : (data['alerts'] ?? []);
-    
+
     return alerts.map((alert) => alert as Map<String, dynamic>).toList();
   }
 

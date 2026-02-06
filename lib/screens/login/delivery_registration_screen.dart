@@ -12,10 +12,22 @@ import '../../widgets/onboarding_form_widgets.dart';
 class DeliveryRegistrationDetails {
   final String documentId;
   final List<String> equipments;
+  final String plateLicense;
+  final int currentKilometers;
+  final DateTime? lastOilChangeDate;
+  final int? lastOilChangeKm;
+  final String? emergencyPhone;
+  final bool consentImages;
 
   const DeliveryRegistrationDetails({
     required this.documentId,
     required this.equipments,
+    required this.plateLicense,
+    required this.currentKilometers,
+    this.lastOilChangeDate,
+    this.lastOilChangeKm,
+    this.emergencyPhone,
+    required this.consentImages,
   });
 }
 
@@ -40,11 +52,26 @@ class _DeliveryRegistrationScreenState
     extends State<DeliveryRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _documentController = TextEditingController();
+  final _plateController = TextEditingController();
+  final _kilometersController = TextEditingController();
+  final _emergencyPhoneController = TextEditingController();
+  final _lastOilChangeKmController = TextEditingController();
   final _imagePicker = ImagePicker();
   final Set<String> _selectedEquipments = {};
+
+  // Estado
   bool _isSubmitting = false;
+  bool _consentImages = false;
+  DateTime? _lastOilChangeDate;
+
+  // Documento fotos
   XFile? _cnhFile;
   XFile? _crlvFile;
+  XFile? _selfieWithDocFile;
+
+  // Moto fotos
+  XFile? _motoWithPlateFile;
+  XFile? _platePlateCloseupFile;
 
   static const List<String> _equipmentOptions = [
     'Bau',
@@ -57,7 +84,32 @@ class _DeliveryRegistrationScreenState
   @override
   void dispose() {
     _documentController.dispose();
+    _plateController.dispose();
+    _kilometersController.dispose();
+    _emergencyPhoneController.dispose();
+    _lastOilChangeKmController.dispose();
     super.dispose();
+  }
+
+  bool _validateRequiredUploads() {
+    final missingDocs = <String>[];
+    if (_cnhFile == null) missingDocs.add('CNH');
+    if (_crlvFile == null) missingDocs.add('CRLV');
+    if (_selfieWithDocFile == null) missingDocs.add('Selfie com documento');
+    if (_motoWithPlateFile == null) missingDocs.add('Foto da moto com placa');
+    if (_platePlateCloseupFile == null)
+      missingDocs.add('Foto da placa (close-up)');
+
+    if (missingDocs.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Faltam documentos: ${missingDocs.join(", ")}'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return false;
+    }
+    return true;
   }
 
   Future<void> _submit() async {
@@ -65,10 +117,12 @@ class _DeliveryRegistrationScreenState
     final formValid = _formKey.currentState?.validate() ?? false;
     if (!formValid) return;
 
-    if (_cnhFile == null || _crlvFile == null) {
+    if (!_validateRequiredUploads()) return;
+
+    if (!_consentImages) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Envie a foto da CNH e do CRLV para continuar.'),
+          content: Text('Você deve consentir o uso de imagens para continuar.'),
         ),
       );
       return;
@@ -77,13 +131,25 @@ class _DeliveryRegistrationScreenState
     setState(() => _isSubmitting = true);
 
     try {
-      await ApiService.uploadCourierDocument(
-        documentType: 'CNH',
-        filePath: _cnhFile!.path,
-      );
-      await ApiService.uploadCourierDocument(
-        documentType: 'CRLV',
-        filePath: _crlvFile!.path,
+      // Chamar novo endpoint que aceita múltiplas imagens em um multipart request
+      await ApiService.createDeliveryRegistration(
+        documentId:
+            DocumentValidators.normalizeDigits(_documentController.text),
+        plateLicense: _plateController.text.trim().toUpperCase(),
+        currentKilometers: int.parse(_kilometersController.text.trim()),
+        lastOilChangeDate: _lastOilChangeDate,
+        lastOilChangeKm: _lastOilChangeKmController.text.isNotEmpty
+            ? int.parse(_lastOilChangeKmController.text.trim())
+            : null,
+        emergencyPhone: _emergencyPhoneController.text.trim().isEmpty
+            ? null
+            : _emergencyPhoneController.text.trim(),
+        consentImages: _consentImages,
+        selfieWithDocPath: _selfieWithDocFile?.path,
+        motoWithPlatePath: _motoWithPlateFile?.path,
+        platePlateCloseupPath: _platePlateCloseupFile?.path,
+        cnhPhotoPath: _cnhFile?.path,
+        crlvPhotoPath: _crlvFile?.path,
       );
 
       await _showPendingFeedback();
@@ -91,10 +157,19 @@ class _DeliveryRegistrationScreenState
 
       widget.onSubmit(
         DeliveryRegistrationDetails(
-          documentId: DocumentValidators.normalizeDigits(
-            _documentController.text,
-          ),
+          documentId:
+              DocumentValidators.normalizeDigits(_documentController.text),
           equipments: _selectedEquipments.toList(),
+          plateLicense: _plateController.text.trim().toUpperCase(),
+          currentKilometers: int.parse(_kilometersController.text.trim()),
+          lastOilChangeDate: _lastOilChangeDate,
+          lastOilChangeKm: _lastOilChangeKmController.text.trim().isEmpty
+              ? null
+              : int.parse(_lastOilChangeKmController.text.trim()),
+          emergencyPhone: _emergencyPhoneController.text.trim().isEmpty
+              ? null
+              : _emergencyPhoneController.text.trim(),
+          consentImages: _consentImages,
         ),
       );
     } catch (e) {
@@ -154,7 +229,31 @@ class _DeliveryRegistrationScreenState
     }
   }
 
-  Future<void> _showSourcePicker({required bool isCnh}) async {
+  Future<void> _pickImage({
+    required Function(XFile) onFilePicked,
+    required ImageSource source,
+  }) async {
+    try {
+      final file = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      setState(() {
+        onFilePicked(file);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao selecionar arquivo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showSourcePicker({
+    required Function(ImageSource) onSourceSelected,
+  }) async {
     final theme = Theme.of(context);
     await showModalBottomSheet<void>(
       context: context,
@@ -169,10 +268,10 @@ class _DeliveryRegistrationScreenState
             children: [
               ListTile(
                 leading: const Icon(LucideIcons.camera),
-                title: const Text('Usar camera'),
+                title: const Text('Usar câmera'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  _pickDocument(isCnh: isCnh, source: ImageSource.camera);
+                  onSourceSelected(ImageSource.camera);
                 },
               ),
               ListTile(
@@ -180,13 +279,21 @@ class _DeliveryRegistrationScreenState
                 title: const Text('Escolher da galeria'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  _pickDocument(isCnh: isCnh, source: ImageSource.gallery);
+                  onSourceSelected(ImageSource.gallery);
                 },
               ),
               const SizedBox(height: 8),
             ],
           ),
         );
+      },
+    );
+  }
+
+  Future<void> _showSourcePickerForDoc({required bool isCnh}) async {
+    await _showSourcePicker(
+      onSourceSelected: (source) {
+        _pickDocument(isCnh: isCnh, source: source);
       },
     );
   }
@@ -268,6 +375,7 @@ class _DeliveryRegistrationScreenState
                     ),
                   ),
                   const SizedBox(height: 24),
+                  // Documento do piloto
                   OnboardingSectionCard(
                     title: 'Documento do piloto',
                     subtitle: 'Informe CPF ou CNH para validacao.',
@@ -287,30 +395,189 @@ class _DeliveryRegistrationScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // Fotos de identificacao
                   OnboardingSectionCard(
-                    title: 'Upload de documentos',
-                    subtitle: 'Envie fotos da CNH e do CRLV.',
-                    icon: LucideIcons.uploadCloud,
+                    title: 'Fotos de identificacao',
+                    subtitle: 'Fotos que ligam voce ao veiculo.',
+                    icon: LucideIcons.camera,
                     accentColor: accent,
                     child: Column(
                       children: [
                         _DocumentUploadCard(
-                          label: 'Foto da CNH',
-                          icon: LucideIcons.camera,
-                          file: _cnhFile,
-                          onTap: () => _showSourcePicker(isCnh: true),
+                          label: 'Selfie com documento',
+                          subtitle: 'Voce segurando seu documento',
+                          icon: LucideIcons.user,
+                          file: _selfieWithDocFile,
+                          onTap: () => _showSourcePicker(
+                            onSourceSelected: (source) {
+                              _pickImage(
+                                onFilePicked: (file) =>
+                                    setState(() => _selfieWithDocFile = file),
+                                source: source,
+                              );
+                            },
+                          ),
                         ),
                         const SizedBox(height: 12),
                         _DocumentUploadCard(
-                          label: 'Foto do CRLV',
+                          label: 'Foto da moto com placa',
+                          subtitle: 'Voce ao lado da moto, mostrando a placa',
+                          icon: LucideIcons.bike,
+                          file: _motoWithPlateFile,
+                          onTap: () => _showSourcePicker(
+                            onSourceSelected: (source) {
+                              _pickImage(
+                                onFilePicked: (file) =>
+                                    setState(() => _motoWithPlateFile = file),
+                                source: source,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _DocumentUploadCard(
+                          label: 'Foto da placa (close-up)',
+                          subtitle: 'Placa legivel para validacao',
                           icon: LucideIcons.fileImage,
-                          file: _crlvFile,
-                          onTap: () => _showSourcePicker(isCnh: false),
+                          file: _platePlateCloseupFile,
+                          onTap: () => _showSourcePicker(
+                            onSourceSelected: (source) {
+                              _pickImage(
+                                onFilePicked: (file) => setState(
+                                    () => _platePlateCloseupFile = file),
+                                source: source,
+                              );
+                            },
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // Documentos oficiais
+                  OnboardingSectionCard(
+                    title: 'Documentos oficiais',
+                    subtitle: 'Envie CNH e CRLV para validacao.',
+                    icon: LucideIcons.fileText,
+                    accentColor: accent,
+                    child: Column(
+                      children: [
+                        _DocumentUploadCard(
+                          label: 'Foto da CNH',
+                          subtitle: 'Documento de habilitacao',
+                          icon: LucideIcons.fileBadge,
+                          file: _cnhFile,
+                          onTap: () => _showSourcePickerForDoc(isCnh: true),
+                        ),
+                        const SizedBox(height: 12),
+                        _DocumentUploadCard(
+                          label: 'Foto do CRLV',
+                          subtitle: 'Documento do veiculo',
+                          icon: LucideIcons.fileText,
+                          file: _crlvFile,
+                          onTap: () => _showSourcePickerForDoc(isCnh: false),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Informacoes da moto
+                  OnboardingSectionCard(
+                    title: 'Informacoes da moto',
+                    subtitle: 'Dados essenciais do seu veiculo.',
+                    icon: LucideIcons.bike,
+                    accentColor: accent,
+                    child: Column(
+                      children: [
+                        OnboardingTextField(
+                          label: 'Placa',
+                          hint: 'ABC-1234',
+                          icon: LucideIcons.fileText,
+                          controller: _plateController,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[A-Za-z0-9-]'),
+                            ),
+                          ],
+                          validator: (value) {
+                            if (value?.isEmpty ?? true) {
+                              return 'Informe a placa';
+                            }
+                            if (value!.length < 7) {
+                              return 'Placa invalida';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        OnboardingTextField(
+                          label: 'Quilometragem atual',
+                          hint: 'Ex: 12500',
+                          icon: LucideIcons.gauge,
+                          controller: _kilometersController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          validator: (value) {
+                            if (value?.isEmpty ?? true) {
+                              return 'Informe a quilometragem';
+                            }
+                            if (int.tryParse(value!) == null ||
+                                int.parse(value) < 0) {
+                              return 'Quilometragem invalida';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Manutencao da moto
+                  OnboardingSectionCard(
+                    title: 'Manutencao da moto',
+                    subtitle: 'Informacoes sobre a ultima troca de oleo.',
+                    icon: LucideIcons.wrench,
+                    accentColor: accent,
+                    child: Column(
+                      children: [
+                        ListTile(
+                          title: const Text('Data da ultima troca de oleo'),
+                          trailing: (_lastOilChangeDate == null
+                              ? const Text('Selecionar')
+                              : Text(
+                                  '${_lastOilChangeDate?.day}/${_lastOilChangeDate?.month}/${_lastOilChangeDate?.year}',
+                                  style: theme.textTheme.bodyMedium,
+                                )),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _lastOilChangeDate ?? DateTime.now(),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null) {
+                              setState(() => _lastOilChangeDate = picked);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        OnboardingTextField(
+                          label: 'Quilometragem da ultima troca',
+                          hint: 'Ex: 10000',
+                          icon: LucideIcons.gauge,
+                          controller: _lastOilChangeKmController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Equipamentos
                   OnboardingSectionCard(
                     title: 'Equipamentos',
                     subtitle: 'Selecione o que voce usa nas entregas.',
@@ -338,6 +605,43 @@ class _DeliveryRegistrationScreenState
                       }).toList(),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  // Contato de emergencia
+                  OnboardingSectionCard(
+                    title: 'Contato de emergencia',
+                    subtitle: 'Telefone alternativo para contato.',
+                    icon: LucideIcons.phone,
+                    accentColor: accent,
+                    child: OnboardingTextField(
+                      label: 'Telefone de emergencia',
+                      hint: '(11) 99999-9999',
+                      icon: LucideIcons.phone,
+                      controller: _emergencyPhoneController,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Consentimento
+                  OnboardingSectionCard(
+                    title: 'Consentimento',
+                    subtitle: 'Autorizo o uso de imagens para verificacao.',
+                    icon: LucideIcons.shield,
+                    accentColor: accent,
+                    child: CheckboxListTile(
+                      value: _consentImages,
+                      onChanged: (value) {
+                        setState(() => _consentImages = value ?? false);
+                      },
+                      title: const Text(
+                        'Autorizo o uso de imagens para verificacao de identidade e validacao do cadastro',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      dense: true,
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   OnboardingPrimaryButton(
                     label: 'Enviar para Analise',
@@ -357,12 +661,14 @@ class _DeliveryRegistrationScreenState
 
 class _DocumentUploadCard extends StatelessWidget {
   final String label;
+  final String? subtitle;
   final IconData icon;
   final VoidCallback onTap;
   final XFile? file;
 
   const _DocumentUploadCard({
     required this.label,
+    this.subtitle,
     required this.icon,
     required this.onTap,
     required this.file,
@@ -410,7 +716,17 @@ class _DocumentUploadCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.textTheme.bodyMedium?.color
+                              ?.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
                     Text(
                       file == null ? 'Selecionar arquivo' : file!.name,
                       style: theme.textTheme.bodySmall?.copyWith(
