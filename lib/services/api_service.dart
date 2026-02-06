@@ -655,7 +655,7 @@ class ApiService {
 
     final data = json.decode(response.body);
     final registrations = data['registrations'] as List?;
-    
+
     if (registrations?.isNotEmpty == true) {
       return registrations?.first as Map<String, dynamic>;
     }

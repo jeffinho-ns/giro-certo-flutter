@@ -1,6 +1,6 @@
 enum PilotAccessLevel {
-  casual,      // Piloto casual - sem delivery necessário, libera tudo
-  delivery,    // Piloto delivery - precisa de aprovação
+  casual, // Piloto casual - sem delivery necessário, libera tudo
+  delivery, // Piloto delivery - precisa de aprovação
 }
 
 class PilotAccessControl {
@@ -9,10 +9,10 @@ class PilotAccessControl {
     // FIM_DE_SEMANA, URBANO, TRABALHO, PISTA = casual
     // Apenas delivery necessita de aprovação
     final casualProfiles = ['FIM_DE_SEMANA', 'URBANO', 'TRABALHO', 'PISTA'];
-    
-    return casualProfiles.contains(pilotProfile.toUpperCase()) 
-      ? PilotAccessLevel.casual 
-      : PilotAccessLevel.delivery;
+
+    return casualProfiles.contains(pilotProfile.toUpperCase())
+        ? PilotAccessLevel.casual
+        : PilotAccessLevel.delivery;
   }
 
   /// Verifica se o piloto precisa de aprovação de delivery
