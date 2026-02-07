@@ -160,4 +160,12 @@ class MotorcycleDataService {
       orElse: () => getAllMotorcycles().first,
     );
   }
+
+  static Set<String> getAllBrands() {
+    return getAllMotorcycles().map((moto) => moto.brand).toSet();
+  }
+
+  static List<MotorcycleModel> getMotorcyclesByBrand(String brand) {
+    return getAllMotorcycles().where((moto) => moto.brand == brand).toList();
+  }
 }

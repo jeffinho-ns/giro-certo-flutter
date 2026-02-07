@@ -33,27 +33,25 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
         maxDrag > 0 ? (_dragPosition / maxDrag).clamp(0.0, 1.0) : 0.0;
     final circleLeftPosition = 8.0 + (_dragPosition.clamp(0.0, maxDrag));
 
-    // --- LÓGICA DA IMAGEM CORRIGIDA ---
+    // --- AJUSTE DA IMAGEM ---
 
-    // 1. Zoom (Largura da imagem)
-    final imageWidth = screenWidth * 3.2;
+    // 1. Imagem reduzida em 20% (8.16 * 0.8 = 6.528)
+    final imageWidth = screenWidth * 2.1;
 
-    // 2. Cálculo do deslocamento
-    // Queremos começar vendo a FRENTE (Lado Direito da imagem).
-    // Para isso, precisamos empurrar a imagem toda para a esquerda.
-    // O valor exato para alinhar à direita seria: -(imageWidth - screenWidth).
-    final startOffset = -(imageWidth - screenWidth);
+    // 2. Cálculo dos offsets
+    final hiddenWidth = imageWidth - screenWidth;
 
-    // Queremos terminar vendo a TRASEIRA (Lado Esquerdo da imagem).
-    // Para isso, o offset deve chegar perto de 0.
-    // Vamos deixar um pequeno ajuste (-50) para não colar totalmente na borda esquerda se não quiser.
-    const endOffset = 0.0;
+    // Offset inicial: deslocado um pouco para a esquerda para focar a roda da frente
+    final startOffset = -(hiddenWidth / 1);
 
-    // Interpolação linear entre o início e o fim baseada no progresso do botão
-    // Quando progress é 0, estamos em startOffset (Vemos a frente)
-    // Quando progress é 1, estamos em endOffset (Vemos a traseira)
-    // O movimento será da esquerda para direita (valor negativo indo para zero)
-    final currentOffset = startOffset + (progress * (endOffset - startOffset));
+    // Offset final: deslocado para a direita para focar a roda de trás
+    final endOffset = (hiddenWidth / 4);
+
+    // 3. Movimento mais lento que o botão (imagem acompanha da esquerda para a direita)
+    final slowedProgress =
+        Curves.easeOut.transform((progress * 0.9).clamp(0.0, 1.0));
+    final currentOffset =
+        startOffset + (slowedProgress * (endOffset - startOffset));
 
     final theme = Theme.of(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -123,13 +121,13 @@ class _GarageIntroScreenState extends State<GarageIntroScreen> {
                     left: 0,
                     child: Transform.translate(
                       offset: Offset(currentOffset, 0),
-                      child: Container(
+                      child: SizedBox(
                         width: imageWidth,
-                        // Alinhamento à esquerda garante que o offset 0 seja o início da imagem
-                        alignment: Alignment.centerLeft,
+                        height: MediaQuery.of(context).size.height * 0.58,
                         child: Image.asset(
                           'assets/images/moto-black.png',
-                          fit: BoxFit.cover, // Garante altura total e zoom
+                          fit: BoxFit.cover, // Garante cobertura e zoom
+                          alignment: Alignment.centerLeft,
                         ),
                       ),
                     ),

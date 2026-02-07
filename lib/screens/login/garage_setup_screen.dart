@@ -31,13 +31,18 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
   final _searchController = TextEditingController();
   MotorcycleModel? _selectedMotorcycle;
   String? _selectedBrand;
+  String? _expandedBrand; // Acordeão: qual marca está expandida
   List<MotorcycleModel> _brandModels = [];
+  List<String> _allBrands = [];
   String? _resolvedModelImagePath;
+  bool _isSearching = false;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    // Obter todas as marcas únicas
+    _allBrands = MotorcycleDataService.getAllBrands().toList();
   }
 
   @override
@@ -52,13 +57,16 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
 
     if (query.isEmpty) {
       setState(() {
+        _isSearching = false;
         _selectedBrand = null;
         _brandModels = [];
         _selectedMotorcycle = null;
+        _expandedBrand = null;
       });
       return;
     }
 
+    _isSearching = true;
     final results = MotorcycleDataService.searchMotorcycles(query);
 
     // Agrupar por marca
@@ -84,6 +92,19 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
         _selectedBrand = null;
         _brandModels = [];
       }
+    });
+  }
+
+  void _toggleBrandExpansion(String brand) {
+    setState(() {
+      if (_expandedBrand == brand) {
+        _expandedBrand = null;
+      } else {
+        _expandedBrand = brand;
+        _brandModels = MotorcycleDataService.getMotorcyclesByBrand(brand).toList();
+      }
+      _selectedBrand = null;
+      _selectedMotorcycle = null;
     });
   }
 
@@ -116,11 +137,9 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
 
     for (final path in candidates) {
       try {
-        // debug
         // ignore: avoid_print
         print('[MotorcycleImage] trying asset: $path');
         await rootBundle.load(path);
-        // debug
         // ignore: avoid_print
         print('[MotorcycleImage] found asset: $path');
         if (!mounted) return;
@@ -129,17 +148,14 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
         });
         return;
       } catch (e) {
-        // debug
         // ignore: avoid_print
         print('[MotorcycleImage] not found: $path -> $e');
-        // continuar para o próximo candidato
       }
     }
 
     if (!mounted) return;
     setState(() {
       _resolvedModelImagePath = 'assets/images/moto-black.png';
-      // debug
       // ignore: avoid_print
       print('[MotorcycleImage] fallback to default image');
     });
@@ -227,8 +243,188 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      // Lista de modelos da marca (quando não há seleção)
-                      if (_brandModels.isNotEmpty &&
+                      // Grid de logos das marcas (quando não há busca)
+                      if (!_isSearching && _selectedMotorcycle == null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                    left: 8, bottom: 16),
+                                child: Text(
+                                  'Escolha sua marca',
+                                  style: GoogleFonts.lato(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                              GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  childAspectRatio: 1.0,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                ),
+                                itemCount: _allBrands.length,
+                                itemBuilder: (context, index) {
+                                  final brand = _allBrands[index];
+                                  final isExpanded = _expandedBrand == brand;
+                                  final motorcyclesInBrand =
+                                      MotorcycleDataService
+                                          .getMotorcyclesByBrand(brand);
+
+                                  return GestureDetector(
+                                    onTap: () =>
+                                        _toggleBrandExpansion(brand),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: isExpanded
+                                            ? AppColors.racingOrange
+                                                .withOpacity(0.1)
+                                            : Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: isExpanded
+                                              ? AppColors.racingOrange
+                                              : Colors.black12,
+                                          width:
+                                              isExpanded ? 2 : 1,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Expanded(
+                                            child: Image.asset(
+                                              motorcyclesInBrand.isNotEmpty
+                                                  ? motorcyclesInBrand
+                                                      .first.brandImagePath
+                                                  : 'assets/images/moto-black.png',
+                                              fit: BoxFit.contain,
+                                              errorBuilder:
+                                                  (context, error,
+                                                      stackTrace) {
+                                                return Text(
+                                                  brand,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                    color: Colors.black54,
+                                                  ),
+                                                  textAlign:
+                                                      TextAlign.center,
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                          if (isExpanded)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 4),
+                                              child: Icon(
+                                                Icons.expand_less,
+                                                color: AppColors
+                                                    .racingOrange,
+                                                size: 16,
+                                              ),
+                                            )
+                                          else
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 4),
+                                              child: Icon(
+                                                Icons.expand_more,
+                                                color: Colors.black54,
+                                                size: 16,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Acordeão: modelos da marca selecionada
+                      if (_expandedBrand != null &&
+                          _brandModels.isNotEmpty &&
+                          _selectedMotorcycle == null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  'Modelos',
+                                  style: GoogleFonts.lato(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                              ..._brandModels.map((moto) {
+                                return InkWell(
+                                  onTap: () => _selectMotorcycle(moto),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14, horizontal: 14),
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius:
+                                          BorderRadius.circular(8),
+                                      border: Border.all(
+                                          color: Colors.black12),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            moto.model,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.black87,
+                                              fontWeight:
+                                                  FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        const Icon(
+                                          Icons.chevron_right,
+                                          color: Colors.black54,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+
+                      // Lista de modelos da busca (quando há busca)
+                      if (_isSearching &&
+                          _brandModels.isNotEmpty &&
                           _selectedMotorcycle == null)
                         Padding(
                           padding: const EdgeInsets.symmetric(
@@ -242,7 +438,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                   child: Image.asset(
                                     _brandModels.first.brandImagePath,
                                     height: 60,
-                                    errorBuilder: (context, error, stackTrace) {
+                                    errorBuilder: (context, error,
+                                        stackTrace) {
                                       return const SizedBox(height: 60);
                                     },
                                   ),
@@ -256,8 +453,10 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                     margin: const EdgeInsets.only(bottom: 8),
                                     decoration: BoxDecoration(
                                       color: Colors.white,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.black12),
+                                      borderRadius:
+                                          BorderRadius.circular(8),
+                                      border: Border.all(
+                                          color: Colors.black12),
                                     ),
                                     child: Row(
                                       children: [
