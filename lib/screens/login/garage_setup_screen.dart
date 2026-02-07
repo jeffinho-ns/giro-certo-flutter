@@ -101,7 +101,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
         _expandedBrand = null;
       } else {
         _expandedBrand = brand;
-        _brandModels = MotorcycleDataService.getMotorcyclesByBrand(brand).toList();
+        _brandModels =
+            MotorcycleDataService.getMotorcyclesByBrand(brand).toList();
       }
       _selectedBrand = null;
       _selectedMotorcycle = null;
@@ -252,8 +253,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Padding(
-                                padding: const EdgeInsets.only(
-                                    left: 8, bottom: 16),
+                                padding:
+                                    const EdgeInsets.only(left: 8, bottom: 16),
                                 child: Text(
                                   'Escolha sua marca',
                                   style: GoogleFonts.lato(
@@ -282,22 +283,19 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                           .getMotorcyclesByBrand(brand);
 
                                   return GestureDetector(
-                                    onTap: () =>
-                                        _toggleBrandExpansion(brand),
+                                    onTap: () => _toggleBrandExpansion(brand),
                                     child: Container(
                                       decoration: BoxDecoration(
                                         color: isExpanded
                                             ? AppColors.racingOrange
                                                 .withOpacity(0.1)
                                             : Colors.white,
-                                        borderRadius:
-                                            BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
                                           color: isExpanded
                                               ? AppColors.racingOrange
                                               : Colors.black12,
-                                          width:
-                                              isExpanded ? 2 : 1,
+                                          width: isExpanded ? 2 : 1,
                                         ),
                                       ),
                                       child: Column(
@@ -312,18 +310,15 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                                   : 'assets/images/moto-black.png',
                                               fit: BoxFit.contain,
                                               errorBuilder:
-                                                  (context, error,
-                                                      stackTrace) {
+                                                  (context, error, stackTrace) {
                                                 return Text(
                                                   brand,
                                                   style: const TextStyle(
                                                     fontSize: 12,
-                                                    fontWeight:
-                                                        FontWeight.w600,
+                                                    fontWeight: FontWeight.w600,
                                                     color: Colors.black54,
                                                   ),
-                                                  textAlign:
-                                                      TextAlign.center,
+                                                  textAlign: TextAlign.center,
                                                 );
                                               },
                                             ),
@@ -335,8 +330,7 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                                       vertical: 4),
                                               child: Icon(
                                                 Icons.expand_less,
-                                                color: AppColors
-                                                    .racingOrange,
+                                                color: AppColors.racingOrange,
                                                 size: 16,
                                               ),
                                             )
@@ -391,10 +385,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                     margin: const EdgeInsets.only(bottom: 8),
                                     decoration: BoxDecoration(
                                       color: Colors.white,
-                                      borderRadius:
-                                          BorderRadius.circular(8),
-                                      border: Border.all(
-                                          color: Colors.black12),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.black12),
                                     ),
                                     child: Row(
                                       children: [
@@ -404,8 +396,7 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                             style: const TextStyle(
                                               fontSize: 16,
                                               color: Colors.black87,
-                                              fontWeight:
-                                                  FontWeight.w500,
+                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
                                         ),
@@ -438,8 +429,7 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                   child: Image.asset(
                                     _brandModels.first.brandImagePath,
                                     height: 60,
-                                    errorBuilder: (context, error,
-                                        stackTrace) {
+                                    errorBuilder: (context, error, stackTrace) {
                                       return const SizedBox(height: 60);
                                     },
                                   ),
@@ -453,10 +443,8 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                                     margin: const EdgeInsets.only(bottom: 8),
                                     decoration: BoxDecoration(
                                       color: Colors.white,
-                                      borderRadius:
-                                          BorderRadius.circular(8),
-                                      border: Border.all(
-                                          color: Colors.black12),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.black12),
                                     ),
                                     child: Row(
                                       children: [
