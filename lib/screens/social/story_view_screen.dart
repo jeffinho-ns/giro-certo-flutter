@@ -193,7 +193,8 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -244,10 +245,12 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                         setState(() {
                           if (_likedStories.contains(_currentIndex)) {
                             _likedStories.remove(_currentIndex);
-                            _likeCount[_currentIndex] = (_likeCount[_currentIndex] ?? 0) - 1;
+                            _likeCount[_currentIndex] =
+                                (_likeCount[_currentIndex] ?? 0) - 1;
                           } else {
                             _likedStories.add(_currentIndex);
-                            _likeCount[_currentIndex] = (_likeCount[_currentIndex] ?? 0) + 1;
+                            _likeCount[_currentIndex] =
+                                (_likeCount[_currentIndex] ?? 0) + 1;
                           }
                         });
                       },
@@ -394,7 +397,8 @@ class _CommentBottomSheetState extends State<_CommentBottomSheet> {
                   itemBuilder: (context, i) {
                     final c = _comments[i];
                     return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

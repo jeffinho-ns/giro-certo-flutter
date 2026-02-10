@@ -18,14 +18,46 @@ class SocialHomeScreen extends StatefulWidget {
 
 class _SocialHomeScreenState extends State<SocialHomeScreen> {
   final List<Map<String, String>> _stories = [
-    {'name': 'Abdul', 'image': 'assets/images/user-1.png', 'storyImage': 'assets/images/prev-story-1.png'},
-    {'name': 'Chris', 'image': 'assets/images/user-2.png', 'storyImage': 'assets/images/prev-story-2.png'},
-    {'name': 'General', 'image': 'assets/images/user-3.png', 'storyImage': 'assets/images/prev-story-3.png'},
-    {'name': 'Ojogbon', 'image': 'assets/images/user-1.png', 'storyImage': 'assets/images/prev-story-1.png'},
-    {'name': 'Oyin Dolapo', 'image': 'assets/images/user-2.png', 'storyImage': 'assets/images/prev-story-2.png'},
-    {'name': 'Rider 1', 'image': 'assets/images/user-3.png', 'storyImage': 'assets/images/prev-story-3.png'},
-    {'name': 'Rider 2', 'image': 'assets/images/user-1.png', 'storyImage': 'assets/images/prev-story-1.png'},
-    {'name': 'Rider 3', 'image': 'assets/images/user-2.png', 'storyImage': 'assets/images/prev-story-2.png'},
+    {
+      'name': 'Abdul',
+      'image': 'assets/images/user-1.png',
+      'storyImage': 'assets/images/prev-story-1.png'
+    },
+    {
+      'name': 'Chris',
+      'image': 'assets/images/user-2.png',
+      'storyImage': 'assets/images/prev-story-2.png'
+    },
+    {
+      'name': 'General',
+      'image': 'assets/images/user-3.png',
+      'storyImage': 'assets/images/prev-story-3.png'
+    },
+    {
+      'name': 'Ojogbon',
+      'image': 'assets/images/user-1.png',
+      'storyImage': 'assets/images/prev-story-1.png'
+    },
+    {
+      'name': 'Oyin Dolapo',
+      'image': 'assets/images/user-2.png',
+      'storyImage': 'assets/images/prev-story-2.png'
+    },
+    {
+      'name': 'Rider 1',
+      'image': 'assets/images/user-3.png',
+      'storyImage': 'assets/images/prev-story-3.png'
+    },
+    {
+      'name': 'Rider 2',
+      'image': 'assets/images/user-1.png',
+      'storyImage': 'assets/images/prev-story-1.png'
+    },
+    {
+      'name': 'Rider 3',
+      'image': 'assets/images/user-2.png',
+      'storyImage': 'assets/images/prev-story-2.png'
+    },
   ];
 
   final List<Map<String, String>> _posts = [
@@ -33,28 +65,32 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
       'name': 'Oyin Dolapo',
       'userImage': 'assets/images/user-post-1.png',
       'time': '1hr ago',
-      'text': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pharetra',
+      'text':
+          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pharetra',
       'postImage': 'assets/images/post-1.png',
     },
     {
       'name': 'Abdul Quayyum',
       'userImage': 'assets/images/user-1.png',
       'time': '2hr ago',
-      'text': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pharetra',
+      'text':
+          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pharetra',
       'postImage': 'assets/images/post-1.png',
     },
     {
       'name': 'Chris Rider',
       'userImage': 'assets/images/user-2.png',
       'time': '3hr ago',
-      'text': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pharetra',
+      'text':
+          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pharetra',
       'postImage': 'assets/images/post-1.png',
     },
     {
       'name': 'General Flow',
       'userImage': 'assets/images/user-3.png',
       'time': '4hr ago',
-      'text': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pharetra',
+      'text':
+          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pharetra',
       'postImage': 'assets/images/post-1.png',
     },
   ];
@@ -65,7 +101,8 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final drawerProvider = Provider.of<DrawerProvider>(context, listen: false);
+      final drawerProvider =
+          Provider.of<DrawerProvider>(context, listen: false);
       drawerProvider.setScaffoldKey(_scaffoldKey);
     });
   }
@@ -145,7 +182,8 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                           border: InputBorder.none,
                           isCollapsed: true,
                           hintStyle: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.textTheme.bodySmall?.color?.withOpacity(0.5),
+                            color: theme.textTheme.bodySmall?.color
+                                ?.withOpacity(0.5),
                           ),
                         ),
                       ),
@@ -234,7 +272,8 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(14),
                                 child: Image.asset(
-                                  s['storyImage'] ?? 'assets/images/prev-story-1.png',
+                                  s['storyImage'] ??
+                                      'assets/images/prev-story-1.png',
                                   fit: BoxFit.cover,
                                   errorBuilder: (context, error, stackTrace) {
                                     return Container(
@@ -290,7 +329,8 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                               CircleAvatar(
                                 radius: 22,
                                 backgroundImage: AssetImage(
-                                  p['userImage'] ?? 'assets/images/user-post-1.png',
+                                  p['userImage'] ??
+                                      'assets/images/user-post-1.png',
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -300,15 +340,18 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                                   children: [
                                     Text(
                                       p['name'] ?? '',
-                                      style: theme.textTheme.titleMedium?.copyWith(
+                                      style:
+                                          theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
                                       ),
                                     ),
                                     Text(
                                       p['time'] ?? '',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.textTheme.bodySmall?.color?.withOpacity(0.65),
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color: theme.textTheme.bodySmall?.color
+                                            ?.withOpacity(0.65),
                                         fontSize: 12,
                                       ),
                                     ),
@@ -345,7 +388,8 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                                     child: Icon(
                                       LucideIcons.image,
                                       size: 48,
-                                      color: theme.iconTheme.color?.withOpacity(0.4),
+                                      color: theme.iconTheme.color
+                                          ?.withOpacity(0.4),
                                     ),
                                   ),
                                 );
@@ -371,7 +415,9 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                                 ),
                               ),
                               const SizedBox(width: 2),
-                              Text('247', style: theme.textTheme.bodySmall?.copyWith(fontSize: 12)),
+                              Text('247',
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(fontSize: 12)),
                               const SizedBox(width: 24),
                               GestureDetector(
                                 onTap: () {},
@@ -389,7 +435,9 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                                 ),
                               ),
                               const SizedBox(width: 2),
-                              Text('57', style: theme.textTheme.bodySmall?.copyWith(fontSize: 12)),
+                              Text('57',
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(fontSize: 12)),
                             ],
                           ),
                         ],
@@ -409,8 +457,10 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(LucideIcons.home), label: ''),
           BottomNavigationBarItem(icon: Icon(LucideIcons.compass), label: ''),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.plusCircle), label: ''),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.messageSquare), label: ''),
+          BottomNavigationBarItem(
+              icon: Icon(LucideIcons.plusCircle), label: ''),
+          BottomNavigationBarItem(
+              icon: Icon(LucideIcons.messageSquare), label: ''),
           BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: ''),
         ],
         currentIndex: 0,
@@ -451,8 +501,8 @@ class _NotificationsFullSheet extends StatelessWidget {
                 child: Text(
                   'Notificações',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ),
               Expanded(

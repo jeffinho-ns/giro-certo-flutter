@@ -9,8 +9,10 @@ class ModernHeader extends StatefulWidget {
   final String title;
   final bool showBackButton;
   final VoidCallback? onBackPressed;
+
   /// Se true, usa layout compacto para sobrepor o mapa (sem fundo sólido).
   final bool transparentOverMap;
+
   /// Se true, esconde o clock e KM da moto no header.
   final bool hideClockAndKm;
 
@@ -35,12 +37,14 @@ class _ModernHeaderState extends State<ModernHeader> {
   void initState() {
     super.initState();
     _updateTime();
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) => _updateTime());
+    _clockTimer =
+        Timer.periodic(const Duration(seconds: 1), (_) => _updateTime());
   }
 
   void _updateTime() {
     final now = DateTime.now();
-    final str = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final str =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     if (str != _timeStr && mounted) {
       setState(() => _timeStr = str);
     }
@@ -67,7 +71,9 @@ class _ModernHeaderState extends State<ModernHeader> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
-        color: widget.transparentOverMap ? Colors.transparent : theme.scaffoldBackgroundColor,
+        color: widget.transparentOverMap
+            ? Colors.transparent
+            : theme.scaffoldBackgroundColor,
         boxShadow: widget.transparentOverMap
             ? []
             : [
@@ -106,7 +112,8 @@ class _ModernHeaderState extends State<ModernHeader> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: theme.colorScheme.primary.withOpacity(0.15),
+                              color:
+                                  theme.colorScheme.primary.withOpacity(0.15),
                               blurRadius: 6,
                               offset: const Offset(0, 2),
                             ),
@@ -148,7 +155,8 @@ class _ModernHeaderState extends State<ModernHeader> {
                             user?.pilotProfile ?? 'Piloto',
                             style: theme.textTheme.bodySmall?.copyWith(
                               fontSize: 12,
-                              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                              color: theme.textTheme.bodyMedium?.color
+                                  ?.withOpacity(0.7),
                             ),
                           ),
                         ],
@@ -160,7 +168,8 @@ class _ModernHeaderState extends State<ModernHeader> {
                 // Display [Hora] | [KM da Moto] (direita) – fundo escuro, bordas arredondadas, opacidade
                 if (!widget.hideClockAndKm)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(12),
@@ -224,7 +233,8 @@ class _ModernHeaderState extends State<ModernHeader> {
                   if (widget.showBackButton)
                     IconButton(
                       icon: const Icon(LucideIcons.arrowLeft),
-                      onPressed: widget.onBackPressed ?? () => Navigator.of(context).pop(),
+                      onPressed: widget.onBackPressed ??
+                          () => Navigator.of(context).pop(),
                       color: theme.iconTheme.color,
                     ),
                   Expanded(

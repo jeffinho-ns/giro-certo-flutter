@@ -28,7 +28,8 @@ class CommunityScreen extends StatelessWidget {
               title: 'Comunidade',
               showBackButton: true,
               onBackPressed: () {
-                Provider.of<NavigationProvider>(context, listen: false).navigateTo(2);
+                Provider.of<NavigationProvider>(context, listen: false)
+                    .navigateTo(2);
               },
             ),
             Expanded(
@@ -39,7 +40,8 @@ class CommunityScreen extends StatelessWidget {
                     Icon(
                       LucideIcons.bike,
                       size: 64,
-                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
+                      color:
+                          theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -50,7 +52,8 @@ class CommunityScreen extends StatelessWidget {
                     Text(
                       'Para visualizar a comunidade, você precisa cadastrar uma moto.',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -68,35 +71,36 @@ class CommunityScreen extends StatelessWidget {
     return SafeArea(
       bottom: false,
       child: Column(
-          children: [
-            // Header
-            ModernHeader(
-              title: 'Comunidade',
-              showBackButton: true,
-              onBackPressed: () {
-                Provider.of<NavigationProvider>(context, listen: false).navigateTo(2);
+        children: [
+          // Header
+          ModernHeader(
+            title: 'Comunidade',
+            showBackButton: true,
+            onBackPressed: () {
+              Provider.of<NavigationProvider>(context, listen: false)
+                  .navigateTo(2);
+            },
+          ),
+
+          // Lista de posts
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(24),
+              itemCount: posts.length,
+              itemBuilder: (context, index) {
+                final post = posts[index];
+                return _buildModernPostCard(post, theme);
               },
             ),
-            
-            // Lista de posts
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(24),
-                itemCount: posts.length,
-                itemBuilder: (context, index) {
-                  final post = posts[index];
-                  return _buildModernPostCard(post, theme);
-                },
-              ),
-            ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildModernPostCard(Post post, ThemeData theme) {
     final timeAgo = _getTimeAgo(post.createdAt);
-    
+
     return Builder(
       builder: (context) {
         return Container(
@@ -173,7 +177,8 @@ class CommunityScreen extends StatelessWidget {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.racingOrange.withOpacity(0.2),
+                                    color:
+                                        AppColors.racingOrange.withOpacity(0.2),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
@@ -216,9 +221,9 @@ class CommunityScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Conteúdo do post
                 Text(
                   post.content,
@@ -227,16 +232,17 @@ class CommunityScreen extends StatelessWidget {
                     height: 1.6,
                   ),
                 ),
-                
+
                 const SizedBox(height: 20),
-                
+
                 // Ações
                 Row(
                   children: [
                     GestureDetector(
                       onTap: () {},
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: theme.scaffoldBackgroundColor,
                           borderRadius: BorderRadius.circular(12),
@@ -254,7 +260,8 @@ class CommunityScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Text(post.likes.toString(), style: theme.textTheme.bodyMedium),
+                            Text(post.likes.toString(),
+                                style: theme.textTheme.bodyMedium),
                           ],
                         ),
                       ),
@@ -263,7 +270,8 @@ class CommunityScreen extends StatelessWidget {
                     GestureDetector(
                       onTap: () {},
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: theme.scaffoldBackgroundColor,
                           borderRadius: BorderRadius.circular(12),
@@ -281,7 +289,8 @@ class CommunityScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Text(post.comments.toString(), style: theme.textTheme.bodyMedium),
+                            Text(post.comments.toString(),
+                                style: theme.textTheme.bodyMedium),
                           ],
                         ),
                       ),
