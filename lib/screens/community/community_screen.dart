@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../services/mock_data_service.dart';
@@ -232,20 +233,58 @@ class CommunityScreen extends StatelessWidget {
                 // Ações
                 Row(
                   children: [
-                    _buildActionButton(
-                      context: context,
-                      theme: theme,
-                      icon: LucideIcons.heart,
-                      label: post.likes.toString(),
+                    GestureDetector(
                       onTap: () {},
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: theme.scaffoldBackgroundColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SvgPicture.asset(
+                              'assets/images/Heart.svg',
+                              width: 18,
+                              height: 18,
+                              colorFilter: ColorFilter.mode(
+                                theme.iconTheme.color ?? Colors.grey,
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(post.likes.toString(), style: theme.textTheme.bodyMedium),
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 24),
-                    _buildActionButton(
-                      context: context,
-                      theme: theme,
-                      icon: LucideIcons.messageCircle,
-                      label: post.comments.toString(),
+                    GestureDetector(
                       onTap: () {},
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: theme.scaffoldBackgroundColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SvgPicture.asset(
+                              'assets/images/Chat.svg',
+                              width: 18,
+                              height: 18,
+                              colorFilter: ColorFilter.mode(
+                                theme.iconTheme.color ?? Colors.grey,
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(post.comments.toString(), style: theme.textTheme.bodyMedium),
+                          ],
+                        ),
+                      ),
                     ),
                     const Spacer(),
                     IconButton(
@@ -254,43 +293,6 @@ class CommunityScreen extends StatelessWidget {
                       onPressed: () {},
                     ),
                   ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildActionButton({
-    required BuildContext context,
-    required ThemeData theme,
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Builder(
-      builder: (context) {
-        return GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: theme.scaffoldBackgroundColor,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: theme.iconTheme.color, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
                 ),
               ],
             ),

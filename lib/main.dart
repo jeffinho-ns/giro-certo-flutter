@@ -14,6 +14,7 @@ import 'screens/login/pilot_profile_select_screen.dart';
 import 'screens/login/garage_setup_detail_screen.dart';
 import 'screens/login/delivery_registration_screen.dart';
 import 'screens/main_navigation.dart';
+import 'screens/social/social_home_screen.dart';
 import 'models/user.dart';
 import 'models/bike.dart';
 import 'models/motorcycle_model.dart';
@@ -442,6 +443,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     // Fluxo de navegação correto: SplashScreen → Login → Setup → Home
     if (appState.isLoggedIn && appState.hasCompletedSetup) {
+      final pilot = appState.pilotProfileType;
+      if (pilot != null && !pilot.isDelivery) {
+        return const SocialHomeScreen();
+      }
       return const MainNavigation();
     }
 

@@ -11,6 +11,8 @@ class ModernHeader extends StatefulWidget {
   final VoidCallback? onBackPressed;
   /// Se true, usa layout compacto para sobrepor o mapa (sem fundo sólido).
   final bool transparentOverMap;
+  /// Se true, esconde o clock e KM da moto no header.
+  final bool hideClockAndKm;
 
   const ModernHeader({
     super.key,
@@ -18,6 +20,7 @@ class ModernHeader extends StatefulWidget {
     this.showBackButton = false,
     this.onBackPressed,
     this.transparentOverMap = false,
+    this.hideClockAndKm = false,
   });
 
   @override
@@ -155,62 +158,63 @@ class _ModernHeaderState extends State<ModernHeader> {
                 ),
                 const Spacer(),
                 // Display [Hora] | [KM da Moto] (direita) – fundo escuro, bordas arredondadas, opacidade
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.35),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.12),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                if (!widget.hideClockAndKm)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.12),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.clock,
+                          size: 14,
+                          color: Colors.white.withOpacity(0.85),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _timeStr,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Container(
+                            width: 1,
+                            height: 14,
+                            color: Colors.white.withOpacity(0.3),
+                          ),
+                        ),
+                        Icon(
+                          LucideIcons.gauge,
+                          size: 14,
+                          color: Colors.white.withOpacity(0.85),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          kmStr,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        LucideIcons.clock,
-                        size: 14,
-                        color: Colors.white.withOpacity(0.85),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _timeStr,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Container(
-                          width: 1,
-                          height: 14,
-                          color: Colors.white.withOpacity(0.3),
-                        ),
-                      ),
-                      Icon(
-                        LucideIcons.gauge,
-                        size: 14,
-                        color: Colors.white.withOpacity(0.85),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        kmStr,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
             if (widget.title.isNotEmpty) ...[
