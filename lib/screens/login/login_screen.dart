@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:local_auth/local_auth.dart';
@@ -106,33 +107,35 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
       
-      print('🔍 Login - Resposta do login: $loginResponse');
+      if (kDebugMode) print('🔍 Login - Resposta do login: $loginResponse');
       
       // Verificar se o login retornou o usuário diretamente
       User? user;
       if (loginResponse['user'] != null) {
         // Se o login retornou o usuário, usar ele
         user = User.fromJson(loginResponse['user']);
-        print('🔍 Login - User do login response: ${user.email}, partnerId: ${user.partnerId}');
+        if (kDebugMode) print('🔍 Login - User do login response: ${user.email}, partnerId: ${user.partnerId}');
       } else {
         // Caso contrário, buscar do endpoint /users/me
         try {
           user = await ApiService.getCurrentUser();
-          print('🔍 Login - User do getCurrentUser: ${user.email}, partnerId: ${user.partnerId}');
+          if (kDebugMode) print('🔍 Login - User do getCurrentUser: ${user.email}, partnerId: ${user.partnerId}');
         } catch (e) {
-          print('⚠️ Erro ao buscar usuário: $e');
+          if (kDebugMode) print('⚠️ Erro ao buscar usuário: $e');
           throw Exception('Não foi possível obter dados do usuário: $e');
         }
       }
       
       // Debug: verificar dados do usuário recebido
-      print('🔍 Login - User final: ${user.email}, partnerId: ${user.partnerId}, isPartner: ${user.isPartner}, isRider: ${user.isRider}');
+      if (kDebugMode) print('🔍 Login - User final: ${user.email}, partnerId: ${user.partnerId}, isPartner: ${user.isPartner}, isRider: ${user.isRider}');
       
       // Salvar usuário no AppStateProvider
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       appState.setUser(user);
       appState.completeLogin();
-      appState.setSetupCompleted(user.onboardingCompleted);
+      // Verificar se setup já foi completado (pular Perfil do piloto e Minha garagem)
+      final setupComplete = await _hasCompletedSetup(user);
+      appState.setSetupCompleted(setupComplete || user.onboardingCompleted);
       final pilotType = _mapPilotProfileType(user.pilotProfile);
       if (pilotType != null) {
         appState.setPilotProfileType(pilotType);
@@ -144,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       
       // Debug: verificar após salvar
-      print('🔍 Login - User salvo no AppState: ${appState.user?.email}, partnerId: ${appState.user?.partnerId}');
+      if (kDebugMode) print('🔍 Login - User salvo no AppState: ${appState.user?.email}, partnerId: ${appState.user?.partnerId}');
 
       // Guardar credenciais se o utilizador marcou a opção
       try {
@@ -170,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
         widget.onLogin();
       }
     } catch (e) {
-      print('❌ Erro no login: $e');
+      if (kDebugMode) print('❌ Erro no login: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -256,7 +259,8 @@ class _LoginScreenState extends State<LoginScreen> {
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       appState.setUser(user);
       appState.completeLogin();
-      appState.setSetupCompleted(user.onboardingCompleted);
+      final setupComplete = await _hasCompletedSetup(user);
+      appState.setSetupCompleted(setupComplete || user.onboardingCompleted);
       final pilotType = _mapPilotProfileType(user.pilotProfile);
       if (pilotType != null) {
         appState.setPilotProfileType(pilotType);
@@ -558,6 +562,14 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  /// Verifica se o utilizador já completou o setup (Perfil do piloto + Minha garagem).
+  /// Lojista e Delivery não precisam; riders (Casual/Diário/Racing) precisam ter bikes.
+  Future<bool> _hasCompletedSetup(User user) async {
+    if (user.partnerId != null) return true; // Lojista
+    if (user.pilotProfile == 'TRABALHO') return true; // Delivery
+    return ApiService.userHasBikes(); // Riders: precisa ter pelo menos uma moto
   }
 
   PilotProfileType? _mapPilotProfileType(String? profile) {

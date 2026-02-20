@@ -4,6 +4,8 @@ import '../utils/colors.dart';
 import '../screens/maintenance/maintenance_detail_screen.dart';
 import '../screens/partners/partners_screen.dart';
 import '../screens/delivery/delivery_screen.dart';
+import '../screens/social/social_home_screen.dart';
+import '../screens/social/user_search_screen.dart';
 
 /// routeIndex: 0=Chat, 1=Eventos, 4=Garagem (navega tab). 101=Manutenção, 102=Parceiros, 105=Delivery (push).
 class MenuGridModal extends StatelessWidget {
@@ -23,12 +25,12 @@ class MenuGridModal extends StatelessWidget {
     MenuGridItem(icon: LucideIcons.camera, label: 'Foto Sport', routeIndex: -1),
     MenuGridItem(icon: LucideIcons.mapPin, label: 'Rotas', routeIndex: -1),
     MenuGridItem(icon: LucideIcons.helpCircle, label: 'Help', routeIndex: -1),
-    MenuGridItem(icon: LucideIcons.newspaper, label: 'News', routeIndex: -1),
+    MenuGridItem(icon: LucideIcons.newspaper, label: 'News', routeIndex: 106),
     MenuGridItem(icon: LucideIcons.car, label: 'Modo Drive', routeIndex: -1),
     MenuGridItem(icon: LucideIcons.bike, label: 'Veículos', routeIndex: 4),
     MenuGridItem(icon: LucideIcons.users, label: 'Comunidades', routeIndex: 0),
     MenuGridItem(icon: LucideIcons.search, label: 'Pesquisar', routeIndex: -1),
-    MenuGridItem(icon: LucideIcons.userPlus, label: 'Amigos', routeIndex: -1),
+    MenuGridItem(icon: LucideIcons.userPlus, label: 'Amigos', routeIndex: 107),
   ];
 
   @override
@@ -112,6 +114,16 @@ class MenuGridModal extends StatelessWidget {
                       } else if (item.routeIndex == 105) {
                         Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => const DeliveryScreen()),
+                        );
+                      } else if (item.routeIndex == 106) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SocialHomeScreen(fromMenu: true),
+                          ),
+                        );
+                      } else if (item.routeIndex == 107) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const UserSearchScreen()),
                         );
                       }
                     },

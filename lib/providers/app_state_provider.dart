@@ -21,6 +21,18 @@ class AppStateProvider extends ChangeNotifier {
   DeliveryModerationStatus get deliveryModerationStatus =>
       _deliveryModerationStatus;
 
+  /// Destino após login por tipo de usuário:
+  /// - Lojista (partnerId != null) → MainNavigation (home lojista)
+  /// - Delivery (pilotProfile TRABALHO) → MainNavigation (home mapa)
+  /// - Casual, Diário, Racing → SocialHomeScreen (home social)
+  bool get shouldShowSocialHome {
+    final u = _user;
+    if (u == null) return false;
+    if (u.partnerId != null) return false; // Lojista → mapa/lojista
+    if (u.pilotProfile == 'TRABALHO') return false; // Delivery → mapa
+    return true; // Casual, Diário, Racing → social
+  }
+
   void setUser(User user) {
     _user = user;
     notifyListeners();

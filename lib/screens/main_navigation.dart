@@ -12,6 +12,9 @@ import 'sidebars/profile_sidebar.dart';
 import '../providers/drawer_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/app_state_provider.dart';
+import '../models/bike.dart';
+import '../models/pilot_profile.dart';
+import '../services/api_service.dart';
 
 /// Navegação principal com 5 destinos:
 /// 0 = Chat (CommunityScreen), 1 = Eventos (RankingScreen), 2 = Menu/Mapa (HomeScreen),
@@ -45,7 +48,40 @@ class _MainNavigationState extends State<MainNavigation> {
       drawerProvider.setScaffoldKey(_scaffoldKey);
       final navProvider = Provider.of<NavigationProvider>(context, listen: false);
       navProvider.navigateTo(_currentIndex);
+      _loadBikeIfDelivery();
     });
+  }
+
+  /// Carrega dados da moto e status de aprovação do registro de delivery quando o usuário é entregador.
+  Future<void> _loadBikeIfDelivery() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final profile = appState.user?.pilotProfile;
+    if (profile == null || profile.toUpperCase() != 'TRABALHO') return;
+    try {
+      final reg = await ApiService.getDeliveryRegistrationStatus();
+      if (reg == null || !mounted) return;
+      final status = reg['status'] as String?;
+      if (status != null && status.toUpperCase() == 'APPROVED') {
+        appState.setDeliveryModerationStatus(DeliveryModerationStatus.approved);
+      }
+      if (appState.bike == null) {
+        final plate = reg['plateLicense'] as String? ?? reg['plate_license'] as String? ?? '';
+        final currentKm = reg['currentKilometers'] as int? ?? reg['current_kilometers'] as int? ?? 0;
+        if (plate.isNotEmpty && mounted) {
+          final bike = Bike(
+            id: '1',
+            brand: 'Moto',
+            model: 'Delivery',
+            plate: plate,
+            currentKm: currentKm,
+            oilType: '10W-40',
+            frontTirePressure: 2.5,
+            rearTirePressure: 2.8,
+          );
+          appState.setBike(bike);
+        }
+      }
+    } catch (_) {}
   }
 
   void _onNavTap(int index) {

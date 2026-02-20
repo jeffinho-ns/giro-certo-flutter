@@ -10,37 +10,25 @@ class ApiService {
   // TODO: Configurar via variável de ambiente
   static const String baseUrl = 'https://giro-certo-api.onrender.com/api';
 
+  /// Timeout para requisições HTTP (evita travamentos em rede instável)
+  static const Duration _requestTimeout = Duration(seconds: 25);
+
   // Cache do token
   static String? _cachedToken;
 
-  // Obter token armazenado
+  // Obter token armazenado (sem logs em produção - evita spam com 500k+ usuários)
   static Future<String?> _getToken() async {
-    if (_cachedToken != null) {
-      print(
-          '✅ Token recuperado do cache: ${_cachedToken!.substring(0, 20)}...');
-      return _cachedToken;
-    }
-
+    if (_cachedToken != null) return _cachedToken;
     final prefs = await SharedPreferences.getInstance();
     _cachedToken = prefs.getString('auth_token');
-
-    if (_cachedToken != null) {
-      print(
-          '✅ Token recuperado de SharedPreferences: ${_cachedToken!.substring(0, 20)}...');
-    } else {
-      print('❌ Nenhum token encontrado em SharedPreferences');
-    }
-
     return _cachedToken;
   }
 
   // Salvar token
   static Future<void> _saveToken(String token) async {
-    print('💾 Salvando token no SharedPreferences...');
     _cachedToken = token;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
-    print('✅ Token salvo com sucesso: ${token.substring(0, 20)}...');
   }
 
   // Remover token (logout)
@@ -89,28 +77,26 @@ class ApiService {
   /// Login
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/login'),
-      headers: await _getHeaders(includeAuth: false),
-      body: json.encode({
-        'email': email,
-        'password': password,
-      }),
-    );
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/login'),
+          headers: await _getHeaders(includeAuth: false),
+          body: json.encode({
+            'email': email,
+            'password': password,
+          }),
+        )
+        .timeout(_requestTimeout, onTimeout: () {
+          throw Exception('Tempo esgotado. Verifique sua conexão.');
+        });
 
     _handleError(response);
 
     final data = json.decode(response.body);
-    print('🔐 Login response recebido: $data');
 
     // Salvar token
     if (data['token'] != null) {
-      print(
-          '✅ Token encontrado na resposta: ${(data['token'] as String).substring(0, 20)}...');
       await _saveToken(data['token'] as String);
-    } else {
-      print(
-          '❌ Nenhum token na resposta de login. Chaves disponíveis: ${data.keys.toList()}');
     }
 
     return data;
@@ -141,16 +127,10 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
-    print('🔐 Register response recebido: $data');
 
     // Salvar token
     if (data['token'] != null) {
-      print(
-          '✅ Token encontrado na resposta: ${(data['token'] as String).substring(0, 20)}...');
       await _saveToken(data['token'] as String);
-    } else {
-      print(
-          '❌ Nenhum token na resposta de registro. Chaves disponíveis: ${data.keys.toList()}');
     }
 
     return data;
@@ -172,10 +152,14 @@ class ApiService {
 
   /// Obter usuário atual
   static Future<User> getCurrentUser() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/users/me/profile'),
-      headers: await _getHeaders(),
-    );
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/users/me/profile'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout, onTimeout: () {
+          throw Exception('Tempo esgotado. Verifique sua conexão.');
+        });
 
     _handleError(response);
 
@@ -187,6 +171,208 @@ class ApiService {
     }
 
     return User.fromJson(data['user']);
+  }
+
+  /// Atualizar perfil (photoUrl, coverUrl)
+  static Future<User> updateUserProfile({
+    String? name,
+    String? photoUrl,
+    String? coverUrl,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (photoUrl != null) body['photoUrl'] = photoUrl;
+    if (coverUrl != null) body['coverUrl'] = coverUrl;
+
+    final response = await http.patch(
+      Uri.parse('$baseUrl/users/me/profile'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final user = User.fromJson(data['user'] as Map<String, dynamic>);
+    return user;
+  }
+
+  /// Upload de imagem para perfil (avatar ou capa). Retorna URL se a API suportar.
+  static Future<String?> uploadProfileImage(String filePath, {String type = 'avatar'}) async {
+    try {
+      final uri = Uri.parse('$baseUrl/users/me/upload-image');
+      final token = await _getToken();
+      if (token == null) return null;
+
+      final request = http.MultipartRequest('POST', uri);
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['type'] = type;
+      request.files.add(await http.MultipartFile.fromPath('image', filePath));
+
+      final streamed = await request.send().timeout(
+        _requestTimeout,
+        onTimeout: () => throw Exception('Tempo esgotado'),
+      );
+      final response = await http.Response.fromStream(streamed);
+
+      if (response.statusCode >= 400) return null;
+
+      final data = json.decode(response.body) as Map<String, dynamic>?;
+      return data?['url'] as String? ?? data?['imageUrl'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Obter perfil público de um utilizador por ID (nome, foto, capa, motos)
+  static Future<Map<String, dynamic>?> getUserProfile(String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/$userId'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return null;
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final user = data['user'] as Map<String, dynamic>?;
+      return user;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Buscar utilizadores por nome ou handle (ex: @jeff)
+  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    final q = query.trim().replaceFirst(RegExp(r'^@'), '');
+    if (q.isEmpty) return [];
+
+    try {
+      final uri = Uri.parse('$baseUrl/users/search').replace(
+        queryParameters: {'q': q, 'limit': '20'},
+      );
+
+      final response = await http
+          .get(uri, headers: await _getHeaders())
+          .timeout(_requestTimeout, onTimeout: () => throw Exception('Tempo esgotado'));
+
+      if (response.statusCode == 404) return [];
+
+      _handleError(response);
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['users'] as List<dynamic>? ?? data['results'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Enviar pedido de seguimento
+  static Future<bool> sendFollowRequest(String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/$userId/follow-request'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404 || response.statusCode == 501) return false;
+      _handleError(response);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// IDs de utilizadores a quem já enviei pedido de seguimento (pendentes)
+  static Future<List<String>> getSentFollowRequestTargetIds() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/me/follow-requests/sent'),
+        headers: await _getHeaders(),
+      );
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['targetIds'] as List<dynamic>? ?? [];
+      return list.map((e) => e as String).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Listar pedidos de seguimento recebidos (pendentes)
+  static Future<List<Map<String, dynamic>>> getFollowRequests() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/me/follow-requests'),
+        headers: await _getHeaders(),
+      );
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['requests'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Aceitar pedido de seguimento (e opcionalmente seguir de volta)
+  static Future<bool> acceptFollowRequest(String requestId, {bool followBack = false}) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/me/follow-requests/$requestId/accept'),
+        headers: await _getHeaders(),
+        body: json.encode({'followBack': followBack}),
+      );
+      if (response.statusCode == 404) return false;
+      _handleError(response);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Rejeitar pedido de seguimento
+  static Future<bool> rejectFollowRequest(String requestId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/me/follow-requests/$requestId/reject'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return false;
+      _handleError(response);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Seguir utilizador (direto, ex. após aceitar)
+  static Future<bool> followUser(String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/$userId/follow'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return false;
+      _handleError(response);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Deixar de seguir
+  static Future<bool> unfollowUser(String userId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/users/$userId/follow'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return false;
+      _handleError(response);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ============================================
@@ -218,15 +404,11 @@ class ApiService {
       );
 
       // Ignorar erro 404 silenciosamente (endpoint opcional)
-      if (response.statusCode == 404) {
-        print('⚠️ Endpoint /users/me/onboarding não disponível (opcional)');
-        return;
-      }
+      if (response.statusCode == 404) return;
 
       _handleError(response);
-    } catch (e) {
+    } catch (_) {
       // Ignorar erros de atualização de onboarding (não são críticos)
-      print('⚠️ Erro ao atualizar onboarding status: $e');
     }
   }
 
@@ -251,10 +433,11 @@ class ApiService {
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
 
-    final response = await http.get(
-      uri,
-      headers: await _getHeaders(),
-    );
+    final response = await http
+        .get(uri, headers: await _getHeaders())
+        .timeout(_requestTimeout, onTimeout: () {
+          throw Exception('Tempo esgotado. Verifique sua conexão.');
+        });
 
     _handleError(response);
 
@@ -310,9 +493,6 @@ class ApiService {
       },
     );
 
-    if (response.statusCode >= 400) {
-      print('❌ API create order: ${response.statusCode} ${response.body}');
-    }
     _handleError(response);
 
     try {
@@ -320,8 +500,6 @@ class ApiService {
       final orderJson = data['order'] as Map<String, dynamic>? ?? data;
       return _deliveryOrderFromJson(orderJson);
     } catch (e) {
-      print('❌ Parse create order response: $e');
-      print('Response body: ${response.body}');
       rethrow;
     }
   }
@@ -539,8 +717,24 @@ class ApiService {
   }
 
   // ============================================
-  // USERS
+  // USERS / BIKES (para verificar setup completo)
   // ============================================
+
+  /// Verifica se o utilizador tem pelo menos uma moto/bike (garagem preenchida).
+  static Future<bool> userHasBikes() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/bikes/me/bikes'),
+        headers: await _getHeaders(),
+      );
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['bikes'] as List<dynamic>? ?? [];
+      return list.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Atualizar localização do usuário
   static Future<void> updateUserLocation({
@@ -617,12 +811,8 @@ class ApiService {
 
     // Validar se token está disponível
     if (token == null || token.isEmpty) {
-      print('❌ Nenhum token disponível para autenticação');
       throw Exception('Você precisa estar autenticado. Faça login novamente.');
     }
-
-    print(
-        '✅ Token disponível para criação de registro: ${token.substring(0, 20)}...');
 
     // Helper para converter arquivo para base64
     Future<String?> fileToBase64(String? filePath) async {
@@ -630,8 +820,7 @@ class ApiService {
       try {
         final bytes = await File(filePath).readAsBytes();
         return base64Encode(bytes);
-      } catch (e) {
-        print('Erro ao converter arquivo para base64: $e');
+      } catch (_) {
         return null;
       }
     }
@@ -757,6 +946,124 @@ class ApiService {
   static Future<void> markAllAlertsAsRead() async {
     final response = await http.put(
       Uri.parse('$baseUrl/alerts/read-all'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+  }
+
+  /// Enviar notificação de broadcast (rede/comunidade)
+  static Future<Map<String, dynamic>> postAlertBroadcast({
+    required String target,
+    required String type,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/alerts/broadcast'),
+      headers: await _getHeaders(),
+      body: json.encode({'target': target, 'type': type}),
+    );
+
+    _handleError(response);
+    return json.decode(response.body) as Map<String, dynamic>;
+  }
+
+  // ============================================
+  // POSTS (rede social)
+  // ============================================
+
+  /// Listar posts. Retorna lista bruta para mapeamento em SocialService.
+  static Future<List<Map<String, dynamic>>> getPosts({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final uri = Uri.parse('$baseUrl/posts').replace(
+      queryParameters: {
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      },
+    );
+
+    final response = await http
+        .get(uri, headers: await _getHeaders())
+        .timeout(_requestTimeout, onTimeout: () {
+          throw Exception('Tempo esgotado. Verifique sua conexão.');
+        });
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final list = data['posts'] as List<dynamic>? ?? [];
+    return list.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  /// Criar post
+  static Future<Map<String, dynamic>> createPost({
+    required String content,
+    List<String>? images,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts'),
+      headers: await _getHeaders(),
+      body: json.encode({
+        'content': content,
+        if (images != null && images.isNotEmpty) 'images': images,
+      }),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data['post'] as Map<String, dynamic>;
+  }
+
+  /// Toggle like no post. Retorna { liked: bool }.
+  static Future<bool> togglePostLike(String postId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/like'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data['liked'] as bool? ?? false;
+  }
+
+  /// Listar comentários de um post
+  static Future<List<Map<String, dynamic>>> getPostComments(String postId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/posts/$postId/comments'),
+      headers: await _getHeaders(),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final list = data['comments'] as List<dynamic>? ?? [];
+    return list.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  /// Adicionar comentário
+  static Future<Map<String, dynamic>> addPostComment(
+    String postId, {
+    required String content,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/comments'),
+      headers: await _getHeaders(),
+      body: json.encode({'content': content}),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data['comment'] as Map<String, dynamic>;
+  }
+
+  /// Excluir post
+  static Future<void> deletePost(String postId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/posts/$postId'),
       headers: await _getHeaders(),
     );
 

@@ -555,6 +555,7 @@ class _HomeScreenState extends State<HomeScreen> {
             polylines: _polylines,
             markers: _markers,
             mapType: _mapType,
+            minMaxZoomPreference: const MinMaxZoomPreference(4, 19),
             rotateGesturesEnabled: true,
             scrollGesturesEnabled: true,
             tiltGesturesEnabled: true,

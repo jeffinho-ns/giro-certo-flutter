@@ -5,9 +5,33 @@ import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
+import '../../services/api_service.dart';
 
-class GarageScreen extends StatelessWidget {
+class GarageScreen extends StatefulWidget {
   const GarageScreen({super.key});
+
+  @override
+  State<GarageScreen> createState() => _GarageScreenState();
+}
+
+class _GarageScreenState extends State<GarageScreen> {
+  Map<String, dynamic>? _deliveryRegistration;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDeliveryRegistrationIfNeeded();
+  }
+
+  Future<void> _loadDeliveryRegistrationIfNeeded() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final user = appState.user;
+    if (user == null || user.pilotProfile.toUpperCase() != 'TRABALHO') return;
+    try {
+      final reg = await ApiService.getDeliveryRegistrationStatus();
+      if (mounted) setState(() => _deliveryRegistration = reg);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -247,6 +271,19 @@ class GarageScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (_deliveryRegistration != null) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        'Dados de entregador',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDeliveryExtraSection(context, theme),
+                    ],
                   ],
                 ),
               ),
@@ -254,6 +291,49 @@ class GarageScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDeliveryExtraSection(BuildContext context, ThemeData theme) {
+    final reg = _deliveryRegistration!;
+    final lastOil = reg['lastOilChangeDate'] != null || reg['lastOilChangeKm'] != null;
+    final lastOilDate = reg['lastOilChangeDate'] as String?;
+    final lastOilKm = reg['lastOilChangeKm'] as int?;
+    final emergencyPhone = reg['emergencyPhone'] as String?;
+    final parts = <Widget>[];
+    if (lastOil) {
+      final text = [
+        if (lastOilDate != null) 'Última troca: $lastOilDate',
+        if (lastOilKm != null) '${lastOilKm.toString()} km',
+      ].join(' • ');
+      parts.add(
+        _buildInfoCard(
+          context: context,
+          theme: theme,
+          icon: LucideIcons.droplet,
+          label: 'Última troca de óleo',
+          value: text.isNotEmpty ? text : '--',
+          color: AppColors.racingOrangeLight,
+        ),
+      );
+      parts.add(const SizedBox(height: 12));
+    }
+    if (emergencyPhone != null && emergencyPhone.isNotEmpty) {
+      parts.add(
+        _buildInfoCard(
+          context: context,
+          theme: theme,
+          icon: LucideIcons.phone,
+          label: 'Telefone de emergência',
+          value: emergencyPhone,
+          color: AppColors.statusOk,
+        ),
+      );
+    }
+    if (parts.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: parts,
     );
   }
 

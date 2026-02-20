@@ -2,13 +2,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../models/story.dart';
+import '../../utils/colors.dart';
 
 class StoryViewScreen extends StatefulWidget {
   final int initialIndex;
+  /// Quando fornecido, usa dados reais em vez da lista fixa.
+  final List<Story>? stories;
 
   const StoryViewScreen({
     super.key,
     this.initialIndex = 0,
+    this.stories,
   });
 
   @override
@@ -20,21 +25,34 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
   late Timer _timer;
   double _progress = 0.0;
   static const Duration _storyDuration = Duration(seconds: 15);
-  static const int _storyCount = 4;
+  late int _storyCount;
   final Set<int> _likedStories = {};
-  final Map<int, int> _likeCount = {0: 12, 1: 45, 2: 8, 3: 32};
+  final Map<int, int> _likeCount = {};
 
-  final List<Map<String, String>> _stories = [
+  /// Lista legada (quando stories == null).
+  final List<Map<String, String>> _legacyStories = [
     {'image': 'assets/images/Story-1.jpg', 'user': 'Abdul'},
     {'image': 'assets/images/Story-2.jpg', 'user': 'Chris'},
     {'image': 'assets/images/Story-3.jpg', 'user': 'General'},
     {'image': 'assets/images/Story-4.jpg', 'user': 'Oyin Dolapo'},
   ];
 
+  List<Story> get _storiesList => widget.stories ?? [];
+  bool get _useStories => widget.stories != null && widget.stories!.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
+    if (_useStories) {
+      _storyCount = widget.stories!.length;
+      for (var i = 0; i < _storyCount; i++) {
+        _likeCount[i] = widget.stories![i].likeCount;
+      }
+    } else {
+      _storyCount = _legacyStories.length;
+      _likeCount.addAll({0: 12, 1: 45, 2: 8, 3: 32});
+    }
+    _currentIndex = widget.initialIndex.clamp(0, _storyCount - 1);
     _startTimer();
   }
 
@@ -88,10 +106,49 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     super.dispose();
   }
 
+  String get _currentStoryImage {
+    if (_useStories) return _storiesList[_currentIndex].mediaUrl;
+    return _legacyStories[_currentIndex]['image']!;
+  }
+
+  String get _currentStoryUser {
+    if (_useStories) return _storiesList[_currentIndex].userName;
+    return _legacyStories[_currentIndex]['user']!;
+  }
+
+  Widget _buildStoryImage() {
+    final url = _currentStoryImage;
+    final isAsset = url.startsWith('assets/');
+    if (isAsset) {
+      return Image.asset(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: Colors.black87,
+            child: const Center(
+              child: Icon(LucideIcons.image, color: Colors.white54, size: 64),
+            ),
+          );
+        },
+      );
+    }
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          color: Colors.black87,
+          child: const Center(
+            child: Icon(LucideIcons.image, color: Colors.white54, size: 64),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final story = _stories[_currentIndex];
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
@@ -107,22 +164,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
           children: [
             // Imagem da story em tela cheia
             Positioned.fill(
-              child: Image.asset(
-                story['image']!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.black87,
-                    child: const Center(
-                      child: Icon(
-                        LucideIcons.image,
-                        color: Colors.white54,
-                        size: 64,
-                      ),
-                    ),
-                  );
-                },
-              ),
+              child: _buildStoryImage(),
             ),
 
             // Overlay gradiente no topo
@@ -157,7 +199,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                   child: Row(
                     children: List.generate(
                       _storyCount,
-                      (index) => Expanded(
+                      (int index) => Expanded(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
                           child: ClipRRect(
@@ -203,7 +245,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                         children: [
                           const SizedBox(height: 32),
                           Text(
-                            story['user']!,
+                            _currentStoryUser,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -211,7 +253,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                             ),
                           ),
                           Text(
-                            '${_currentIndex + 1}/${_storyCount}',
+                            '${_currentIndex + 1}/$_storyCount',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 12,
@@ -359,112 +401,136 @@ class _CommentBottomSheetState extends State<_CommentBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.dividerColor,
-                  borderRadius: BorderRadius.circular(2),
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.35,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Comentários',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+              ],
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.dividerColor.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _comments.length,
-                  itemBuilder: (context, i) {
-                    final c = _comments[i];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            c['user']!,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Comentários',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.only(bottom: 8),
+                    itemCount: _comments.length,
+                    itemBuilder: (context, i) {
+                      final c = _comments[i];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              c['user']!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              c['text']!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Divider(
+                              height: 1,
+                              color: theme.dividerColor.withOpacity(0.4),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _commentController,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _submitComment(),
+                          decoration: InputDecoration(
+                            hintText: 'Adicionar comentário...',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide(
+                                color: theme.dividerColor.withOpacity(0.6),
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 12,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            c['text']!,
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Divider(color: theme.dividerColor.withOpacity(0.3)),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  12,
-                  16,
-                  MediaQuery.of(context).viewInsets.bottom + 12,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _commentController,
-                        decoration: InputDecoration(
-                          hintText: 'Adicionar comentário...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
+                          maxLines: 1,
                         ),
-                        maxLines: 1,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        shape: BoxShape.circle,
+                      const SizedBox(width: 10),
+                      Material(
+                        color: AppColors.racingOrange,
+                        borderRadius: BorderRadius.circular(24),
+                        child: IconButton(
+                          icon: const Icon(LucideIcons.send, size: 20, color: Colors.white),
+                          onPressed: _submitComment,
+                        ),
                       ),
-                      child: IconButton(
-                        icon: const Icon(LucideIcons.send),
-                        color: Colors.white,
-                        onPressed: _submitComment,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

@@ -6,7 +6,7 @@ import '../../services/api_service.dart';
 import '../../models/user.dart';
 import '../../utils/colors.dart';
 import '../settings/settings_screen.dart';
-import '../profile/edit_profile_screen.dart';
+import '../social/profile_page.dart';
 import '../help/help_screen.dart';
 import '../../providers/navigation_provider.dart';
 
@@ -295,14 +295,14 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                       context: context,
                       theme: theme,
                       icon: LucideIcons.user,
-                      title: 'Editar Perfil',
-                      subtitle: 'Atualizar informações pessoais',
+                      title: 'Perfil',
+                      subtitle: 'Ver seu perfil',
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const EditProfileScreen(),
+                            builder: (context) => const ProfilePage(),
                           ),
                         );
                       },

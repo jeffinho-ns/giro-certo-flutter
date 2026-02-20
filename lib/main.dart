@@ -4,6 +4,7 @@ import 'providers/app_state_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/drawer_provider.dart';
 import 'providers/navigation_provider.dart';
+import 'providers/social_feed_provider.dart';
 import 'utils/theme.dart';
 import 'screens/login/splash_screen.dart';
 import 'screens/login/login_screen.dart';
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppStateProvider()),
         ChangeNotifierProvider(create: (_) => DrawerProvider()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
+        ChangeNotifierProvider(create: (_) => SocialFeedProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
@@ -329,19 +331,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
     );
   }
 
-  void _handleDeliveryRegistrationComplete(DeliveryRegistrationDetails _) {
-    _handleDeliveryRegistrationCompleteAsync();
+  void _handleDeliveryRegistrationComplete(DeliveryRegistrationDetails details) {
+    _handleDeliveryRegistrationCompleteAsync(details);
   }
 
-  Future<void> _handleDeliveryRegistrationCompleteAsync() async {
+  Future<void> _handleDeliveryRegistrationCompleteAsync(
+      DeliveryRegistrationDetails details) async {
     await _finalizeSetup(
       deliveryStatus: DeliveryModerationStatus.pending,
+      deliveryDetails: details,
     );
   }
 
   Future<void> _finalizeSetup({
     required DeliveryModerationStatus deliveryStatus,
     GarageSetupDetails? garageDetails,
+    DeliveryRegistrationDetails? deliveryDetails,
   }) async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final resolvedProfile = _pilotProfileType ??
@@ -365,13 +370,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final model = _bikeModel.isNotEmpty
         ? _bikeModel
         : _selectedMotorcycle?.model ?? 'Modelo';
+    final plate = deliveryDetails?.plateLicense ?? _plate;
+    final currentKm = deliveryDetails?.currentKilometers ?? _currentKm;
 
     final bike = Bike(
       id: '1',
       model: model,
       brand: brand,
-      plate: _plate,
-      currentKm: _currentKm,
+      plate: plate,
+      currentKm: currentKm,
       oilType: _oilType,
       frontTirePressure: _frontTirePressure,
       rearTirePressure: _rearTirePressure,
@@ -441,10 +448,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    // Fluxo de navegação correto: SplashScreen → Login → Setup → Home
+    // Fluxo de navegação: Login → Setup → Home por tipo de usuário
+    // Delivery → home mapa (MainNavigation); Lojista → home lojista (MainNavigation); Casual/Diário/Racing → home social
     if (appState.isLoggedIn && appState.hasCompletedSetup) {
-      final pilot = appState.pilotProfileType;
-      if (pilot != null && !pilot.isDelivery) {
+      if (appState.shouldShowSocialHome) {
         return const SocialHomeScreen();
       }
       return const MainNavigation();

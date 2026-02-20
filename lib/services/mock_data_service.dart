@@ -5,6 +5,7 @@ import '../models/part.dart';
 import '../models/post.dart';
 import '../models/partner.dart';
 import '../models/delivery_order.dart';
+import '../models/story.dart';
 
 class MockDataService {
   static User? _cachedUser;
@@ -164,6 +165,47 @@ class MockDataService {
         reviewCount: 156,
         description: 'Proteção e estilo para sua moto',
         compatibleModels: ['CB 650F', 'CB 600F'],
+      ),
+    ];
+  }
+
+  static List<Story> getMockStories() {
+    return [
+      Story(
+        id: 'st1',
+        userId: '2',
+        userName: 'Maria Santos',
+        userAvatarUrl: null,
+        mediaUrl: 'assets/images/prev-story-1.png',
+        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        likeCount: 12,
+      ),
+      Story(
+        id: 'st2',
+        userId: '3',
+        userName: 'Pedro Costa',
+        userAvatarUrl: null,
+        mediaUrl: 'assets/images/prev-story-2.png',
+        createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+        likeCount: 8,
+      ),
+      Story(
+        id: 'st3',
+        userId: '4',
+        userName: 'Ana Oliveira',
+        userAvatarUrl: null,
+        mediaUrl: 'assets/images/prev-story-3.png',
+        createdAt: DateTime.now().subtract(const Duration(hours: 8)),
+        likeCount: 15,
+      ),
+      Story(
+        id: 'st4',
+        userId: '5',
+        userName: 'Carlos Mendes',
+        userAvatarUrl: null,
+        mediaUrl: 'assets/images/prev-story-1.png',
+        createdAt: DateTime.now().subtract(const Duration(hours: 12)),
+        likeCount: 6,
       ),
     ];
   }
