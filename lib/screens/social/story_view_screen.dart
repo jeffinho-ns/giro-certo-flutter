@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../models/story.dart';
 import '../../utils/colors.dart';
+import '../../widgets/api_image.dart';
 
 class StoryViewScreen extends StatefulWidget {
   final int initialIndex;
@@ -133,8 +134,8 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
         },
       );
     }
-    return Image.network(
-      url,
+    return ApiImage(
+      url: url,
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) {
         return Container(

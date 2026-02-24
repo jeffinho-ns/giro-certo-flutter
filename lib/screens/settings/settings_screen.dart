@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
+import 'image_diagnostic_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -143,6 +144,24 @@ class SettingsScreen extends StatelessWidget {
                           ),
                         ],
                       ),
+                    ),
+                    
+                    const SizedBox(height: 32),
+
+                    // Diagnóstico de imagens
+                    ListTile(
+                      leading: Icon(LucideIcons.bug, color: themeProvider.primaryColor),
+                      title: const Text('Diagnóstico de Imagens'),
+                      subtitle: const Text('Ver o que a API retorna (posts, stories)'),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ImageDiagnosticScreen(),
+                          ),
+                        );
+                      },
                     ),
                     
                     const SizedBox(height: 32),

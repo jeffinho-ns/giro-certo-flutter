@@ -16,6 +16,9 @@ import 'story_view_screen.dart';
 import '../settings/settings_screen.dart';
 import '../garage/garage_screen.dart';
 import '../../services/api_service.dart';
+import '../../utils/image_url.dart';
+import '../../widgets/api_image.dart';
+import 'follow_list_screen.dart';
 
 const String _coverKeyPrefix = 'profile_cover_';
 const String _avatarKeyPrefix = 'profile_avatar_';
@@ -57,9 +60,32 @@ class _ProfilePageState extends State<ProfilePage>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadLocalImages();
-    if (widget.userId != null) {
-      _loadPendingFollowRequestState();
-      _loadOtherUserProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      if (widget.userId == null || widget.userId == appState.user?.id) {
+        _loadOwnProfile();
+      } else {
+        _loadPendingFollowRequestState();
+        _loadOtherUserProfile();
+      }
+    });
+  }
+
+  Future<void> _loadOwnProfile() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final uid = appState.user?.id;
+    if (uid == null) return;
+    setState(() => _loadingProfile = true);
+    try {
+      final profile = await ApiService.getUserProfile(uid);
+      if (mounted) {
+        setState(() {
+          _loadedProfile = profile;
+          _loadingProfile = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingProfile = false);
     }
   }
 
@@ -85,6 +111,18 @@ class _ProfilePageState extends State<ProfilePage>
     if (mounted && widget.userId != null) {
       setState(() => _hasPendingFollowRequest = ids.contains(widget.userId));
     }
+  }
+
+  void _openFollowList(String userId, {required bool isFollowers}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FollowListScreen(
+          userId: userId,
+          title: isFollowers ? 'Seguidores' : 'A seguir',
+          isFollowers: isFollowers,
+        ),
+      ),
+    );
   }
 
   Future<void> _sendFollowRequestFromProfile() async {
@@ -279,7 +317,10 @@ class _ProfilePageState extends State<ProfilePage>
     final loaded = _loadedProfile;
     final userName = loaded?['name'] as String? ?? widget.userName ?? appState.user?.name ?? 'Utilizador';
     final userAvatarUrl = loaded?['photoUrl'] as String? ?? widget.userAvatarUrl ?? appState.user?.photoUrl;
-    final userCoverUrl = loaded?['coverUrl'] as String?;
+    final rawCover = loaded?['coverUrl'] as String?;
+    final userCoverUrl = (rawCover != null && rawCover.isNotEmpty)
+        ? resolveImageUrl(rawCover)
+        : null;
     final bikesList = loaded?['bikes'] as List<dynamic>?;
     final firstBike = bikesList != null && bikesList.isNotEmpty ? bikesList.first as Map<String, dynamic>? : null;
     final bikeModel = firstBike?['model'] as String? ?? widget.userBikeModel ?? appState.bike?.model ?? '';
@@ -341,9 +382,12 @@ class _ProfilePageState extends State<ProfilePage>
                         avatarPath: effectiveAvatarPath,
                         coverPath: isOwnProfile ? _coverPath : null,
                         coverUrl: userCoverUrl,
-                        followersCount: 0,
-                        followingCount: 0,
+                        followersCount: (loaded?['followersCount'] as num?)?.toInt() ?? 0,
+                        followingCount: (loaded?['followingCount'] as num?)?.toInt() ?? 0,
+                        userId: userId,
                         isOwnProfile: isOwnProfile,
+                        onFollowersTap: () => _openFollowList(userId, isFollowers: true),
+                        onFollowingTap: () => _openFollowList(userId, isFollowers: false),
                         onCoverTap: _pickCover,
                         onAvatarTap: _pickAvatar,
                         loadingCover: _loadingCover,
@@ -431,8 +475,11 @@ class _ProfileHeader extends StatelessWidget {
   final String? coverUrl;
   final int followersCount;
   final int followingCount;
+  final String? userId;
   final bool isOwnProfile;
   final VoidCallback? onCoverTap;
+  final VoidCallback? onFollowersTap;
+  final VoidCallback? onFollowingTap;
   final VoidCallback? onAvatarTap;
   final bool loadingCover;
   final bool loadingAvatar;
@@ -449,8 +496,11 @@ class _ProfileHeader extends StatelessWidget {
     this.coverUrl,
     this.followersCount = 0,
     this.followingCount = 0,
+    this.userId,
     this.isOwnProfile = false,
     this.onCoverTap,
+    this.onFollowersTap,
+    this.onFollowingTap,
     this.onAvatarTap,
     this.loadingCover = false,
     this.loadingAvatar = false,
@@ -492,8 +542,8 @@ class _ProfileHeader extends StatelessWidget {
                     fit: BoxFit.cover,
                   )
                 : (coverUrl != null && coverUrl!.isNotEmpty)
-                    ? Image.network(
-                        coverUrl!,
+                    ? ApiImage(
+                        url: coverUrl!,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => _defaultCover(),
                       )
@@ -567,26 +617,29 @@ class _ProfileHeader extends StatelessWidget {
                         child: CircleAvatar(
                           radius: 44,
                           backgroundColor: Colors.white,
-                          child: CircleAvatar(
-                            radius: 40,
-                            backgroundColor: const Color(0xFFE8E6F0),
-                            backgroundImage: avatarPath != null
-                                ? FileImage(File(avatarPath!))
-                                : (hasAvatar && avatarUrl != null
-                                    ? NetworkImage(avatarUrl!) as ImageProvider
-                                    : null),
-                            child: !hasAvatar && avatarPath == null
-                                ? Text(
-                                    userName.isNotEmpty ? userName[0].toUpperCase() : '?',
-                                    style: TextStyle(
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.bold,
-                                      color: theme.brightness == Brightness.dark
-                                          ? Colors.white70
-                                          : const Color(0xFF2D2642),
-                                    ),
-                                  )
-                                : null,
+                          child: ClipOval(
+                            child: SizedBox(
+                              width: 80,
+                              height: 80,
+                              child: avatarPath != null
+                                  ? Image.file(File(avatarPath!), fit: BoxFit.cover)
+                                  : (hasAvatar && avatarUrl != null && avatarUrl!.isNotEmpty)
+                                      ? ApiImage(url: avatarUrl!, fit: BoxFit.cover)
+                                      : Container(
+                                          color: const Color(0xFFE8E6F0),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            userName.isNotEmpty ? userName[0].toUpperCase() : '?',
+                                            style: TextStyle(
+                                              fontSize: 30,
+                                              fontWeight: FontWeight.bold,
+                                              color: theme.brightness == Brightness.dark
+                                                  ? Colors.white70
+                                                  : const Color(0xFF2D2642),
+                                            ),
+                                          ),
+                                        ),
+                            ),
                           ),
                         ),
                       ),
@@ -638,9 +691,15 @@ class _ProfileHeader extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _CountChip(label: '$followersCount Seguidores'),
+                    _CountChip(
+                      label: '$followersCount Seguidores',
+                      onTap: onFollowersTap,
+                    ),
                     const SizedBox(width: 12),
-                    _CountChip(label: '$followingCount A seguir'),
+                    _CountChip(
+                      label: '$followingCount A seguir',
+                      onTap: onFollowingTap,
+                    ),
                   ],
                 ),
               ],
@@ -701,30 +760,34 @@ class _CoverEditHint extends StatelessWidget {
 
 class _CountChip extends StatelessWidget {
   final String label;
+  final VoidCallback? onTap;
 
-  const _CountChip({required this.label});
+  const _CountChip({required this.label, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.grey.shade700,
+            fontWeight: FontWeight.w600,
           ),
-        ],
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          color: Colors.grey.shade700,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -780,7 +843,7 @@ class _StorysTab extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: isAsset
                 ? Image.asset(s.mediaUrl, fit: BoxFit.cover)
-                : Image.network(s.mediaUrl, fit: BoxFit.cover),
+                : ApiImage(url: s.mediaUrl, fit: BoxFit.cover),
           ),
         );
       },
@@ -834,7 +897,7 @@ class _MomentosTab extends StatelessWidget {
           ),
           clipBehavior: Clip.antiAlias,
           child: isUrl
-              ? Image.network(img, fit: BoxFit.cover)
+              ? ApiImage(url: img, fit: BoxFit.cover)
               : Image.asset(img, fit: BoxFit.cover),
         );
       },
@@ -999,51 +1062,55 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: AppColors.racingOrange.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                size: 48,
-                color: AppColors.racingOrange.withOpacity(0.8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              title,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.textTheme.bodySmall?.color?.withOpacity(0.8),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (action != null && onAction != null) ...[
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: onAction,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.racingOrange,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.racingOrange.withOpacity(0.1),
+                  shape: BoxShape.circle,
                 ),
-                child: Text(action!),
+                child: Icon(
+                  icon,
+                  size: 48,
+                  color: AppColors.racingOrange.withOpacity(0.8),
+                ),
               ),
+              const SizedBox(height: 24),
+              Text(
+                title,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.textTheme.bodySmall?.color?.withOpacity(0.8),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (action != null && onAction != null) ...[
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: onAction,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.racingOrange,
+                  ),
+                  child: Text(action!),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

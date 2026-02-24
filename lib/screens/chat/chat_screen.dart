@@ -15,8 +15,11 @@ enum ChatTab {
 }
 
 /// Tela de chat: Comunidade, Grupos ou Particular.
+/// Se [initialConversation] for passado, abre essa conversa diretamente.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final ChatConversation? initialConversation;
+
+  const ChatScreen({super.key, this.initialConversation});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -40,10 +43,17 @@ class _ChatScreenState extends State<ChatScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final conv = widget.initialConversation;
+    if (conv != null) {
+      return _ChatRoomScreen(
+        chatId: conv.id,
+        title: conv.title,
+        isGroup: conv.isGroup,
+      );
+    }
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Mensagens'),
         bottom: TabBar(

@@ -1,7 +1,7 @@
 import '../models/post.dart';
 import '../models/story.dart';
+import '../utils/image_url.dart';
 import 'api_service.dart';
-import 'mock_data_service.dart';
 
 /// Serviço da rede social. Usa API quando disponível; fallback para mock.
 class SocialService {
@@ -17,14 +17,21 @@ class SocialService {
         likes.any((e) => (e as Map<String, dynamic>)['userId'] == currentUserId);
     if (isLiked) _likedPostIds.add(json['id'] as String);
 
+    final rawImages = _parseImagesList(json);
+    final resolvedImages = rawImages
+        ?.map((u) => resolveImageUrl(u))
+        .where((u) => u.isNotEmpty)
+        .toList();
+
+    final rawPhoto = user?['photoUrl'] as String?;
     return Post(
       id: json['id'] as String,
       userId: json['userId'] as String,
       userName: (user?['name'] as String?) ?? '',
       userBikeModel: '',
-      userAvatarUrl: user?['photoUrl'] as String?,
+      userAvatarUrl: (rawPhoto != null && rawPhoto.isNotEmpty) ? resolveImageUrl(rawPhoto) : null,
       content: json['content'] as String? ?? '',
-      images: (json['images'] as List<dynamic>?)?.map((e) => e as String).toList(),
+      images: resolvedImages?.isNotEmpty == true ? resolvedImages : null,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : DateTime.now(),
@@ -45,17 +52,126 @@ class SocialService {
       _cachedPosts = list.map((j) => _postFromApi(j, currentUserId: currentUserId)).toList();
       return List.from(_cachedPosts);
     } catch (_) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      _cachedPosts = MockDataService.getMockPosts(userBikeModel ?? '');
-      return List.from(_cachedPosts);
+      _cachedPosts = [];
+      return [];
     }
   }
 
   /// Lista stories para o carrossel.
   static Future<List<Story>> getStories() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    _cachedStories = MockDataService.getMockStories();
-    return List.from(_cachedStories);
+    try {
+      final list = await ApiService.getStories();
+      _cachedStories = list.map(_storyFromMap).toList();
+      return List.from(_cachedStories);
+    } catch (_) {
+      _cachedStories = [];
+      return [];
+    }
+  }
+
+  static List<String>? _parseImagesList(Map<String, dynamic> json) {
+    final v = json['images'] ?? json['Images'];
+    if (v == null || v is! List) return null;
+    final out = <String>[];
+    for (final e in v) {
+      final s = e is String ? e : e?.toString();
+      if (s != null && s.isNotEmpty) out.add(s);
+    }
+    return out.isEmpty ? null : out;
+  }
+
+  static Story _storyFromMap(Map<String, dynamic> j) {
+    final rawAvatar = j['userAvatarUrl'] as String?;
+    final rawMedia = (j['mediaUrl'] ?? j['media_url'])?.toString() ?? '';
+    return Story(
+        id: j['id'] as String,
+        userId: j['userId'] as String,
+        userName: (j['userName'] as String?) ?? '',
+        userAvatarUrl: (rawAvatar != null && rawAvatar.isNotEmpty) ? resolveImageUrl(rawAvatar) : null,
+        mediaUrl: rawMedia.isNotEmpty ? resolveImageUrl(rawMedia) : rawMedia,
+        createdAt: j['createdAt'] != null ? DateTime.parse(j['createdAt'] as String) : DateTime.now(),
+        likeCount: (j['likeCount'] as int?) ?? 0,
+      );
+  }
+
+  /// Lista posts de um utilizador específico.
+  static Future<List<Post>> fetchPostsByUserId(
+    String userId, {
+    String? currentUserId,
+  }) async {
+    try {
+      final list = await ApiService.getPosts(limit: 100, offset: 0, userId: userId);
+      final posts = list.map((j) => _postFromApi(j, currentUserId: currentUserId)).toList();
+      return posts.where((p) => p.userId == userId).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Lista stories de um utilizador específico.
+  static Future<List<Story>> fetchStoriesByUserId(String userId) async {
+    try {
+      final list = await ApiService.getStories(userId: userId);
+      return list.map(_storyFromMap).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Seguir utilizador. Retorna true se passou a seguir, false se já seguia ou erro.
+  static Future<bool> followUser(String currentUserId, String targetUserId) async {
+    if (currentUserId == targetUserId) return false;
+    try {
+      final ok = await ApiService.followUser(targetUserId);
+      if (ok) _followingIds.add(targetUserId);
+      return ok;
+    } catch (_) {
+      _followingIds.add(targetUserId);
+      return true;
+    }
+  }
+
+  /// Deixar de seguir utilizador.
+  static Future<bool> unfollowUser(String currentUserId, String targetUserId) async {
+    if (currentUserId == targetUserId) return false;
+    try {
+      final ok = await ApiService.unfollowUser(targetUserId);
+      if (ok) _followingIds.remove(targetUserId);
+      return ok;
+    } catch (_) {
+      _followingIds.remove(targetUserId);
+      return true;
+    }
+  }
+
+  /// Cache local de quem o utilizador atual segue (fallback quando API não retorna).
+  static final Set<String> _followingIds = {};
+
+  /// Verifica se [currentUserId] segue [targetUserId].
+  static Future<bool> checkFollowStatus(
+    String currentUserId,
+    String targetUserId,
+  ) async {
+    if (currentUserId == targetUserId) return false;
+    if (_followingIds.contains(targetUserId)) return true;
+    try {
+      final ids = await ApiService.getFollowingIds();
+      _followingIds.addAll(ids);
+      return ids.contains(targetUserId);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Lista IDs dos utilizadores que o utilizador logado segue.
+  static Future<List<String>> getFollowingIds() async {
+    try {
+      final ids = await ApiService.getFollowingIds();
+      _followingIds.addAll(ids);
+      return ids;
+    } catch (_) {
+      return _followingIds.toList();
+    }
   }
 
   /// Verifica se o post está curtido (estado local).
@@ -148,7 +264,8 @@ class SocialService {
     }
   }
 
-  /// Cria novo post.
+  /// Cria novo post. Se [imageUrls] contiver caminhos locais (file://), faz upload primeiro via API.
+  /// Igual ao agilizaiapp: Flutter envia para API, API faz upload para Firebase Storage.
   static Future<Post> createPost({
     required String userId,
     required String userName,
@@ -157,10 +274,23 @@ class SocialService {
     required String content,
     List<String>? imageUrls,
   }) async {
+    List<String>? urlsToSend = imageUrls;
+    if (imageUrls != null && imageUrls.isNotEmpty) {
+      final uploadedUrls = <String>[];
+      for (final path in imageUrls) {
+        if (path.startsWith('http')) {
+          uploadedUrls.add(path);
+        } else {
+          final url = await ApiService.uploadPostImage(path, userId);
+          if (url != null) uploadedUrls.add(url);
+        }
+      }
+      urlsToSend = uploadedUrls.isEmpty ? null : uploadedUrls;
+    }
     try {
       final raw = await ApiService.createPost(
         content: content,
-        images: imageUrls,
+        images: urlsToSend,
       );
       final post = _postFromApi(raw, currentUserId: userId);
       _cachedPosts.insert(0, post);
@@ -174,7 +304,7 @@ class SocialService {
         userBikeModel: userBikeModel,
         userAvatarUrl: userAvatarUrl,
         content: content,
-        images: imageUrls,
+        images: urlsToSend,
         createdAt: DateTime.now(),
         likes: 0,
         comments: 0,
@@ -185,25 +315,37 @@ class SocialService {
     }
   }
 
-  /// Cria novo story (mock).
+  /// Cria novo story. Se mediaUrl for caminho local, faz upload primeiro.
   static Future<Story> createStory({
     required String userId,
     required String userName,
     String? userAvatarUrl,
     required String mediaUrl,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    final story = Story(
-      id: 's_${DateTime.now().millisecondsSinceEpoch}',
-      userId: userId,
-      userName: userName,
-      userAvatarUrl: userAvatarUrl,
-      mediaUrl: mediaUrl,
-      createdAt: DateTime.now(),
-      likeCount: 0,
-    );
-    _cachedStories.insert(0, story);
-    return story;
+    String finalUrl = mediaUrl;
+    if (!mediaUrl.startsWith('http')) {
+      final uploaded = await ApiService.uploadStoryImage(mediaUrl, userId);
+      if (uploaded != null) finalUrl = uploaded;
+    }
+    try {
+      final j = await ApiService.createStory(finalUrl);
+      final story = _storyFromMap(j);
+      _cachedStories.insert(0, story);
+      return story;
+    } catch (_) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      final story = Story(
+        id: 's_${DateTime.now().millisecondsSinceEpoch}',
+        userId: userId,
+        userName: userName,
+        userAvatarUrl: userAvatarUrl,
+        mediaUrl: finalUrl,
+        createdAt: DateTime.now(),
+        likeCount: 0,
+      );
+      _cachedStories.insert(0, story);
+      return story;
+    }
   }
 
   /// Filtra posts por texto (busca local).
@@ -294,10 +436,13 @@ class SocialService {
     return updated;
   }
 
-  /// Reportar post (mock: só registra).
+  /// Reportar post.
   static Future<void> reportPost(String postId, String reason) async {
-    await Future.delayed(const Duration(milliseconds: 150));
-    // Em produção enviaria para API
+    try {
+      await ApiService.reportPost(postId, reason);
+    } catch (_) {
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
   }
 }
 

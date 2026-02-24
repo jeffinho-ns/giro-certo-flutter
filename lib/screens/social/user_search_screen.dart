@@ -4,7 +4,9 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/colors.dart';
-import 'profile_page.dart';
+import '../../utils/image_url.dart';
+import '../../widgets/api_image.dart';
+import 'user_profile_screen.dart';
 
 /// Tela de busca de utilizadores por @handle ou nome.
 class UserSearchScreen extends StatefulWidget {
@@ -165,7 +167,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                         final u = _users[i];
                         final id = u['id'] as String? ?? '';
                         final name = u['name'] as String? ?? 'Utilizador';
-                        final photoUrl = u['photoUrl'] as String?;
+                        final photoUrl = resolveImageUrl(u['photoUrl'] as String?);
                         final isOwn = id == currentUserId;
 
                         final hasPending = _pendingRequestTargetIds.contains(id);
@@ -174,18 +176,21 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                           leading: CircleAvatar(
                             radius: 24,
                             backgroundColor: AppColors.racingOrange.withOpacity(0.2),
-                            backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                                ? NetworkImage(photoUrl)
-                                : null,
-                            child: photoUrl == null || photoUrl.isEmpty
-                                ? Text(
+                            child: photoUrl.isNotEmpty
+                                ? ClipOval(
+                                    child: SizedBox(
+                                      width: 48,
+                                      height: 48,
+                                      child: ApiImage(url: photoUrl, fit: BoxFit.cover),
+                                    ),
+                                  )
+                                : Text(
                                     name.isNotEmpty ? name[0].toUpperCase() : '?',
                                     style: const TextStyle(
                                       color: AppColors.racingOrange,
                                       fontWeight: FontWeight.bold,
                                     ),
-                                  )
-                                : null,
+                                  ),
                           ),
                           title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: Text(_handleFromName(name)),
@@ -199,10 +204,11 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) => ProfilePage(
+                                            builder: (_) => UserProfileScreen(
                                               userId: id,
                                               userName: name,
                                               userAvatarUrl: photoUrl,
+                                              userBikeModel: u['bikeModel'] as String?,
                                             ),
                                           ),
                                         );
@@ -227,10 +233,11 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => ProfilePage(
+                                builder: (_) => UserProfileScreen(
                                   userId: id,
                                   userName: name,
                                   userAvatarUrl: photoUrl,
+                                  userBikeModel: u['bikeModel'] as String?,
                                 ),
                               ),
                             );

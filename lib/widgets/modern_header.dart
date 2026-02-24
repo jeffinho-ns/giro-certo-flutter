@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/drawer_provider.dart';
+import 'api_image.dart';
 
 class ModernHeader extends StatefulWidget {
   final String title;
@@ -119,10 +120,10 @@ class _ModernHeaderState extends State<ModernHeader> {
                             ),
                           ],
                         ),
-                        child: user?.photoUrl != null
+                        child: user?.photoUrl != null && user!.photoUrl!.isNotEmpty
                             ? ClipOval(
-                                child: Image.network(
-                                  user!.photoUrl!,
+                                child: ApiImage(
+                                  url: user.photoUrl!,
                                   fit: BoxFit.cover,
                                 ),
                               )

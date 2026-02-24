@@ -9,6 +9,7 @@ import '../sidebars/profile_sidebar.dart';
 import '../../widgets/modern_header.dart';
 import '../../services/social_service.dart';
 import '../../models/post.dart';
+import '../../utils/colors.dart';
 import '../../widgets/social/social_search_bar.dart';
 import '../../widgets/social/story_tile.dart';
 import '../../widgets/social/post_card.dart';
@@ -25,6 +26,7 @@ import 'report_post_sheet.dart';
 import 'notifications_screen.dart';
 import 'explorar_screen.dart';
 import 'profile_page.dart';
+import 'user_profile_screen.dart';
 import 'user_search_screen.dart';
 import '../chat/chat_screen.dart';
 
@@ -102,12 +104,14 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ProfilePage(
-                      userId: post.userId,
-                      userName: post.userName,
-                      userAvatarUrl: post.userAvatarUrl,
-                      userBikeModel: post.userBikeModel,
-                    ),
+                    builder: (_) => isOwnPost
+                        ? const ProfilePage()
+                        : UserProfileScreen(
+                            userId: post.userId,
+                            userName: post.userName,
+                            userAvatarUrl: post.userAvatarUrl,
+                            userBikeModel: post.userBikeModel,
+                          ),
                   ),
                 );
               },
@@ -321,6 +325,22 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _FeedTabChip(
+                      label: 'Para Você',
+                      isSelected: feed.feedTab == FeedTab.forYou,
+                      onTap: () => feed.setFeedTab(FeedTab.forYou),
+                    ),
+                    const SizedBox(width: 8),
+                    _FeedTabChip(
+                      label: 'Seguindo',
+                      isSelected: feed.feedTab == FeedTab.following,
+                      onTap: () => feed.setFeedTab(FeedTab.following),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 150,
@@ -399,6 +419,45 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
       bottomNavigationBar: SocialBottomNav(
         currentIndex: _currentNavIndex,
         onTap: _onNavTap,
+      ),
+    );
+  }
+}
+
+class _FeedTabChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _FeedTabChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.racingOrange.withOpacity(0.2)
+              : theme.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppColors.racingOrange : theme.dividerColor,
+          ),
+        ),
+        child: Text(
+          label,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: isSelected ? AppColors.racingOrange : theme.textTheme.bodyMedium?.color,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }

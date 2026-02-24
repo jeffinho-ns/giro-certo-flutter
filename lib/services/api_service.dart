@@ -38,6 +38,31 @@ class ApiService {
     await prefs.remove('auth_token');
   }
 
+  /// Headers apenas com auth (para imagens - sem Content-Type json)
+  static Future<Map<String, String>> getImageHeaders() async {
+    final token = await _getToken();
+    if (token == null) return {};
+    return {'Authorization': 'Bearer $token'};
+  }
+
+  /// Carrega bytes de uma imagem (com auth se necessário)
+  static Future<http.Response?> fetchImage(String url) async {
+    if (url.isEmpty || url.startsWith('assets/')) return null;
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null || !uri.hasScheme) return null;
+      final headers = await getImageHeaders();
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('Timeout'),
+      );
+      if (response.statusCode >= 400) return null;
+      return response;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Headers padrão com autenticação
   static Future<Map<String, String>> _getHeaders({
     bool includeAuth = true,
@@ -372,6 +397,60 @@ class ApiService {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Lista de seguidores de um utilizador
+  static Future<List<Map<String, dynamic>>> getFollowers(String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/$userId/followers'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['followers'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Lista de quem um utilizador segue
+  static Future<List<Map<String, dynamic>>> getFollowing(String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/$userId/following'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['following'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// IDs dos utilizadores que o utilizador logado segue
+  static Future<List<String>> getFollowingIds() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/me/following'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['followingIds'] as List<dynamic>? ??
+          data['ids'] as List<dynamic>? ??
+          (data['users'] as List<dynamic>?)?.map((u) => (u as Map)['id']).toList() ??
+          [];
+      return list.map((e) => e.toString()).toList();
+    } catch (_) {
+      return [];
     }
   }
 
@@ -972,15 +1051,19 @@ class ApiService {
   // ============================================
 
   /// Listar posts. Retorna lista bruta para mapeamento em SocialService.
+  /// Se [userId] for fornecido, filtra posts desse utilizador (quando a API suportar).
   static Future<List<Map<String, dynamic>>> getPosts({
     int limit = 50,
     int offset = 0,
+    String? userId,
   }) async {
+    final params = <String, String>{
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+    };
+    if (userId != null && userId.isNotEmpty) params['userId'] = userId;
     final uri = Uri.parse('$baseUrl/posts').replace(
-      queryParameters: {
-        'limit': limit.toString(),
-        'offset': offset.toString(),
-      },
+      queryParameters: params,
     );
 
     final response = await http
@@ -994,6 +1077,36 @@ class ApiService {
     final data = json.decode(response.body) as Map<String, dynamic>;
     final list = data['posts'] as List<dynamic>? ?? [];
     return list.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  /// Upload de imagem para post. Retorna URL completa.
+  static Future<String?> uploadPostImage(String filePath, String userId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/images/upload/post/$userId');
+      final token = await _getToken();
+      if (token == null) return null;
+
+      final request = http.MultipartRequest('POST', uri);
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(await http.MultipartFile.fromPath('image', filePath));
+
+      final streamed = await request.send().timeout(
+        _requestTimeout,
+        onTimeout: () => throw Exception('Tempo esgotado'),
+      );
+      final response = await http.Response.fromStream(streamed);
+
+      if (response.statusCode >= 400) return null;
+
+      final data = json.decode(response.body) as Map<String, dynamic>?;
+      final relUrl = data?['image']?['url'] as String? ?? data?['url'] as String?;
+      if (relUrl == null) return null;
+      if (relUrl.startsWith('http')) return relUrl;
+      final origin = Uri.parse(baseUrl).origin;
+      return '$origin$relUrl';
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Criar post
@@ -1068,5 +1181,149 @@ class ApiService {
     );
 
     _handleError(response);
+  }
+
+  /// Reportar post
+  static Future<void> reportPost(String postId, String reason) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/report'),
+      headers: await _getHeaders(),
+      body: json.encode({'reason': reason}),
+    );
+    _handleError(response);
+  }
+
+  // ============================================
+  // STORIES
+  // ============================================
+
+  /// Listar stories (opcional: userId para filtrar por utilizador).
+  static Future<List<Map<String, dynamic>>> getStories({String? userId}) async {
+    try {
+      final params = <String, String>{'limit': '100'};
+      if (userId != null && userId.isNotEmpty) params['userId'] = userId;
+      final uri = Uri.parse('$baseUrl/stories').replace(queryParameters: params);
+      final response = await http.get(uri, headers: await _getHeaders());
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['stories'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Upload de imagem para story. Retorna URL completa.
+  static Future<String?> uploadStoryImage(String filePath, String userId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/images/upload/story/$userId');
+      final token = await _getToken();
+      if (token == null) return null;
+
+      final request = http.MultipartRequest('POST', uri);
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(await http.MultipartFile.fromPath('image', filePath));
+
+      final streamed = await request.send().timeout(
+        _requestTimeout,
+        onTimeout: () => throw Exception('Tempo esgotado'),
+      );
+      final response = await http.Response.fromStream(streamed);
+
+      if (response.statusCode >= 400) return null;
+
+      final data = json.decode(response.body) as Map<String, dynamic>?;
+      final relUrl = data?['image']?['url'] as String? ?? data?['url'] as String?;
+      if (relUrl == null) return null;
+      if (relUrl.startsWith('http')) return relUrl;
+      final origin = Uri.parse(baseUrl).origin;
+      return '$origin$relUrl';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Criar story.
+  static Future<Map<String, dynamic>> createStory(String mediaUrl) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/stories'),
+      headers: await _getHeaders(),
+      body: json.encode({'mediaUrl': mediaUrl}),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data['story'] as Map<String, dynamic>;
+  }
+
+  /// Excluir story.
+  static Future<void> deleteStory(String storyId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/stories/$storyId'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+  }
+
+  // ============================================
+  // CHAT
+  // ============================================
+
+  /// Listar conversas privadas.
+  static Future<List<Map<String, dynamic>>> getChatConversations() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/chats'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['conversations'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Obter ou criar conversa privada.
+  static Future<Map<String, dynamic>> getOrCreatePrivateChat(String recipientId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chats/private'),
+      headers: await _getHeaders(),
+      body: json.encode({'recipientId': recipientId}),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data['conversation'] as Map<String, dynamic>;
+  }
+
+  /// Listar mensagens de uma conversa.
+  static Future<List<Map<String, dynamic>>> getChatMessages(String chatId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/chats/$chatId/messages'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['messages'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Enviar mensagem.
+  static Future<Map<String, dynamic>> sendChatMessage(String chatId, String text) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chats/$chatId/messages'),
+      headers: await _getHeaders(),
+      body: json.encode({'text': text}),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data['message'] as Map<String, dynamic>;
   }
 }

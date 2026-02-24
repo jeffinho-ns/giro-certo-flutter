@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../models/post.dart';
 import '../../utils/colors.dart';
 import '../../utils/social_formatters.dart';
+import '../api_image.dart';
 
 class SocialPostCard extends StatelessWidget {
   final Post post;
@@ -41,27 +42,32 @@ class SocialPostCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.racingOrange.withOpacity(0.2),
-                  backgroundImage: post.userAvatarUrl != null &&
-                          post.userAvatarUrl!.isNotEmpty
-                      ? NetworkImage(post.userAvatarUrl!)
-                      : null,
-                  child: post.userAvatarUrl == null ||
-                          post.userAvatarUrl!.isEmpty
-                      ? Text(
-                          (post.userName.isNotEmpty
-                                  ? post.userName[0]
-                                  : '?')
-                              .toUpperCase(),
-                          style: const TextStyle(
-                            color: AppColors.racingOrange,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                ClipOval(
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: post.userAvatarUrl != null &&
+                            post.userAvatarUrl!.isNotEmpty
+                        ? ApiImage(
+                            url: post.userAvatarUrl!,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            color: AppColors.racingOrange.withOpacity(0.2),
+                            alignment: Alignment.center,
+                            child: Text(
+                              (post.userName.isNotEmpty
+                                      ? post.userName[0]
+                                      : '?')
+                                  .toUpperCase(),
+                              style: const TextStyle(
+                                color: AppColors.racingOrange,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
                           ),
-                        )
-                      : null,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -134,13 +140,17 @@ class SocialPostCard extends StatelessWidget {
                         errorBuilder: (_, __, ___) =>
                             _placeholderImage(theme),
                       )
-                    : Image.network(
-                        post.images!.first,
+                    : SizedBox(
                         height: 200,
                         width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            _placeholderImage(theme),
+                        child: ApiImage(
+                          url: post.images!.first,
+                          fit: BoxFit.cover,
+                          height: 200,
+                          width: double.infinity,
+                          errorBuilder: (_, __, ___) =>
+                              _placeholderImage(theme),
+                        ),
                       ),
               ),
             ],

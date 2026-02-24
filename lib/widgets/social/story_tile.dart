@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../models/story.dart';
 import '../../utils/colors.dart';
+import '../api_image.dart';
 
 /// Tile "Publicar" (index 0) ou tile de um story.
 class StoryTile extends StatelessWidget {
@@ -135,8 +136,8 @@ class _StoryImage extends StatelessWidget {
         ),
       );
     }
-    return Image.network(
-      url,
+    return ApiImage(
+      url: url,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => Container(
         color: theme.cardColor,

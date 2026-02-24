@@ -5,6 +5,7 @@ import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
 import '../../models/user.dart';
 import '../../utils/colors.dart';
+import '../../widgets/api_image.dart';
 import '../settings/settings_screen.dart';
 import '../social/profile_page.dart';
 import '../help/help_screen.dart';
@@ -99,10 +100,10 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                           ),
                         ],
                       ),
-                      child: user?.photoUrl != null
+                      child: user?.photoUrl != null && user!.photoUrl!.isNotEmpty
                           ? ClipOval(
-                              child: Image.network(
-                                user!.photoUrl!,
+                              child: ApiImage(
+                                url: user.photoUrl!,
                                 fit: BoxFit.cover,
                               ),
                             )
