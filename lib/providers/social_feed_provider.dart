@@ -137,6 +137,19 @@ class SocialFeedProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void removeStory(String storyId) {
+    _stories = _stories.where((s) => s.id != storyId).toList();
+    notifyListeners();
+  }
+
+  void removeProfileStory(String userId, String storyId) {
+    final list = _profileStories[userId];
+    if (list != null) {
+      _profileStories[userId] = list.where((s) => s.id != storyId).toList();
+      notifyListeners();
+    }
+  }
+
   /// Carrega posts, stories e perfil de um utilizador específico.
   Future<void> loadProfileData(
     String userId, {

@@ -8,6 +8,8 @@ class Story {
   final String mediaUrl;
   final DateTime createdAt;
   final int likeCount;
+  /// Legenda/texto opcional da story.
+  final String? caption;
 
   const Story({
     required this.id,
@@ -17,6 +19,7 @@ class Story {
     required this.mediaUrl,
     required this.createdAt,
     this.likeCount = 0,
+    this.caption,
   });
 
   factory Story.fromJson(Map<String, dynamic> json) {
@@ -30,6 +33,7 @@ class Story {
           ? DateTime.parse(json['createdAt'] as String)
           : DateTime.now(),
       likeCount: (json['likeCount'] as int?) ?? 0,
+      caption: json['caption'] as String?,
     );
   }
 
@@ -42,6 +46,7 @@ class Story {
       'mediaUrl': mediaUrl,
       'createdAt': createdAt.toIso8601String(),
       'likeCount': likeCount,
+      if (caption != null) 'caption': caption,
     };
   }
 }

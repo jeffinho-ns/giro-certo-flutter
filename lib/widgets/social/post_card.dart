@@ -129,29 +129,32 @@ class SocialPostCard extends StatelessWidget {
             ),
             if (post.images != null && post.images!.isNotEmpty) ...[
               const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: post.images!.first.startsWith('assets/')
-                    ? Image.asset(
-                        post.images!.first,
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            _placeholderImage(theme),
-                      )
-                    : SizedBox(
-                        height: 200,
-                        width: double.infinity,
-                        child: ApiImage(
-                          url: post.images!.first,
-                          fit: BoxFit.cover,
+              GestureDetector(
+                onTap: () => _openFullScreenImage(context, post.images!.first),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: post.images!.first.startsWith('assets/')
+                      ? Image.asset(
+                          post.images!.first,
                           height: 200,
                           width: double.infinity,
+                          fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) =>
                               _placeholderImage(theme),
+                        )
+                      : SizedBox(
+                          height: 200,
+                          width: double.infinity,
+                          child: ApiImage(
+                            url: post.images!.first,
+                            fit: BoxFit.cover,
+                            height: 200,
+                            width: double.infinity,
+                            errorBuilder: (_, __, ___) =>
+                                _placeholderImage(theme),
+                          ),
                         ),
-                      ),
+                ),
               ),
             ],
             const SizedBox(height: 10),
@@ -217,6 +220,61 @@ class SocialPostCard extends StatelessWidget {
           LucideIcons.image,
           size: 48,
           color: theme.iconTheme.color?.withOpacity(0.4),
+        ),
+      ),
+    );
+  }
+
+  static void _openFullScreenImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4,
+                  child: Center(
+                    child: SizedBox(
+                      width: MediaQuery.of(context).size.width,
+                      height: MediaQuery.of(context).size.height,
+                      child: imageUrl.startsWith('assets/')
+                          ? Image.asset(
+                              imageUrl,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                LucideIcons.imageOff,
+                                size: 64,
+                                color: Colors.white54,
+                              ),
+                            )
+                          : ApiImage(
+                              url: imageUrl,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                LucideIcons.imageOff,
+                                size: 64,
+                                color: Colors.white54,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: const Icon(LucideIcons.x, color: Colors.white, size: 28),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

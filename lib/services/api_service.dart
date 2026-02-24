@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/delivery_order.dart';
 import '../models/partner.dart';
@@ -1080,33 +1081,65 @@ class ApiService {
   }
 
   /// Upload de imagem para post. Retorna URL completa.
-  static Future<String?> uploadPostImage(String filePath, String userId) async {
-    try {
-      final uri = Uri.parse('$baseUrl/images/upload/post/$userId');
-      final token = await _getToken();
-      if (token == null) return null;
-
-      final request = http.MultipartRequest('POST', uri);
-      request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('image', filePath));
-
-      final streamed = await request.send().timeout(
-        _requestTimeout,
-        onTimeout: () => throw Exception('Tempo esgotado'),
-      );
-      final response = await http.Response.fromStream(streamed);
-
-      if (response.statusCode >= 400) return null;
-
-      final data = json.decode(response.body) as Map<String, dynamic>?;
-      final relUrl = data?['image']?['url'] as String? ?? data?['url'] as String?;
-      if (relUrl == null) return null;
-      if (relUrl.startsWith('http')) return relUrl;
-      final origin = Uri.parse(baseUrl).origin;
-      return '$origin$relUrl';
-    } catch (_) {
-      return null;
+  /// Só retorna quando o upload for concluído com sucesso; em caso de falha lança exceção.
+  /// Usa bytes + Content-Type (image/*) para o servidor aceitar o ficheiro.
+  static Future<String> uploadPostImage(String filePath, String userId) async {
+    final token = await _getToken();
+    if (token == null) {
+      throw Exception('Sessão expirada. Faz login novamente.');
     }
+
+    final path = filePath.replaceFirst(RegExp(r'^file://'), '');
+    List<int> bytes;
+    String filename = 'image.jpg';
+    try {
+      final file = File(path);
+      if (!file.existsSync()) {
+        throw Exception('Ficheiro da imagem já não existe. Escolhe a imagem outra vez.');
+      }
+      bytes = await file.readAsBytes();
+      final name = path.split(RegExp(r'[/\\]')).last;
+      if (name.isNotEmpty) filename = name;
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Não foi possível ler a imagem. Tenta escolher outra.');
+    }
+
+    final contentType = _mediaTypeFromFilename(filename);
+    final uri = Uri.parse('$baseUrl/images/upload/post/$userId');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: filename,
+      contentType: contentType,
+    ));
+
+    final streamed = await request.send().timeout(
+      _requestTimeout,
+      onTimeout: () => throw Exception('Tempo esgotado. Verifica a ligação.'),
+    );
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode >= 400) {
+      String msg = 'Falha ao enviar a imagem (${response.statusCode}).';
+      try {
+        final body = json.decode(response.body) as Map<String, dynamic>?;
+        final err = body?['error']?.toString();
+        if (err != null && err.isNotEmpty) msg = err;
+      } catch (_) {}
+      throw Exception(msg);
+    }
+
+    final data = json.decode(response.body) as Map<String, dynamic>?;
+    final relUrl = data?['image']?['url'] as String? ?? data?['url'] as String?;
+    if (relUrl == null || relUrl.isEmpty) {
+      throw Exception('Resposta do servidor sem URL da imagem. Tenta novamente.');
+    }
+    if (relUrl.startsWith('http')) return relUrl;
+    final origin = Uri.parse(baseUrl).origin;
+    return '$origin$relUrl';
   }
 
   /// Criar post
@@ -1214,42 +1247,95 @@ class ApiService {
     }
   }
 
-  /// Upload de imagem para story. Retorna URL completa.
-  static Future<String?> uploadStoryImage(String filePath, String userId) async {
-    try {
-      final uri = Uri.parse('$baseUrl/images/upload/story/$userId');
-      final token = await _getToken();
-      if (token == null) return null;
-
-      final request = http.MultipartRequest('POST', uri);
-      request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('image', filePath));
-
-      final streamed = await request.send().timeout(
-        _requestTimeout,
-        onTimeout: () => throw Exception('Tempo esgotado'),
-      );
-      final response = await http.Response.fromStream(streamed);
-
-      if (response.statusCode >= 400) return null;
-
-      final data = json.decode(response.body) as Map<String, dynamic>?;
-      final relUrl = data?['image']?['url'] as String? ?? data?['url'] as String?;
-      if (relUrl == null) return null;
-      if (relUrl.startsWith('http')) return relUrl;
-      final origin = Uri.parse(baseUrl).origin;
-      return '$origin$relUrl';
-    } catch (_) {
-      return null;
+  /// Tipo MIME da imagem a partir da extensão do ficheiro (o servidor exige image/*).
+  static MediaType _mediaTypeFromFilename(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'png':
+        return MediaType('image', 'png');
+      case 'gif':
+        return MediaType('image', 'gif');
+      case 'webp':
+        return MediaType('image', 'webp');
+      case 'heic':
+        return MediaType('image', 'heic');
+      case 'jpg':
+      case 'jpeg':
+      default:
+        return MediaType('image', 'jpeg');
     }
   }
 
-  /// Criar story.
-  static Future<Map<String, dynamic>> createStory(String mediaUrl) async {
+  /// Upload de imagem para story. Retorna URL completa.
+  /// Lê o ficheiro como bytes para evitar falhas com paths temporários (ex.: após preview).
+  static Future<String> uploadStoryImage(String filePath, String userId) async {
+    final token = await _getToken();
+    if (token == null) {
+      throw Exception('Sessão expirada. Faz login novamente.');
+    }
+
+    final path = filePath.replaceFirst(RegExp(r'^file://'), '');
+    List<int> bytes;
+    String filename = 'image.jpg';
+    try {
+      final file = File(path);
+      if (!file.existsSync()) {
+        throw Exception('Ficheiro da imagem já não existe. Escolhe a imagem outra vez e publica de imediato.');
+      }
+      bytes = await file.readAsBytes();
+      final name = path.split(RegExp(r'[/\\]')).last;
+      if (name.isNotEmpty) filename = name;
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Não foi possível ler a imagem. Tenta escolher outra.');
+    }
+
+    final contentType = _mediaTypeFromFilename(filename);
+
+    final uri = Uri.parse('$baseUrl/images/upload/story/$userId');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: filename,
+      contentType: contentType,
+    ));
+
+    final streamed = await request.send().timeout(
+      _requestTimeout,
+      onTimeout: () => throw Exception('Tempo esgotado. Verifica a ligação.'),
+    );
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode >= 400) {
+      String msg = 'Falha ao enviar a imagem (${response.statusCode}).';
+      try {
+        final body = json.decode(response.body) as Map<String, dynamic>?;
+        final err = body?['error']?.toString();
+        if (err != null && err.isNotEmpty) msg = err;
+      } catch (_) {}
+      throw Exception(msg);
+    }
+
+    final data = json.decode(response.body) as Map<String, dynamic>?;
+    final relUrl = data?['image']?['url'] as String? ?? data?['url'] as String?;
+    if (relUrl == null || relUrl.isEmpty) {
+      throw Exception('Resposta do servidor sem URL da imagem. Tenta novamente.');
+    }
+    if (relUrl.startsWith('http')) return relUrl;
+    final origin = Uri.parse(baseUrl).origin;
+    return '$origin$relUrl';
+  }
+
+  /// Criar story. [caption] é opcional.
+  static Future<Map<String, dynamic>> createStory(String mediaUrl, {String? caption}) async {
+    final body = <String, dynamic>{'mediaUrl': mediaUrl};
+    if (caption != null && caption.isNotEmpty) body['caption'] = caption;
     final response = await http.post(
       Uri.parse('$baseUrl/stories'),
       headers: await _getHeaders(),
-      body: json.encode({'mediaUrl': mediaUrl}),
+      body: json.encode(body),
     );
     _handleError(response);
     final data = json.decode(response.body) as Map<String, dynamic>;

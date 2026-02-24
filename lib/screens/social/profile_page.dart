@@ -455,7 +455,7 @@ class _ProfilePageState extends State<ProfilePage>
         body: TabBarView(
           controller: _tabController,
           children: [
-            _StorysTab(stories: userStories),
+            _StorysTab(stories: userStories, profileUserId: userId),
             _MomentosTab(posts: userPosts),
             _GaragemTab(bike: bike, bikeModel: bikeModel, isOwnProfile: isOwnProfile),
           ],
@@ -796,12 +796,15 @@ class _CountChip extends StatelessWidget {
 
 class _StorysTab extends StatelessWidget {
   final List<Story> stories;
+  final String profileUserId;
 
-  const _StorysTab({required this.stories});
+  const _StorysTab({required this.stories, required this.profileUserId});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final feed = Provider.of<SocialFeedProvider>(context, listen: false);
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
 
     if (stories.isEmpty) {
       return _EmptyState(
@@ -831,6 +834,11 @@ class _StorysTab extends StatelessWidget {
                 builder: (_) => StoryViewScreen(
                   stories: stories,
                   initialIndex: i,
+                  currentUserId: appState.user?.id,
+                  onStoryDeleted: (id) {
+                    feed.removeStory(id);
+                    feed.removeProfileStory(profileUserId, id);
+                  },
                 ),
               ),
             );

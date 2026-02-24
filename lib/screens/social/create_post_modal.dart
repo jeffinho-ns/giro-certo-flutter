@@ -55,6 +55,15 @@ class _CreatePostModalState extends State<CreatePostModal> {
         imageUrls: _imagePaths.isEmpty ? null : _imagePaths,
       );
       if (mounted) Navigator.of(context).pop(post);
+    } catch (e) {
+      if (mounted) {
+        final message = e is Exception
+            ? e.toString().replaceFirst('Exception: ', '')
+            : 'Erro ao publicar. Tenta novamente.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

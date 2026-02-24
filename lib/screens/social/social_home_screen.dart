@@ -16,6 +16,7 @@ import '../../widgets/social/post_card.dart';
 import '../../widgets/social/social_bottom_nav.dart';
 import '../../widgets/social/feed_skeleton.dart';
 import 'story_view_screen.dart';
+import 'story_preview_edit_screen.dart';
 import 'create_post_modal.dart';
 import 'create_story_sheet.dart';
 import 'create_action_sheet.dart';
@@ -208,8 +209,19 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
   }
 
   Future<void> _openCreateStory() async {
-    final created = await CreateStorySheet.show(context);
-    if (created == true) _loadData();
+    final result = await CreateStorySheet.show(context);
+    if (result is Map && result['openPreview'] == true) {
+      await StoryPreviewEditScreen.push(
+        context,
+        imagePath: result['imagePath'] as String,
+        userId: result['userId'] as String,
+        userName: result['userName'] as String,
+        userAvatarUrl: result['userAvatarUrl'] as String?,
+      );
+      // A story já foi adicionada ao feed no ecrã de preview; não chamar prependStory aqui para não duplicar
+    } else if (result == true) {
+      _loadData();
+    }
   }
 
   void _onNavTap(int index) {
@@ -362,11 +374,14 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                               storyIndex: index - 1,
                               allStories: feed.stories,
                               onStoryTap: () {
+                                final appState = Provider.of<AppStateProvider>(context, listen: false);
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (context) => StoryViewScreen(
                                       stories: feed.stories,
                                       initialIndex: index - 1,
+                                      currentUserId: appState.user?.id,
+                                      onStoryDeleted: (id) => feed.removeStory(id),
                                     ),
                                   ),
                                 );

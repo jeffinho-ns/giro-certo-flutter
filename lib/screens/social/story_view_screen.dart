@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../models/story.dart';
+import '../../services/social_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/api_image.dart';
 
@@ -10,11 +11,17 @@ class StoryViewScreen extends StatefulWidget {
   final int initialIndex;
   /// Quando fornecido, usa dados reais em vez da lista fixa.
   final List<Story>? stories;
+  /// ID do utilizador logado: permite mostrar opção "Excluir" nos storys próprios.
+  final String? currentUserId;
+  /// Chamado quando um story é excluído (para atualizar feed/perfil).
+  final void Function(String storyId)? onStoryDeleted;
 
   const StoryViewScreen({
     super.key,
     this.initialIndex = 0,
     this.stories,
+    this.currentUserId,
+    this.onStoryDeleted,
   });
 
   @override
@@ -115,6 +122,51 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
   String get _currentStoryUser {
     if (_useStories) return _storiesList[_currentIndex].userName;
     return _legacyStories[_currentIndex]['user']!;
+  }
+
+  bool get _isCurrentStoryMine {
+    if (!_useStories || widget.currentUserId == null) return false;
+    return _storiesList[_currentIndex].userId == widget.currentUserId;
+  }
+
+  Story get _currentStory => _storiesList[_currentIndex];
+
+  Future<void> _deleteCurrentStory() async {
+    if (!_useStories) return;
+    final storyId = _currentStory.id;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir story'),
+        content: const Text(
+          'Tens a certeza que queres excluir esta story? Esta ação não pode ser desfeita.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await SocialService.deleteStory(storyId);
+      widget.onStoryDeleted?.call(storyId);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível excluir a story. Tenta novamente.')),
+        );
+      }
+    }
   }
 
   Widget _buildStoryImage() {
@@ -263,10 +315,22 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                         ],
                       ),
                       SafeArea(
-                        child: IconButton(
-                          icon: const Icon(LucideIcons.x),
-                          color: Colors.white,
-                          onPressed: () => Navigator.of(context).pop(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_isCurrentStoryMine)
+                              IconButton(
+                                icon: const Icon(LucideIcons.trash2),
+                                color: Colors.white,
+                                tooltip: 'Excluir story',
+                                onPressed: _deleteCurrentStory,
+                              ),
+                            IconButton(
+                              icon: const Icon(LucideIcons.x),
+                              color: Colors.white,
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -274,6 +338,35 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                 ),
               ),
             ),
+
+            // Legenda (caption) da story no fundo
+            if (_useStories && _currentStory.caption != null && _currentStory.caption!.isNotEmpty)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 100,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _currentStory.caption!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
 
             // Botões no canto inferior direito
             Positioned(

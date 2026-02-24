@@ -297,11 +297,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       final isAsset = s.mediaUrl.startsWith('assets/');
                       return GestureDetector(
                         onTap: () {
+                          final appState = Provider.of<AppStateProvider>(context, listen: false);
+                          final feed = Provider.of<SocialFeedProvider>(context, listen: false);
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => StoryViewScreen(
                                 stories: profileStories,
                                 initialIndex: i,
+                                currentUserId: appState.user?.id,
+                                onStoryDeleted: (id) {
+                                  feed.removeStory(id);
+                                  feed.removeProfileStory(widget.userId, id);
+                                },
                               ),
                             ),
                           );

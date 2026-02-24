@@ -3,17 +3,20 @@ import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_state_provider.dart';
-import '../../services/social_service.dart';
 
 /// Bottom sheet para criar story: Câmera ou Galeria.
+/// Abre o ecrã de pré-visualização/edição para adicionar texto e publicar.
 class CreateStorySheet extends StatelessWidget {
   const CreateStorySheet({super.key});
 
-  static Future<bool?> show(BuildContext context) {
-    return showModalBottomSheet<bool>(
+  /// Retorna true se uma story foi publicada, false se cancelou, ou um Map com openPreview.
+  static Future<dynamic> show(BuildContext context) {
+    return showModalBottomSheet<dynamic>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      isDismissible: true,
+      enableDrag: true,
       builder: (context) => const CreateStorySheet(),
     );
   }
@@ -48,13 +51,13 @@ class CreateStorySheet extends StatelessWidget {
                 _OptionTile(
                   icon: LucideIcons.camera,
                   label: 'Câmera',
-                  onTap: () => _pickAndCreate(context, user.id, user.name, user.photoUrl, ImageSource.camera),
+                  onTap: () => _pickAndOpenPreview(context, user.id, user.name, user.photoUrl, ImageSource.camera),
                 ),
                 const SizedBox(width: 24),
                 _OptionTile(
                   icon: LucideIcons.image,
                   label: 'Galeria',
-                  onTap: () => _pickAndCreate(context, user.id, user.name, user.photoUrl, ImageSource.gallery),
+                  onTap: () => _pickAndOpenPreview(context, user.id, user.name, user.photoUrl, ImageSource.gallery),
                 ),
               ],
             ),
@@ -65,7 +68,8 @@ class CreateStorySheet extends StatelessWidget {
     );
   }
 
-  static Future<void> _pickAndCreate(
+  /// Escolhe imagem e abre o ecrã de pré-visualização para editar texto e publicar.
+  static Future<void> _pickAndOpenPreview(
     BuildContext context,
     String userId,
     String userName,
@@ -75,21 +79,8 @@ class CreateStorySheet extends StatelessWidget {
     final picker = ImagePicker();
     final x = await picker.pickImage(source: source);
     if (x == null || !context.mounted) return;
-    try {
-      await SocialService.createStory(
-        userId: userId,
-        userName: userName,
-        userAvatarUrl: userAvatarUrl,
-        mediaUrl: x.path,
-      );
-      if (context.mounted) Navigator.of(context).pop(true);
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao publicar story')),
-        );
-      }
-    }
+
+    Navigator.of(context).pop({'openPreview': true, 'imagePath': x.path, 'userId': userId, 'userName': userName, 'userAvatarUrl': userAvatarUrl});
   }
 }
 

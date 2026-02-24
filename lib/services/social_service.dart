@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../models/post.dart';
 import '../models/story.dart';
 import '../utils/image_url.dart';
@@ -57,11 +58,21 @@ class SocialService {
     }
   }
 
-  /// Lista stories para o carrossel.
+  /// Stories expiram após 24 horas.
+  static const Duration storyExpiration = Duration(hours: 24);
+
+  static bool _isStoryWithin24h(Story s) {
+    return DateTime.now().difference(s.createdAt) < storyExpiration;
+  }
+
+  /// Lista stories para o carrossel (apenas das últimas 24h).
   static Future<List<Story>> getStories() async {
     try {
       final list = await ApiService.getStories();
-      _cachedStories = list.map(_storyFromMap).toList();
+      _cachedStories = list
+          .map(_storyFromMap)
+          .where(_isStoryWithin24h)
+          .toList();
       return List.from(_cachedStories);
     } catch (_) {
       _cachedStories = [];
@@ -71,18 +82,47 @@ class SocialService {
 
   static List<String>? _parseImagesList(Map<String, dynamic> json) {
     final v = json['images'] ?? json['Images'];
-    if (v == null || v is! List) return null;
+    if (v == null) return null;
+    List<dynamic>? list;
+    if (v is List) {
+      list = v;
+    } else if (v is String) {
+      final s = v.trim();
+      if (s.isEmpty) return null;
+      try {
+        final decoded = jsonDecode(s) as dynamic;
+        list = decoded is List ? decoded : null;
+      } catch (_) {
+        list = null;
+      }
+      if (list == null) {
+        final pgArray = _parsePostgresArray(s);
+        if (pgArray != null && pgArray.isNotEmpty) return pgArray;
+        return null;
+      }
+    } else {
+      return null;
+    }
     final out = <String>[];
-    for (final e in v) {
+    for (final e in list) {
       final s = e is String ? e : e?.toString();
       if (s != null && s.isNotEmpty) out.add(s);
     }
     return out.isEmpty ? null : out;
   }
 
+  static List<String>? _parsePostgresArray(String s) {
+    if (s.length < 2 || !s.startsWith('{') || !s.endsWith('}')) return null;
+    final inner = s.substring(1, s.length - 1);
+    if (inner.isEmpty) return [];
+    final parts = inner.split(',').map((e) => e.trim().replaceAll(RegExp(r'^"|"$'), '')).where((e) => e.isNotEmpty).toList();
+    return parts.isEmpty ? null : parts;
+  }
+
   static Story _storyFromMap(Map<String, dynamic> j) {
     final rawAvatar = j['userAvatarUrl'] as String?;
     final rawMedia = (j['mediaUrl'] ?? j['media_url'])?.toString() ?? '';
+    final caption = j['caption'] as String?;
     return Story(
         id: j['id'] as String,
         userId: j['userId'] as String,
@@ -91,6 +131,7 @@ class SocialService {
         mediaUrl: rawMedia.isNotEmpty ? resolveImageUrl(rawMedia) : rawMedia,
         createdAt: j['createdAt'] != null ? DateTime.parse(j['createdAt'] as String) : DateTime.now(),
         likeCount: (j['likeCount'] as int?) ?? 0,
+        caption: (caption != null && caption.isNotEmpty) ? caption : null,
       );
   }
 
@@ -108,11 +149,11 @@ class SocialService {
     }
   }
 
-  /// Lista stories de um utilizador específico.
+  /// Lista stories de um utilizador específico (apenas das últimas 24h).
   static Future<List<Story>> fetchStoriesByUserId(String userId) async {
     try {
       final list = await ApiService.getStories(userId: userId);
-      return list.map(_storyFromMap).toList();
+      return list.map(_storyFromMap).where(_isStoryWithin24h).toList();
     } catch (_) {
       return [];
     }
@@ -264,8 +305,8 @@ class SocialService {
     }
   }
 
-  /// Cria novo post. Se [imageUrls] contiver caminhos locais (file://), faz upload primeiro via API.
-  /// Igual ao agilizaiapp: Flutter envia para API, API faz upload para Firebase Storage.
+  /// Cria novo post. Se [imageUrls] contiver caminhos locais, faz upload primeiro.
+  /// O post só é criado quando todas as imagens forem enviadas com sucesso (igual às stories).
   static Future<Post> createPost({
     required String userId,
     required String userName,
@@ -282,10 +323,10 @@ class SocialService {
           uploadedUrls.add(path);
         } else {
           final url = await ApiService.uploadPostImage(path, userId);
-          if (url != null) uploadedUrls.add(url);
+          uploadedUrls.add(url);
         }
       }
-      urlsToSend = uploadedUrls.isEmpty ? null : uploadedUrls;
+      urlsToSend = uploadedUrls;
     }
     try {
       final raw = await ApiService.createPost(
@@ -315,20 +356,28 @@ class SocialService {
     }
   }
 
+  /// Elimina story na API e do cache local. Só o dono pode excluir.
+  static Future<void> deleteStory(String storyId) async {
+    await ApiService.deleteStory(storyId);
+    _cachedStories = _cachedStories.where((s) => s.id != storyId).toList();
+  }
+
   /// Cria novo story. Se mediaUrl for caminho local, faz upload primeiro.
+  /// Só retorna quando o upload e a criação na API estiverem concluídos.
+  /// Se o upload falhar, lança exceção para não guardar URL inválida.
   static Future<Story> createStory({
     required String userId,
     required String userName,
     String? userAvatarUrl,
     required String mediaUrl,
+    String? caption,
   }) async {
     String finalUrl = mediaUrl;
     if (!mediaUrl.startsWith('http')) {
-      final uploaded = await ApiService.uploadStoryImage(mediaUrl, userId);
-      if (uploaded != null) finalUrl = uploaded;
+      finalUrl = await ApiService.uploadStoryImage(mediaUrl, userId);
     }
     try {
-      final j = await ApiService.createStory(finalUrl);
+      final j = await ApiService.createStory(finalUrl, caption: caption);
       final story = _storyFromMap(j);
       _cachedStories.insert(0, story);
       return story;
@@ -342,6 +391,7 @@ class SocialService {
         mediaUrl: finalUrl,
         createdAt: DateTime.now(),
         likeCount: 0,
+        caption: caption,
       );
       _cachedStories.insert(0, story);
       return story;
