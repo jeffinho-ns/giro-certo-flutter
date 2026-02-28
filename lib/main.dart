@@ -23,11 +23,15 @@ import 'models/pilot_profile.dart';
 import 'services/app_preload_service.dart';
 import 'services/onboarding_service.dart';
 import 'services/motorcycle_data_service.dart';
+import 'app_navigator_key.dart';
 import 'services/api_service.dart';
+import 'services/push_notification_service.dart' as push;
 import 'utils/colors.dart';
+import 'widgets/realtime_connection.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await push.initializeFirebase();
   runApp(const MyApp());
 }
 
@@ -47,6 +51,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
+            navigatorKey: appNavigatorKey,
             title: 'Giro Certo',
             theme: AppTheme.getLightTheme(
               primaryColor: themeProvider.primaryColor,
@@ -450,11 +455,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     // Fluxo de navegação: Login → Setup → Home por tipo de usuário
     // Delivery → home mapa (MainNavigation); Lojista → home lojista (MainNavigation); Casual/Diário/Racing → home social
-    if (appState.isLoggedIn && appState.hasCompletedSetup) {
+    if (appState.isLoggedIn && appState.hasCompletedSetup && appState.user != null) {
+      final userId = appState.user!.id;
       if (appState.shouldShowSocialHome) {
-        return const SocialHomeScreen();
+        return RealtimeConnection(userId: userId, child: const SocialHomeScreen());
       }
-      return const MainNavigation();
+      return RealtimeConnection(userId: userId, child: const MainNavigation());
     }
 
     Widget stepScreen;

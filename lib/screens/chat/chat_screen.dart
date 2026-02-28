@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import '../../models/chat_conversation.dart';
 import '../../models/chat_message.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/chat_service.dart';
+import '../../services/realtime_service.dart';
 
 /// Tipo de conversa (abas).
 enum ChatTab {
@@ -228,11 +230,19 @@ class _ChatRoomScreenState extends State<_ChatRoomScreen> {
   final _controller = TextEditingController();
   List<ChatMessage> _messages = [];
   bool _loading = true;
+  StreamSubscription<ChatMessagePayload>? _realtimeSub;
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
+    _realtimeSub = RealtimeService.instance.onChatMessage.listen((payload) {
+      if (payload.chatId != widget.chatId || !mounted) return;
+      try {
+        final msg = ChatMessage.fromJson(payload.message);
+        setState(() => _messages = [..._messages, msg]);
+      } catch (_) {}
+    });
   }
 
   Future<void> _loadMessages() async {
@@ -247,6 +257,7 @@ class _ChatRoomScreenState extends State<_ChatRoomScreen> {
 
   @override
   void dispose() {
+    _realtimeSub?.cancel();
     _controller.dispose();
     super.dispose();
   }

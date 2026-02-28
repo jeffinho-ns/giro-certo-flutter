@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../services/api_service.dart';
+import '../../services/realtime_service.dart';
 import '../../utils/colors.dart';
 import 'profile_page.dart';
 
@@ -16,6 +18,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<Map<String, dynamic>> _alerts = [];
   bool _loading = true;
   String? _error;
+  StreamSubscription<Map<String, dynamic>>? _notificationSub;
 
   Future<void> _loadAlerts() async {
     setState(() {
@@ -40,6 +43,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void initState() {
     super.initState();
     _loadAlerts();
+    _notificationSub = RealtimeService.instance.onNotification.listen((payload) {
+      if (!mounted) return;
+      setState(() {
+        if (payload['id'] != null && payload['title'] != null) {
+          _alerts.insert(0, Map<String, dynamic>.from(payload));
+        } else {
+          _loadAlerts();
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _acceptFollowRequest(

@@ -176,6 +176,16 @@ class ApiService {
     }
   }
 
+  /// Registar token FCM para notificações push (telemóvel bloqueado)
+  static Future<void> registerFcmToken(String token) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/users/me/fcm-token'),
+      headers: await _getHeaders(),
+      body: json.encode({'token': token}),
+    );
+    if (response.statusCode >= 400) return;
+  }
+
   /// Obter usuário atual
   static Future<User> getCurrentUser() async {
     final response = await http
@@ -223,31 +233,66 @@ class ApiService {
     return user;
   }
 
-  /// Upload de imagem para perfil (avatar ou capa). Retorna URL se a API suportar.
-  static Future<String?> uploadProfileImage(String filePath, {String type = 'avatar'}) async {
-    try {
-      final uri = Uri.parse('$baseUrl/users/me/upload-image');
-      final token = await _getToken();
-      if (token == null) return null;
-
-      final request = http.MultipartRequest('POST', uri);
-      request.headers['Authorization'] = 'Bearer $token';
-      request.fields['type'] = type;
-      request.files.add(await http.MultipartFile.fromPath('image', filePath));
-
-      final streamed = await request.send().timeout(
-        _requestTimeout,
-        onTimeout: () => throw Exception('Tempo esgotado'),
-      );
-      final response = await http.Response.fromStream(streamed);
-
-      if (response.statusCode >= 400) return null;
-
-      final data = json.decode(response.body) as Map<String, dynamic>?;
-      return data?['url'] as String? ?? data?['imageUrl'] as String?;
-    } catch (_) {
-      return null;
+  /// Upload de imagem para perfil (avatar ou capa). Retorna URL completa.
+  /// Usa bytes + Content-Type (image/*) para o servidor aceitar. Lança exceção em falha.
+  static Future<String> uploadProfileImage(String filePath, {String type = 'avatar'}) async {
+    final token = await _getToken();
+    if (token == null) {
+      throw Exception('Sessão expirada. Faz login novamente.');
     }
+
+    final path = filePath.replaceFirst(RegExp(r'^file://'), '');
+    List<int> bytes;
+    String filename = 'image.jpg';
+    try {
+      final file = File(path);
+      if (!file.existsSync()) {
+        throw Exception('Ficheiro já não existe. Escolhe a imagem outra vez.');
+      }
+      bytes = await file.readAsBytes();
+      final name = path.split(RegExp(r'[/\\]')).last;
+      if (name.isNotEmpty) filename = name;
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Não foi possível ler a imagem. Tenta outra.');
+    }
+
+    final contentType = _mediaTypeFromFilename(filename);
+    final uri = Uri.parse('$baseUrl/users/me/upload-image');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['type'] = type;
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: filename,
+      contentType: contentType,
+    ));
+
+    final streamed = await request.send().timeout(
+      _requestTimeout,
+      onTimeout: () => throw Exception('Tempo esgotado. Verifica a ligação.'),
+    );
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode >= 400) {
+      String msg = 'Falha ao enviar a imagem (${response.statusCode}).';
+      try {
+        final body = json.decode(response.body) as Map<String, dynamic>?;
+        final err = body?['error']?.toString();
+        if (err != null && err.isNotEmpty) msg = err;
+      } catch (_) {}
+      throw Exception(msg);
+    }
+
+    final data = json.decode(response.body) as Map<String, dynamic>?;
+    final url = data?['url'] as String? ?? data?['imageUrl'] as String?;
+    if (url == null || url.isEmpty) {
+      throw Exception('Resposta do servidor sem URL. Tenta novamente.');
+    }
+    if (url.startsWith('http')) return url;
+    final origin = Uri.parse(baseUrl).origin;
+    return '$origin${url.startsWith('/') ? url : '/$url'}';
   }
 
   /// Obter perfil público de um utilizador por ID (nome, foto, capa, motos)

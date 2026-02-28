@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../../utils/colors.dart';
 import '../../services/api_service.dart';
+import '../../services/realtime_service.dart';
 import '../../providers/app_state_provider.dart';
 
 class NotificationsSidebar extends StatefulWidget {
@@ -16,11 +18,35 @@ class NotificationsSidebar extends StatefulWidget {
 class _NotificationsSidebarState extends State<NotificationsSidebar> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _notifications = [];
+  StreamSubscription<Map<String, dynamic>>? _notificationSub;
 
   @override
   void initState() {
     super.initState();
     _loadNotifications();
+    _notificationSub = RealtimeService.instance.onNotification.listen((payload) {
+      if (!mounted) return;
+      if (payload['id'] != null && payload['title'] != null) {
+        setState(() {
+          _notifications.insert(0, {
+            'id': payload['id'],
+            'title': payload['title'] ?? 'Alerta',
+            'message': payload['message'] ?? '',
+            'time': payload['createdAt'] != null ? DateTime.tryParse(payload['createdAt'].toString()) ?? DateTime.now() : DateTime.now(),
+            'type': 'update',
+            'read': false,
+          });
+        });
+      } else {
+        _loadNotifications();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadNotifications() async {

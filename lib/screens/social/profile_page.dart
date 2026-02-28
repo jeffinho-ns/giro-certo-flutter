@@ -186,18 +186,24 @@ class _ProfilePageState extends State<ProfilePage>
     final uid = appState.user?.id ?? '';
     final permanentPath = await _copyToPermanentStorage(x.path, 'cover', uid);
     final pathToSave = permanentPath ?? x.path;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_coverKeyPrefix$uid', pathToSave);
-    final coverUrl = await ApiService.uploadProfileImage(pathToSave, type: 'cover');
-    if (coverUrl != null && appState.user != null) {
-      try {
-        await ApiService.updateUserProfile(coverUrl: coverUrl);
-      } catch (_) {}
+    try {
+      final coverUrl = await ApiService.uploadProfileImage(pathToSave, type: 'cover');
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('$_coverKeyPrefix$uid', pathToSave);
+      setState(() {
+        _coverPath = pathToSave;
+        _loadedProfile = {...?_loadedProfile, 'coverUrl': coverUrl};
+        _loadingCover = false;
+      });
+      await _loadOwnProfile();
+    } catch (e) {
+      if (mounted) {
+        final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : 'Erro ao enviar a capa.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        setState(() => _loadingCover = false);
+      }
     }
-    if (mounted) setState(() {
-      _coverPath = pathToSave;
-      _loadingCover = false;
-    });
   }
 
   Future<void> _pickAvatar() async {
@@ -218,21 +224,27 @@ class _ProfilePageState extends State<ProfilePage>
     final uid = appState.user?.id ?? '';
     final permanentPath = await _copyToPermanentStorage(x.path, 'avatar', uid);
     final pathToSave = permanentPath ?? x.path;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_avatarKeyPrefix$uid', pathToSave);
-
-    final url = await ApiService.uploadProfileImage(pathToSave, type: 'avatar');
-    if (url != null && appState.user != null) {
-      try {
-        final updated = await ApiService.updateUserProfile(photoUrl: url);
-        appState.setUser(updated);
-      } catch (_) {}
+    try {
+      final url = await ApiService.uploadProfileImage(pathToSave, type: 'avatar');
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('$_avatarKeyPrefix$uid', pathToSave);
+      if (appState.user != null) {
+        appState.setUser(appState.user!.copyWith(photoUrl: url));
+      }
+      setState(() {
+        _avatarPath = pathToSave;
+        _loadedProfile = {...?_loadedProfile, 'photoUrl': url};
+        _loadingAvatar = false;
+      });
+      await _loadOwnProfile();
+    } catch (e) {
+      if (mounted) {
+        final msg = e is Exception ? e.toString().replaceFirst('Exception: ', '') : 'Erro ao enviar a foto.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        setState(() => _loadingAvatar = false);
+      }
     }
-
-    if (mounted) setState(() {
-      _avatarPath = pathToSave;
-      _loadingAvatar = false;
-    });
   }
 
   Future<ImageSource?> _showImageSourceSheet(BuildContext context, String title) async {
