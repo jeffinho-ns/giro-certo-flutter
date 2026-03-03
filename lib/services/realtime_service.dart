@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'api_service.dart';
+import 'notification_service.dart';
 
 /// Payload recebido em tempo real para uma nova mensagem de chat.
 class ChatMessagePayload {
@@ -54,16 +55,46 @@ class RealtimeService {
       final chatId = data['chatId'] as String?;
       final message = data['message'];
       if (chatId != null && message is Map) {
+        final messageMap = Map<String, dynamic>.from(message);
         _chatMessageController.add(ChatMessagePayload(
           chatId: chatId,
-          message: Map<String, dynamic>.from(message),
+          message: messageMap,
         ));
+
+        // Notificação local em foreground para novas mensagens.
+        final preview = (messageMap['text'] as String?) ??
+            (messageMap['content'] as String?) ??
+            (messageMap['body'] as String?) ??
+            '';
+        final body = preview.isNotEmpty
+            ? preview
+            : 'Você recebeu uma nova mensagem.';
+
+        showLocalNotification(
+          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          title: 'Nova mensagem',
+          body: body,
+          payload: 'chat:$chatId',
+        );
       }
     });
 
     _socket!.on('notification', (data) {
       if (data is Map) {
-        _notificationController.add(Map<String, dynamic>.from(data));
+        final map = Map<String, dynamic>.from(data);
+        _notificationController.add(map);
+
+        final title = (map['title'] as String?) ?? 'Nova notificação';
+        final body = (map['body'] as String?) ??
+            (map['description'] as String?) ??
+            'Você recebeu uma nova notificação.';
+
+        showLocalNotification(
+          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          title: title,
+          body: body,
+          payload: 'notification',
+        );
       }
     });
 

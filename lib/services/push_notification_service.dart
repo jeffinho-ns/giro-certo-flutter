@@ -18,8 +18,14 @@ Future<bool> initializeFirebase() async {
   try {
     await Firebase.initializeApp();
     _firebaseReady = true;
+    // Log simples para validar inicialização do Firebase/FCM.
+    // Em produção pode ser removido ou ajustado para um logger.
+    // ignore: avoid_print
+    print('✅ Firebase inicializado para FCM');
     return true;
-  } catch (_) {
+  } catch (e) {
+    // ignore: avoid_print
+    print('❌ Falha ao inicializar Firebase: $e');
     return false;
   }
 }
@@ -29,14 +35,30 @@ Future<void> requestPermissionAndRegisterToken() async {
   if (!_firebaseReady) return;
   try {
     final messaging = FirebaseMessaging.instance;
-    if (Platform.isIOS) {
-      await messaging.requestPermission(alert: true, badge: true, sound: true);
-    }
+    // Android 13+ também exige permissão explícita; usar a mesma API
+    // em ambas as plataformas evita divergências.
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    // ignore: avoid_print
+    print('🔔 Permissão de notificação FCM: ${settings.authorizationStatus}');
+
     final token = await messaging.getToken();
     if (token != null && token.isNotEmpty) {
+      // Log do token para testes manuais no Firebase Console.
+      // ignore: avoid_print
+      print('📲 FCM Token: $token');
       await ApiService.registerFcmToken(token);
+    } else {
+      // ignore: avoid_print
+      print('⚠️ FCM Token vazio ou nulo');
     }
-  } catch (_) {}
+  } catch (e) {
+    // ignore: avoid_print
+    print('❌ Erro ao registar token FCM: $e');
+  }
 }
 
 void _navigateFromNotification(Map<String, dynamic> data) {

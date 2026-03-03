@@ -26,12 +26,14 @@ import 'services/motorcycle_data_service.dart';
 import 'app_navigator_key.dart';
 import 'services/api_service.dart';
 import 'services/push_notification_service.dart' as push;
+import 'services/notification_service.dart' as local_notifications;
 import 'utils/colors.dart';
 import 'widgets/realtime_connection.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await push.initializeFirebase();
+  await local_notifications.initializeLocalNotifications();
   runApp(const MyApp());
 }
 
