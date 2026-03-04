@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../app_navigator_key.dart';
 import '../models/chat_conversation.dart';
 import '../screens/chat/chat_screen.dart';
@@ -9,6 +11,19 @@ import '../screens/social/notifications_screen.dart';
 import 'api_service.dart';
 
 bool _firebaseReady = false;
+
+final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+const String _channelId = 'giro_certo_alerts';
+const String _channelName = 'Notificações Giro Certo';
+const String _channelDescription = 'Mensagens, pedidos de amizade e atividade';
+const AndroidNotificationChannel _channel = AndroidNotificationChannel(
+  _channelId,
+  _channelName,
+  description: _channelDescription,
+  importance: Importance.high,
+  playSound: true,
+  enableVibration: true,
+);
 
 /// Se o Firebase foi inicializado (necessário para FCM).
 bool get isFirebaseReady => _firebaseReady;
@@ -19,14 +34,35 @@ Future<bool> initializeFirebase() async {
     await Firebase.initializeApp();
     _firebaseReady = true;
     // Log simples para validar inicialização do Firebase/FCM.
-    // Em produção pode ser removido ou ajustado para um logger.
     // ignore: avoid_print
     print('✅ Firebase inicializado para FCM');
+    await _initLocalNotifications();
     return true;
   } catch (e) {
     // ignore: avoid_print
     print('❌ Falha ao inicializar Firebase: $e');
     return false;
+  }
+}
+
+Future<void> _initLocalNotifications() async {
+  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const ios = DarwinInitializationSettings(requestAlertPermission: false);
+  await _localNotifications.initialize(
+    const InitializationSettings(android: android, iOS: ios),
+    onDidReceiveNotificationResponse: (NotificationResponse r) {
+      if (r.payload != null && r.payload!.isNotEmpty) {
+        try {
+          final data = json.decode(r.payload!) as Map<String, dynamic>;
+          _navigateFromNotification(Map<String, dynamic>.from(data));
+        } catch (_) {}
+      }
+    },
+  );
+  if (Platform.isAndroid) {
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_channel);
   }
 }
 
@@ -88,9 +124,40 @@ void _navigateFromNotification(Map<String, dynamic> data) {
   }
 }
 
+/// Mostrar notificação local quando a app está em primeiro plano (para o telemóvel apitar).
+Future<void> _showForegroundNotification(String title, String body, Map<String, dynamic> data) async {
+  try {
+    final payload = json.encode(data);
+    const android = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+    );
+    const ios = DarwinNotificationDetails(presentAlert: true, presentSound: true);
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(0x7FFFFFFF),
+      title,
+      body,
+      const NotificationDetails(android: android, iOS: ios),
+      payload: payload,
+    );
+  } catch (_) {}
+}
+
 /// Configura handlers para quando o utilizador toca na notificação (abrir chat ou notificações).
 void setupPushNotificationHandlers() {
   if (!_firebaseReady) return;
+  // App em primeiro plano: FCM envia aqui; mostramos notificação local para o telemóvel apitar
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    final data = message.data.isNotEmpty ? Map<String, dynamic>.from(message.data) : <String, dynamic>{};
+    final title = message.notification?.title ?? 'Giro Certo';
+    final body = message.notification?.body ?? '';
+    _showForegroundNotification(title, body, data);
+  });
+  // Utilizador tocou na notificação (app em background)
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     if (message.data.isNotEmpty) {
       _navigateFromNotification(Map<String, dynamic>.from(message.data));

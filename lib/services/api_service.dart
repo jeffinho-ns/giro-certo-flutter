@@ -1057,6 +1057,24 @@ class ApiService {
     return alerts.map((alert) => alert as Map<String, dynamic>).toList();
   }
 
+  /// Contagem de alertas não lidos (para badge)
+  static Future<int> getAlertsUnreadCount() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/alerts/me/unread-count'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode != 200) return 0;
+      final data = json.decode(response.body);
+      final count = data['count'];
+      if (count is int) return count;
+      if (count is num) return count.toInt();
+      return 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Marcar alerta como lido
   static Future<void> markAlertAsRead(String alertId) async {
     final response = await http.put(

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
+import '../../providers/notifications_count_provider.dart';
 import '../../services/realtime_service.dart';
 import '../../models/user.dart';
 import '../../utils/colors.dart';
@@ -375,6 +376,7 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         } catch (_) {}
                         final appState = Provider.of<AppStateProvider>(context, listen: false);
                         RealtimeService.instance.disconnect();
+                        Provider.of<NotificationsCountProvider>(context, listen: false).unsubscribe();
                         appState.logout();
                         // AuthWrapper reage a isLoggedIn e mostra LoginScreen
                       },

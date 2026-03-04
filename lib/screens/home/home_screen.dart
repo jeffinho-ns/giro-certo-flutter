@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../providers/app_state_provider.dart';
+import '../../providers/notifications_count_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/map_service.dart';
 import '../../models/delivery_order.dart';
@@ -47,6 +48,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _requestLocationAndListen();
     _loadPartnerData();
     _pollPendingDeliveriesForRider();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final p = Provider.of<NotificationsCountProvider>(context, listen: false);
+        p.loadFromApi();
+        p.subscribeToRealtime();
+      } catch (_) {}
+    });
   }
   
   @override

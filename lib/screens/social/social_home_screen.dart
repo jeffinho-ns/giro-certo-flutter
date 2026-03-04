@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/drawer_provider.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/social_feed_provider.dart';
+import '../../providers/notifications_count_provider.dart';
 import '../sidebars/profile_sidebar.dart';
 import '../../widgets/modern_header.dart';
 import '../../services/social_service.dart';
@@ -49,6 +50,11 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final countProvider = Provider.of<NotificationsCountProvider>(context, listen: false);
+      countProvider.loadFromApi();
+      countProvider.subscribeToRealtime();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final drawerProvider =
           Provider.of<DrawerProvider>(context, listen: false);
@@ -287,12 +293,24 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
               top: 0,
               bottom: 0,
               child: Center(
-                child: IconButton(
-                  icon: const Icon(LucideIcons.bell),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const NotificationsScreen(),
+                child: Consumer<NotificationsCountProvider>(
+                  builder: (context, countProvider, _) {
+                    final count = countProvider.unreadCount;
+                    return Badge(
+                      isLabelVisible: count > 0,
+                      label: Text(count > 99 ? '99+' : '$count'),
+                      child: IconButton(
+                        icon: const Icon(LucideIcons.bell),
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationsScreen(),
+                            ),
+                          );
+                          if (context.mounted) {
+                            Provider.of<NotificationsCountProvider>(context, listen: false).loadFromApi();
+                          }
+                        },
                       ),
                     );
                   },

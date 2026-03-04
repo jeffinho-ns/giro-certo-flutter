@@ -5,6 +5,7 @@ import 'providers/theme_provider.dart';
 import 'providers/drawer_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/social_feed_provider.dart';
+import 'providers/notifications_count_provider.dart';
 import 'utils/theme.dart';
 import 'screens/login/splash_screen.dart';
 import 'screens/login/login_screen.dart';
@@ -49,6 +50,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DrawerProvider()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => SocialFeedProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationsCountProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {

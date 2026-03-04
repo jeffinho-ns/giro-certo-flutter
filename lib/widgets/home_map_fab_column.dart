@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../utils/colors.dart';
+import '../providers/notifications_count_provider.dart';
 import '../screens/sidebars/notifications_sidebar.dart';
 
 enum MapFilterOption { mechanics, autoParts, events }
@@ -53,6 +55,9 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
       backgroundColor: Colors.transparent,
       builder: (context) => const NotificationsSidebar(),
     );
+    if (mounted) {
+      Provider.of<NotificationsCountProvider>(context, listen: false).loadFromApi();
+    }
   }
 
   void _toggleHeatmap() {
@@ -92,12 +97,21 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
           isHighlight: true,
         ),
         const SizedBox(height: 12),
-        _fab(
-          context: context,
-          icon: LucideIcons.bell,
-          label: 'Notificações',
-          color: isDark ? Colors.white.withOpacity(0.6) : Colors.black.withOpacity(0.55),
-          onTap: _showNotifications,
+        Consumer<NotificationsCountProvider>(
+          builder: (context, countProvider, _) {
+            final count = countProvider.unreadCount;
+            return Badge(
+              isLabelVisible: count > 0,
+              label: Text(count > 99 ? '99+' : '$count'),
+              child: _fab(
+                context: context,
+                icon: LucideIcons.bell,
+                label: 'Notificações',
+                color: isDark ? Colors.white.withOpacity(0.6) : Colors.black.withOpacity(0.55),
+                onTap: _showNotifications,
+              ),
+            );
+          },
         ),
         const SizedBox(height: 12),
         _fab(
