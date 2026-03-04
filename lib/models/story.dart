@@ -1,3 +1,5 @@
+import 'story_template.dart';
+
 /// Representa um story (história) na rede social.
 class Story {
   final String id;
@@ -10,6 +12,8 @@ class Story {
   final int likeCount;
   /// Legenda/texto opcional da story.
   final String? caption;
+  /// Template: normal, em_entrega, rota_do_dia.
+  final StoryTemplate template;
 
   const Story({
     required this.id,
@@ -20,6 +24,7 @@ class Story {
     required this.createdAt,
     this.likeCount = 0,
     this.caption,
+    this.template = StoryTemplate.normal,
   });
 
   factory Story.fromJson(Map<String, dynamic> json) {
@@ -34,6 +39,7 @@ class Story {
           : DateTime.now(),
       likeCount: (json['likeCount'] as int?) ?? 0,
       caption: json['caption'] as String?,
+      template: StoryTemplateExt.fromString(json['template'] as String?),
     );
   }
 
@@ -47,6 +53,7 @@ class Story {
       'createdAt': createdAt.toIso8601String(),
       'likeCount': likeCount,
       if (caption != null) 'caption': caption,
+      'template': template.apiValue,
     };
   }
 }

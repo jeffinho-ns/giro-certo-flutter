@@ -1115,17 +1115,23 @@ class ApiService {
   // ============================================
 
   /// Listar posts. Retorna lista bruta para mapeamento em SocialService.
-  /// Se [userId] for fornecido, filtra posts desse utilizador (quando a API suportar).
+  /// [pilotType] = delivery | lazer (filtro por tipo de piloto). [hashtag] e [postType] quando a API suportar.
   static Future<List<Map<String, dynamic>>> getPosts({
     int limit = 50,
     int offset = 0,
     String? userId,
+    String? pilotType,
+    String? hashtag,
+    String? postType,
   }) async {
     final params = <String, String>{
       'limit': limit.toString(),
       'offset': offset.toString(),
     };
     if (userId != null && userId.isNotEmpty) params['userId'] = userId;
+    if (pilotType != null && pilotType.isNotEmpty) params['pilotType'] = pilotType;
+    if (hashtag != null && hashtag.isNotEmpty) params['hashtag'] = hashtag;
+    if (postType != null && postType.isNotEmpty) params['postType'] = postType;
     final uri = Uri.parse('$baseUrl/posts').replace(
       queryParameters: params,
     );
@@ -1209,6 +1215,8 @@ class ApiService {
   static Future<Map<String, dynamic>> createPost({
     required String content,
     List<String>? images,
+    String? postType,
+    List<String>? hashtags,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/posts'),
@@ -1216,6 +1224,8 @@ class ApiService {
       body: json.encode({
         'content': content,
         if (images != null && images.isNotEmpty) 'images': images,
+        if (postType != null && postType.isNotEmpty) 'postType': postType,
+        if (hashtags != null && hashtags.isNotEmpty) 'hashtags': hashtags,
       }),
     );
 
@@ -1474,5 +1484,227 @@ class ApiService {
     _handleError(response);
     final data = json.decode(response.body) as Map<String, dynamic>;
     return data['message'] as Map<String, dynamic>;
+  }
+
+  /// Excluir/ocultar conversa para o utilizador atual.
+  static Future<void> deleteChatConversation(String chatId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/chats/$chatId'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+  }
+
+  /// Detalhes da conversa (participantes, mute).
+  static Future<Map<String, dynamic>> getChatSettings(String chatId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/chats/$chatId/settings'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode == 404) {
+      return {};
+    }
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data;
+  }
+
+  /// Atualizar mute da conversa.
+  static Future<void> updateChatMute(String chatId, bool muted) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/chats/$chatId/mute'),
+      headers: await _getHeaders(),
+      body: json.encode({'muted': muted}),
+    );
+    _handleError(response);
+  }
+
+  // ============================================
+  // EVENTOS, CONQUISTAS, MAPA, SUGESTÕES, LOJISTA
+  // ============================================
+
+  /// Eventos da rede social (para pins no mapa e lista).
+  static Future<List<Map<String, dynamic>>> getEvents({String? communityId, int limit = 50}) async {
+    try {
+      final params = <String, String>{'limit': limit.toString()};
+      if (communityId != null && communityId.isNotEmpty) params['communityId'] = communityId;
+      final uri = Uri.parse('$baseUrl/social/events').replace(queryParameters: params);
+      final response = await http.get(uri, headers: await _getHeaders());
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['events'] as List<dynamic>? ?? data as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Conquistas do utilizador logado.
+  static Future<List<Map<String, dynamic>>> getAchievements(String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/$userId/achievements'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['achievements'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Sugestões "quem seguir" (entregadores na zona, mesma moto, etc.).
+  static Future<List<Map<String, dynamic>>> getSuggestedFollows({int limit = 10}) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/me/suggested-follows').replace(queryParameters: {'limit': limit.toString()}),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['suggestions'] as List<dynamic>? ?? data['users'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Visibilidade no mapa: mostrar como "piloto perto" ou "entregador ativo".
+  static Future<Map<String, dynamic>?> getMapVisibility() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/me/map-visibility'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404 || response.statusCode == 501) return null;
+      _handleError(response);
+      return json.decode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Atualizar visibilidade no mapa.
+  static Future<void> updateMapVisibility({bool? showOnMap, bool? showAsDelivery}) async {
+    try {
+      await http.put(
+        Uri.parse('$baseUrl/users/me/map-visibility'),
+        headers: await _getHeaders(),
+        body: json.encode({
+          if (showOnMap != null) 'showOnMap': showOnMap,
+          if (showAsDelivery != null) 'showAsDelivery': showAsDelivery,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  /// Pontos de interesse partilhados (mecânicos, postos, paragens) para o mapa.
+  static Future<List<Map<String, dynamic>>> getPointsOfInterest({double? lat, double? lng, double? radiusKm}) async {
+    try {
+      final params = <String, String>{};
+      if (lat != null) params['lat'] = lat.toString();
+      if (lng != null) params['lng'] = lng.toString();
+      if (radiusKm != null) params['radiusKm'] = radiusKm.toString();
+      final uri = Uri.parse('$baseUrl/social/points-of-interest').replace(queryParameters: params.isEmpty ? null : params);
+      final response = await http.get(uri, headers: await _getHeaders());
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['points'] as List<dynamic>? ?? data as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Pilotos/entregadores visíveis no mapa (quem autorizou visibilidade).
+  static Future<List<Map<String, dynamic>>> getMapNearbyUsers({double? lat, double? lng, bool? deliveryOnly}) async {
+    try {
+      final params = <String, String>{};
+      if (lat != null) params['lat'] = lat.toString();
+      if (lng != null) params['lng'] = lng.toString();
+      if (deliveryOnly == true) params['deliveryOnly'] = 'true';
+      final uri = Uri.parse('$baseUrl/social/map-nearby').replace(queryParameters: params.isEmpty ? null : params);
+      final response = await http.get(uri, headers: await _getHeaders());
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['users'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Chat por comunidade (canais de grupo).
+  static Future<List<Map<String, dynamic>>> getCommunityChannels(String communityId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/communities/$communityId/channels'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['channels'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Feed "Minha loja" para lojista (posts que mencionam a loja).
+  static Future<List<Map<String, dynamic>>> getPartnerFeed(String partnerId, {int limit = 30}) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/partners/$partnerId/feed').replace(queryParameters: {'limit': limit.toString()}),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['posts'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Ranking de entregadores (para lojista).
+  static Future<List<Map<String, dynamic>>> getDeliveryRanking({String? partnerId, int limit = 20}) async {
+    try {
+      final params = <String, String>{'limit': limit.toString()};
+      if (partnerId != null && partnerId.isNotEmpty) params['partnerId'] = partnerId;
+      final uri = Uri.parse('$baseUrl/social/delivery-ranking').replace(queryParameters: params);
+      final response = await http.get(uri, headers: await _getHeaders());
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = data['ranking'] as List<dynamic>? ?? [];
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Reação num post (like, boa_rota, boa_dica).
+  static Future<int> setPostReaction(String postId, String reactionType) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/posts/$postId/reactions'),
+        headers: await _getHeaders(),
+        body: json.encode({'reaction': reactionType}),
+      );
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return (data['likesCount'] as int?) ?? (data['count'] as int?) ?? 0;
+    } catch (_) {
+      return 0;
+    }
   }
 }

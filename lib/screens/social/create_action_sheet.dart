@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../utils/colors.dart';
+import 'events_screen.dart';
 
 /// Resultado ao escolher uma ação no botão +.
 enum CreateActionType {
@@ -75,6 +76,20 @@ class CreateActionSheet extends StatelessWidget {
               label: 'Criar uma nova comunidade',
               subtitle: 'Criar grupo por moto ou região',
               onTap: () => Navigator.pop(context, CreateActionType.community),
+            ),
+            _OptionTile(
+              icon: LucideIcons.calendar,
+              label: 'Ver eventos',
+              subtitle: 'Eventos da rede social',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const EventsScreen(),
+                  ),
+                );
+              },
             ),
             _OptionTile(
               icon: LucideIcons.bell,

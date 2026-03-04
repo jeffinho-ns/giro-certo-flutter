@@ -71,6 +71,13 @@ class User {
   // Verifica se o usuário é um motociclista
   bool get isRider => partnerId == null;
 
+  /// True se o perfil de piloto for "Trabalho" (entregador).
+  bool get isDeliveryPilot =>
+      pilotProfile.toUpperCase().trim() == 'TRABALHO';
+
+  /// Label para badge no perfil e posts: "Delivery" ou "Piloto".
+  String get pilotTypeLabel => isDeliveryPilot ? 'Delivery' : 'Piloto';
+
   // Factory para criar User a partir de JSON (da API)
   factory User.fromJson(Map<String, dynamic> json) {
     return User(

@@ -49,7 +49,7 @@ Future<void> _initLocalNotifications() async {
   const android = AndroidInitializationSettings('@mipmap/ic_launcher');
   const ios = DarwinInitializationSettings(requestAlertPermission: false);
   await _localNotifications.initialize(
-    const InitializationSettings(android: android, iOS: ios),
+    settings: const InitializationSettings(android: android, iOS: ios),
     onDidReceiveNotificationResponse: (NotificationResponse r) {
       if (r.payload != null && r.payload!.isNotEmpty) {
         try {
@@ -138,10 +138,10 @@ Future<void> _showForegroundNotification(String title, String body, Map<String, 
     );
     const ios = DarwinNotificationDetails(presentAlert: true, presentSound: true);
     await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch.remainder(0x7FFFFFFF),
-      title,
-      body,
-      const NotificationDetails(android: android, iOS: ios),
+      id: DateTime.now().millisecondsSinceEpoch.remainder(0x7FFFFFFF),
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(android: android, iOS: ios),
       payload: payload,
     );
   } catch (_) {}

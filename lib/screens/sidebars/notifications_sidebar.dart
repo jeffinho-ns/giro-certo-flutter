@@ -7,6 +7,7 @@ import '../../utils/colors.dart';
 import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
 import '../../providers/app_state_provider.dart';
+import '../../providers/notifications_count_provider.dart';
 
 class NotificationsSidebar extends StatefulWidget {
   const NotificationsSidebar({super.key});
@@ -97,7 +98,10 @@ class _NotificationsSidebarState extends State<NotificationsSidebar> {
   Future<void> _markAsRead(String alertId) async {
     try {
       await ApiService.markAlertAsRead(alertId);
-      _loadNotifications(); // Recarregar
+      if (mounted) {
+        Provider.of<NotificationsCountProvider>(context, listen: false).decrementUnread();
+      }
+      _loadNotifications();
     } catch (e) {
       print('Erro ao marcar notificação como lida: $e');
     }

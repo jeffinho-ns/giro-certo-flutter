@@ -17,6 +17,7 @@ import '../settings/settings_screen.dart';
 import '../garage/garage_screen.dart';
 import '../../services/api_service.dart';
 import '../../utils/image_url.dart';
+import '../../models/achievement.dart';
 import '../../widgets/api_image.dart';
 import 'follow_list_screen.dart';
 
@@ -54,6 +55,7 @@ class _ProfilePageState extends State<ProfilePage>
   bool _hasPendingFollowRequest = false;
   Map<String, dynamic>? _loadedProfile;
   bool _loadingProfile = false;
+  List<Achievement> _achievements = [];
 
   @override
   void initState() {
@@ -83,9 +85,23 @@ class _ProfilePageState extends State<ProfilePage>
           _loadedProfile = profile;
           _loadingProfile = false;
         });
+        _loadAchievements(uid);
       }
     } catch (_) {
       if (mounted) setState(() => _loadingProfile = false);
+    }
+  }
+
+  Future<void> _loadAchievements(String userId) async {
+    try {
+      final list = await ApiService.getAchievements(userId);
+      if (mounted) {
+        setState(() {
+          _achievements = list.map((e) => Achievement.fromJson(e)).toList();
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _achievements = []);
     }
   }
 
@@ -100,9 +116,10 @@ class _ProfilePageState extends State<ProfilePage>
           _loadedProfile = profile;
           _loadingProfile = false;
         });
+        _loadAchievements(uid);
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingProfile = false);
+      if (mounted && widget.userId == uid) setState(() => _loadingProfile = false);
     }
   }
 
@@ -339,6 +356,9 @@ class _ProfilePageState extends State<ProfilePage>
     final bike = isOwnProfile
         ? appState.bike
         : _bikeFromLoaded(firstBike);
+    final pilotProfile = loaded?['pilotProfile'] as String? ?? appState.user?.pilotProfile;
+    final isDeliveryPilot = (pilotProfile ?? '').toUpperCase().trim() == 'TRABALHO';
+    final pilotTypeLabel = isDeliveryPilot ? 'Delivery' : 'Piloto';
 
     final userStories = feed.stories.where((s) => s.userId == userId).toList();
     final userPosts = feed.posts.where((p) => p.userId == userId).toList();
@@ -406,6 +426,7 @@ class _ProfilePageState extends State<ProfilePage>
                         loadingAvatar: _loadingAvatar,
                         hasPendingFollowRequest: _hasPendingFollowRequest,
                         onSendFollowRequest: _sendFollowRequestFromProfile,
+                        pilotTypeLabel: pilotTypeLabel,
                       ),
               ),
             ),
@@ -431,6 +452,57 @@ class _ProfilePageState extends State<ProfilePage>
                 ),
               ),
             ],
+            if (_achievements.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Conquistas',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.racingOrange,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 36,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _achievements.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (context, i) {
+                            final a = _achievements[i];
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.racingOrange.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(LucideIcons.trophy, size: 18, color: AppColors.racingOrange),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    a.name,
+                                    style: theme.textTheme.labelMedium?.copyWith(
+                                      color: AppColors.racingOrange,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             SliverToBoxAdapter(
               child: Container(
                 decoration: BoxDecoration(
@@ -497,6 +569,8 @@ class _ProfileHeader extends StatelessWidget {
   final bool loadingAvatar;
   final bool hasPendingFollowRequest;
   final VoidCallback? onSendFollowRequest;
+  /// "Delivery" ou "Piloto" (tipo de piloto).
+  final String? pilotTypeLabel;
 
   const _ProfileHeader({
     required this.handle,
@@ -518,6 +592,7 @@ class _ProfileHeader extends StatelessWidget {
     this.loadingAvatar = false,
     this.hasPendingFollowRequest = false,
     this.onSendFollowRequest,
+    this.pilotTypeLabel,
   });
 
   static Widget _defaultCover() {
@@ -682,13 +757,41 @@ class _ProfileHeader extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text(
-                  userName,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A1A),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      userName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    if (pilotTypeLabel != null && pilotTypeLabel!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: (pilotTypeLabel == 'Delivery'
+                                  ? Colors.blue
+                                  : AppColors.racingOrange)
+                              .withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          pilotTypeLabel!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: pilotTypeLabel == 'Delivery'
+                                ? Colors.blue.shade700
+                                : AppColors.racingOrange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(

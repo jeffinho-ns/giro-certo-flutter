@@ -10,6 +10,8 @@ import '../sidebars/profile_sidebar.dart';
 import '../../widgets/modern_header.dart';
 import '../../services/social_service.dart';
 import '../../models/post.dart';
+import '../../models/reaction_type.dart';
+import '../../services/api_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/social/social_search_bar.dart';
 import '../../widgets/social/story_tile.dart';
@@ -371,6 +373,51 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _FeedTabChip(
+                        label: 'Todos',
+                        isSelected: feed.pilotFilter == FeedPilotFilter.all,
+                        onTap: () {
+                          feed.setPilotFilter(FeedPilotFilter.all);
+                          _loadData();
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _FeedTabChip(
+                        label: 'Só delivery',
+                        isSelected: feed.pilotFilter == FeedPilotFilter.delivery,
+                        onTap: () {
+                          feed.setPilotFilter(FeedPilotFilter.delivery);
+                          _loadData();
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _FeedTabChip(
+                        label: 'Só lazer',
+                        isSelected: feed.pilotFilter == FeedPilotFilter.lazer,
+                        onTap: () {
+                          feed.setPilotFilter(FeedPilotFilter.lazer);
+                          _loadData();
+                        },
+                      ),
+                      if (feed.hashtagFilter.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Chip(
+                          label: Text('#${feed.hashtagFilter}'),
+                          deleteIcon: const Icon(LucideIcons.x, size: 16),
+                          onDeleted: () {
+                            feed.setHashtagFilter('');
+                            _loadData();
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 150,
@@ -440,6 +487,17 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                         onLike: () => feed.toggleLike(post),
                         onComments: () => _openComments(post),
                         onOptions: () => _showPostOptions(post),
+                        onHashtagTap: (tag) {
+                          feed.setHashtagFilter(tag);
+                          _loadData();
+                        },
+                        onReaction: (type) async {
+                          await ApiService.setPostReaction(
+                            post.id,
+                            type.apiValue,
+                          );
+                          if (context.mounted) _loadData();
+                        },
                       );
                     },
                   ),

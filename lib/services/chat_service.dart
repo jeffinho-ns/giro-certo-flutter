@@ -93,6 +93,33 @@ class ChatService {
     }
   }
 
+  /// Excluir/ocultar conversa para o utilizador atual.
+  static Future<void> deleteConversation(String chatId) async {
+    try {
+      await ApiService.deleteChatConversation(chatId);
+    } catch (_) {
+      // Melhor esforço; em caso de erro mantemos a conversa.
+    }
+  }
+
+  /// Detalhes da conversa (participantes, mute).
+  static Future<Map<String, dynamic>> getChatSettings(String chatId) async {
+    try {
+      return await ApiService.getChatSettings(chatId);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Atualizar mute da conversa.
+  static Future<void> setChatMuted(String chatId, bool muted) async {
+    try {
+      await ApiService.updateChatMute(chatId, muted);
+    } catch (_) {
+      // Ignorar erros de rede.
+    }
+  }
+
   static final List<ChatConversation> _mockCommunity = [
     ChatConversation(
       id: 'comm_1',

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../models/post.dart';
+import '../../models/post_type.dart';
 import '../../models/user.dart';
 import '../../services/social_service.dart';
 import '../../utils/colors.dart';
@@ -24,6 +26,7 @@ class _CreatePostModalState extends State<CreatePostModal> {
   final _controller = TextEditingController();
   final List<String> _imagePaths = [];
   bool _loading = false;
+  PostType _postType = PostType.normal;
   final _picker = ImagePicker();
 
   @override
@@ -41,6 +44,19 @@ class _CreatePostModalState extends State<CreatePostModal> {
     setState(() => _imagePaths.removeAt(index));
   }
 
+  static IconData _iconForPostType(PostType t) {
+    switch (t) {
+      case PostType.dica:
+        return LucideIcons.wrench;
+      case PostType.rota:
+        return LucideIcons.mapPin;
+      case PostType.entregaConcluida:
+        return LucideIcons.packageCheck;
+      default:
+        return LucideIcons.fileText;
+    }
+  }
+
   Future<void> _publish() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
@@ -51,8 +67,10 @@ class _CreatePostModalState extends State<CreatePostModal> {
         userName: widget.user.name,
         userBikeModel: widget.userBikeModel,
         userAvatarUrl: widget.user.photoUrl,
+        userPilotProfile: widget.user.pilotProfile,
         content: text,
         imageUrls: _imagePaths.isEmpty ? null : _imagePaths,
+        postType: _postType,
       );
       if (mounted) Navigator.of(context).pop(post);
     } catch (e) {
@@ -117,6 +135,31 @@ class _CreatePostModalState extends State<CreatePostModal> {
                         letterSpacing: -0.3,
                       ),
                     ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        DropdownButton<PostType>(
+                          value: _postType,
+                          isDense: true,
+                          underline: const SizedBox(),
+                          items: PostType.values.map((t) {
+                            return DropdownMenuItem(
+                              value: t,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(_iconForPostType(t), size: 18, color: AppColors.racingOrange),
+                                  const SizedBox(width: 8),
+                                  Text(t.label, style: const TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => _postType = v);
+                          },
+                        ),
+                        const SizedBox(width: 8),
                     TextButton(
                       onPressed: _loading ? null : _publish,
                       child: _loading
@@ -136,6 +179,8 @@ class _CreatePostModalState extends State<CreatePostModal> {
                               ),
                             ),
                     ),
+                  ],
+                ),
                   ],
                 ),
               ),

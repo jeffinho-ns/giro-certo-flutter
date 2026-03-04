@@ -1,6 +1,9 @@
 import 'dart:convert';
 import '../models/post.dart';
+import '../models/post_type.dart';
+import '../models/reaction_type.dart';
 import '../models/story.dart';
+import '../models/story_template.dart';
 import '../utils/image_url.dart';
 import 'api_service.dart';
 
@@ -25,30 +28,66 @@ class SocialService {
         .toList();
 
     final rawPhoto = user?['photoUrl'] as String?;
+    final likesCount = (json['likesCount'] as int?) ?? 0;
+    final content = json['content'] as String? ?? '';
+    final hashtags = _extractHashtags(content, json['hashtags']);
     return Post(
       id: json['id'] as String,
       userId: json['userId'] as String,
-      userName: (user?['name'] as String?) ?? '',
-      userBikeModel: '',
+      userName: (user?['name'] as String?) ?? (json['userName'] as String?) ?? '',
+      userBikeModel: (user?['bikeModel'] as String?) ?? (json['userBikeModel'] as String?) ?? '',
       userAvatarUrl: (rawPhoto != null && rawPhoto.isNotEmpty) ? resolveImageUrl(rawPhoto) : null,
-      content: json['content'] as String? ?? '',
+      userPilotProfile: user?['pilotProfile'] as String? ?? json['userPilotProfile'] as String?,
+      content: content,
       images: resolvedImages?.isNotEmpty == true ? resolvedImages : null,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : DateTime.now(),
-      likes: (json['likesCount'] as int?) ?? 0,
+      likes: likesCount,
       comments: (json['commentsCount'] as int?) ?? 0,
       isSameBike: false,
+      postType: PostTypeExt.fromString(json['postType'] as String?),
+      hashtags: hashtags,
+      reactions: _parseReactions(json, likesCount),
     );
   }
 
-  /// Lista posts do feed. [userBikeModel] usado para marcar "mesma moto". [currentUserId] para estado de like na API.
+  static List<String> _extractHashtags(String content, dynamic rawHashtags) {
+    if (rawHashtags is List) {
+      return rawHashtags.map((e) => e.toString().replaceFirst(RegExp(r'^#'), '')).where((s) => s.isNotEmpty).toList();
+    }
+    final matches = RegExp(r'#(\w+)').allMatches(content);
+    return matches.map((m) => m.group(1) ?? '').where((s) => s.isNotEmpty).toList();
+  }
+
+  static Map<ReactionType, int> _parseReactions(Map<String, dynamic> json, int defaultLikes) {
+    final raw = json['reactions'] as Map<String, dynamic>?;
+    if (raw == null || raw.isEmpty) return {ReactionType.like: defaultLikes};
+    final Map<ReactionType, int> out = {};
+    for (final e in raw.entries) {
+      final rt = ReactionTypeExt.fromString(e.key as String?);
+      out[rt] = (e.value is int) ? e.value : int.tryParse(e.value.toString()) ?? 0;
+    }
+    if (!out.containsKey(ReactionType.like)) out[ReactionType.like] = defaultLikes;
+    return out;
+  }
+
+  /// Lista posts do feed. [pilotTypeFilter] = all | delivery | lazer. [hashtag] filtra por hashtag.
   static Future<List<Post>> getPosts({
     String? userBikeModel,
     String? currentUserId,
+    String? pilotTypeFilter,
+    String? hashtag,
+    String? postType,
   }) async {
     try {
-      final list = await ApiService.getPosts(limit: 50, offset: 0);
+      final list = await ApiService.getPosts(
+        limit: 50,
+        offset: 0,
+        pilotType: pilotTypeFilter,
+        hashtag: hashtag,
+        postType: postType,
+      );
       _likedPostIds.clear();
       _cachedPosts = list.map((j) => _postFromApi(j, currentUserId: currentUserId)).toList();
       return List.from(_cachedPosts);
@@ -132,6 +171,7 @@ class SocialService {
         createdAt: j['createdAt'] != null ? DateTime.parse(j['createdAt'] as String) : DateTime.now(),
         likeCount: (j['likeCount'] as int?) ?? 0,
         caption: (caption != null && caption.isNotEmpty) ? caption : null,
+        template: StoryTemplateExt.fromString(j['template'] as String?),
       );
   }
 
@@ -312,8 +352,11 @@ class SocialService {
     required String userName,
     required String userBikeModel,
     String? userAvatarUrl,
+    String? userPilotProfile,
     required String content,
     List<String>? imageUrls,
+    PostType postType = PostType.normal,
+    List<String>? hashtags,
   }) async {
     List<String>? urlsToSend = imageUrls;
     if (imageUrls != null && imageUrls.isNotEmpty) {
@@ -328,10 +371,13 @@ class SocialService {
       }
       urlsToSend = uploadedUrls;
     }
+    final extractedHashtags = hashtags ?? _extractHashtags(content, null);
     try {
       final raw = await ApiService.createPost(
         content: content,
         images: urlsToSend,
+        postType: postType == PostType.normal ? null : postType.apiValue,
+        hashtags: extractedHashtags.isEmpty ? null : extractedHashtags,
       );
       final post = _postFromApi(raw, currentUserId: userId);
       _cachedPosts.insert(0, post);
@@ -344,12 +390,15 @@ class SocialService {
         userName: userName,
         userBikeModel: userBikeModel,
         userAvatarUrl: userAvatarUrl,
+        userPilotProfile: userPilotProfile,
         content: content,
         images: urlsToSend,
         createdAt: DateTime.now(),
         likes: 0,
         comments: 0,
         isSameBike: false,
+        postType: postType,
+        hashtags: extractedHashtags,
       );
       _cachedPosts.insert(0, post);
       return post;

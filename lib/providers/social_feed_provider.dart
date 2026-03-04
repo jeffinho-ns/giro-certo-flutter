@@ -7,14 +7,19 @@ import '../services/api_service.dart';
 /// Tipo de feed: Para Você (global) ou Seguindo (filtrado por amizade).
 enum FeedTab { forYou, following }
 
+/// Filtro por tipo de piloto no feed.
+enum FeedPilotFilter { all, delivery, lazer }
+
 class SocialFeedProvider extends ChangeNotifier {
   List<Post> _posts = [];
   List<Story> _stories = [];
   String _searchQuery = '';
+  String _hashtagFilter = '';
   bool _loading = true;
   final Map<String, int> _likeCountOverrides = {};
   FeedOrder _feedOrder = FeedOrder.recent;
   FeedTab _feedTab = FeedTab.forYou;
+  FeedPilotFilter _pilotFilter = FeedPilotFilter.all;
 
   /// Posts e stories por userId (perfis específicos).
   final Map<String, List<Post>> _profilePosts = {};
@@ -26,9 +31,11 @@ class SocialFeedProvider extends ChangeNotifier {
   List<Post> get posts => _posts;
   List<Story> get stories => _stories;
   String get searchQuery => _searchQuery;
+  String get hashtagFilter => _hashtagFilter;
   bool get loading => _loading;
   FeedOrder get feedOrder => _feedOrder;
   FeedTab get feedTab => _feedTab;
+  FeedPilotFilter get pilotFilter => _pilotFilter;
 
   List<Post> getProfilePosts(String userId) =>
       List.from(_profilePosts[userId] ?? []);
@@ -47,6 +54,15 @@ class SocialFeedProvider extends ChangeNotifier {
     if (_feedTab == FeedTab.following) {
       list = list.where((p) => _followingIds.contains(p.userId)).toList();
     }
+    if (_pilotFilter == FeedPilotFilter.delivery) {
+      list = list.where((p) => p.isDeliveryAuthor).toList();
+    } else if (_pilotFilter == FeedPilotFilter.lazer) {
+      list = list.where((p) => !p.isDeliveryAuthor).toList();
+    }
+    if (_hashtagFilter.isNotEmpty) {
+      final tag = _hashtagFilter.replaceFirst(RegExp(r'^#'), '').toLowerCase();
+      list = list.where((p) => p.hashtags.any((h) => h.toLowerCase() == tag)).toList();
+    }
     return SocialService.sortPosts(list, _feedOrder);
   }
 
@@ -62,6 +78,18 @@ class SocialFeedProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setHashtagFilter(String value) {
+    if (_hashtagFilter == value) return;
+    _hashtagFilter = value.replaceFirst(RegExp(r'^#'), '').trim();
+    notifyListeners();
+  }
+
+  void setPilotFilter(FeedPilotFilter value) {
+    if (_pilotFilter == value) return;
+    _pilotFilter = value;
+    notifyListeners();
+  }
+
   void setFeedOrder(FeedOrder order) {
     if (_feedOrder == order) return;
     _feedOrder = order;
@@ -71,14 +99,19 @@ class SocialFeedProvider extends ChangeNotifier {
   Future<void> loadData({
     String? userBikeModel,
     String? currentUserId,
+    String? pilotTypeParam,
+    String? hashtagParam,
   }) async {
     _loading = true;
     notifyListeners();
     try {
+      final pilotType = pilotTypeParam ?? (_pilotFilter == FeedPilotFilter.delivery ? 'delivery' : _pilotFilter == FeedPilotFilter.lazer ? 'lazer' : null);
       final results = await Future.wait([
         SocialService.getPosts(
           userBikeModel: userBikeModel,
           currentUserId: currentUserId,
+          pilotTypeFilter: pilotType,
+          hashtag: _hashtagFilter.isNotEmpty ? _hashtagFilter : null,
         ),
         SocialService.getStories(),
         SocialService.getFollowingIds(),
