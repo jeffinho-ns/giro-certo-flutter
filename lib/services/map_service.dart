@@ -14,23 +14,27 @@ class MapRoutePointsResult {
   });
 
   final List<Map<String, double>> points;
-  /// `true` quando a geometria veio do Google (overview ou passos). `false` = linha reta (fallback).
+  /// `true` quando a geometria veio de vias (Google/OSRM). `false` = linha reta (fallback).
   final bool followsRoads;
   final String? directionsStatus;
   final String? errorMessage;
 }
 
-/// Serviço para Google Directions API.
-/// Configure [apiKey] com a sua chave do Google Maps (Directions API habilitada).
+/// Rotas no mapa: backend Giro → Google no app → **OSRM** (OpenStreetMap, sem chave).
 class MapService {
   static const String _directionsBase =
       'https://maps.googleapis.com/maps/api/directions/json';
   static const String _routesV2Base =
       'https://routes.googleapis.com/directions/v2:computeRoutes';
 
-  /// Chave da Directions API (HTTP). Use chave sem restrição "somente apps Android", senão o Google
-  /// devolve `REQUEST_DENIED` e o app cai no fallback em linha reta.
-  /// Injeção: `--dart-define=GOOGLE_DIRECTIONS_API_KEY=...`
+  /// OSRM demo (Project OSRM). Sem API key; geometria segue ruas.
+  /// Opcional: `--dart-define=OSRM_BASE_URL=https://seu-servidor/` (deve terminar sem barra final).
+  static const String _osrmBase = String.fromEnvironment(
+    'OSRM_BASE_URL',
+    defaultValue: 'https://router.project-osrm.org',
+  );
+
+  /// Chave da Directions API (HTTP no app). Pode falhar por restricao de chave Android-only.
   static String get _directionsApiKey {
     const fromEnv = String.fromEnvironment('GOOGLE_DIRECTIONS_API_KEY');
     final trimmed = fromEnv.trim();
@@ -55,6 +59,88 @@ class MapService {
       return fromBackend;
     }
 
+    final google = await _clientGoogleRoutePoints(
+      originLat: originLat,
+      originLng: originLng,
+      destLat: destLat,
+      destLng: destLng,
+    );
+    if (google.followsRoads) return google;
+
+    final osrm = await _tryOsrmRoute(
+      originLat: originLat,
+      originLng: originLng,
+      destLat: destLat,
+      destLng: destLng,
+    );
+    if (osrm != null && osrm.followsRoads) return osrm;
+
+    return google;
+  }
+
+  /// OSRM: `lon,lat;lon,lat` + GeoJSON LineString em `geometry.coordinates`.
+  static Future<MapRoutePointsResult?> _tryOsrmRoute({
+    required double originLat,
+    required double originLng,
+    required double destLat,
+    required double destLng,
+  }) async {
+    try {
+      final base = _osrmBase.replaceAll(RegExp(r'/$'), '');
+      final path =
+          '$originLng,$originLat;$destLng,$destLat';
+      final uri = Uri.parse('$base/route/v1/driving/$path').replace(
+        queryParameters: const {
+          'overview': 'full',
+          'geometries': 'geojson',
+        },
+      );
+      final response = await http
+          .get(
+            uri,
+            headers: const {
+              'Accept': 'application/json',
+              'User-Agent': 'GiroCerto/1.0 Flutter',
+            },
+          )
+          .timeout(const Duration(seconds: 14));
+      if (response.statusCode != 200) {
+        debugPrint('OSRM HTTP ${response.statusCode}: ${response.body.length > 200 ? response.body.substring(0, 200) : response.body}');
+        return null;
+      }
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final routes = data['routes'] as List<dynamic>?;
+      if (routes == null || routes.isEmpty) return null;
+      final route0 = routes.first as Map<String, dynamic>;
+      final geometry = route0['geometry'] as Map<String, dynamic>?;
+      final coords = geometry?['coordinates'] as List<dynamic>?;
+      if (coords == null || coords.length < 2) return null;
+
+      final points = <Map<String, double>>[];
+      for (final c in coords) {
+        if (c is! List<dynamic> || c.length < 2) continue;
+        final lon = (c[0] as num).toDouble();
+        final lat = (c[1] as num).toDouble();
+        points.add({'lat': lat, 'lng': lon});
+      }
+      if (points.length < 2) return null;
+      return MapRoutePointsResult(
+        points: points,
+        followsRoads: true,
+        directionsStatus: 'OSRM',
+      );
+    } catch (e) {
+      debugPrint('OSRM rota: $e');
+      return null;
+    }
+  }
+
+  static Future<MapRoutePointsResult> _clientGoogleRoutePoints({
+    required double originLat,
+    required double originLng,
+    required double destLat,
+    required double destLng,
+  }) async {
     final uri = Uri.parse(_directionsBase).replace(
       queryParameters: {
         'origin': '$originLat,$originLng',
@@ -239,9 +325,6 @@ class MapService {
     );
   }
 
-  /// Fallback quando o Directions legado (GET) falha ou vem sem geometria:
-  /// [Routes API v2 computeRoutes](https://routes.googleapis.com/directions/v2:computeRoutes)
-  /// com `polylineQuality: HIGH_QUALITY` (mais pontos, melhor aderência às ruas).
   static Future<MapRoutePointsResult> _computeRoutesV2Polyline({
     required double originLat,
     required double originLng,
@@ -319,7 +402,6 @@ class MapService {
     );
   }
 
-  /// Junta os polylines de cada passo do trajeto (mesmo caminho que o Google usa na UI).
   static List<Map<String, double>> _pointsFromRouteLegSteps(
       Map<String, dynamic> route) {
     final legs = route['legs'] as List<dynamic>?;
