@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -12,6 +13,7 @@ import '../../models/delivery_order.dart';
 import '../../models/user.dart';
 import '../../models/pilot_profile.dart';
 import '../../utils/colors.dart';
+import '../../utils/navigation_rider_marker.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/quick_messages_card.dart';
 import '../../widgets/home_map_fab_column.dart';
@@ -38,15 +40,138 @@ class _HomeScreenState extends State<HomeScreen> {
   DeliveryOrder? _pipcarOrder;
   DeliveryOrder? _activeDeliveryOrder;
   bool _isUpdatingDeliveryRoute = false;
+  /// Modo “navegação” (corrida ativa): polyline azul, câmera 3D e marcador com rotação.
+  BitmapDescriptor? _riderNavIcon;
+  Marker? _riderNavMarker;
+  double _navBearing = 0;
+  LatLng? _prevNavForBearing;
+  int _lastNavCameraMs = 0;
   MapType _mapType = MapType.normal;
   double _currentZoom = 15.0;
   static const Duration _cameraAnimationDuration = Duration(milliseconds: 800);
 
   static const LatLng _defaultCenter = LatLng(-23.5505, -46.6333);
 
+  static const Color _googleNavBlue = Color(0xFF4285F4);
+
+  bool get _deliveryNavigationActive => _activeDeliveryOrder != null;
+
+  Polyline _navStylePolyline({
+    required PolylineId polylineId,
+    required List<LatLng> points,
+  }) {
+    return Polyline(
+      polylineId: polylineId,
+      points: points,
+      color: _googleNavBlue,
+      width: 14,
+      geodesic: true,
+      jointType: JointType.round,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+    );
+  }
+
+  double _distanceMeters(LatLng a, LatLng b) {
+    const earth = 6371000.0;
+    final dLat = (b.latitude - a.latitude) * math.pi / 180;
+    final dLng = (b.longitude - a.longitude) * math.pi / 180;
+    final lat1 = a.latitude * math.pi / 180;
+    final lat2 = b.latitude * math.pi / 180;
+    final sinDLat = math.sin(dLat / 2);
+    final sinDLng = math.sin(dLng / 2);
+    final q = sinDLat * sinDLat + math.cos(lat1) * math.cos(lat2) * sinDLng * sinDLng;
+    return 2 * earth * math.asin(math.min(1.0, math.sqrt(q)));
+  }
+
+  double _bearingBetween(LatLng a, LatLng b) {
+    final lat1 = a.latitude * math.pi / 180;
+    final lat2 = b.latitude * math.pi / 180;
+    final dLng = (b.longitude - a.longitude) * math.pi / 180;
+    final y = math.sin(dLng) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+    final brng = math.atan2(y, x) * 180 / math.pi;
+    return (brng + 360) % 360;
+  }
+
+  void _updateNavBearingFromPosition(Position pos) {
+    final cur = LatLng(pos.latitude, pos.longitude);
+    final h = pos.heading;
+    if (h >= 0 && h <= 360) {
+      _navBearing = h;
+      _prevNavForBearing = cur;
+      return;
+    }
+    if (_prevNavForBearing != null) {
+      final d = _distanceMeters(_prevNavForBearing!, cur);
+      if (d >= 4) {
+        _navBearing = _bearingBetween(_prevNavForBearing!, cur);
+        _prevNavForBearing = cur;
+      }
+    } else {
+      _prevNavForBearing = cur;
+    }
+  }
+
+  void _rebuildRiderNavMarker() {
+    if (!_deliveryNavigationActive || _currentPosition == null) {
+      _riderNavMarker = null;
+      return;
+    }
+    _riderNavMarker = Marker(
+      markerId: const MarkerId('rider_nav'),
+      position: _currentPosition!,
+      rotation: _navBearing,
+      flat: true,
+      anchor: const Offset(0.5, 0.5),
+      icon: _riderNavIcon ??
+          BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+      zIndexInt: 999,
+    );
+  }
+
+  void _followNavigationCameraThrottled() {
+    if (!_deliveryNavigationActive ||
+        _mapController == null ||
+        _currentPosition == null) {
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastNavCameraMs < 650) return;
+    _lastNavCameraMs = now;
+    _mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _currentPosition!,
+          zoom: 17,
+          tilt: 52,
+          bearing: _navBearing,
+        ),
+      ),
+      duration: const Duration(milliseconds: 600),
+    );
+  }
+
+  void _snapNavigationCameraNow() {
+    _lastNavCameraMs = 0;
+    _followNavigationCameraThrottled();
+  }
+
+  Set<Marker> get _allMapMarkers => {
+        ..._markers,
+        if (_riderNavMarker != null) _riderNavMarker!,
+      };
+
   @override
   void initState() {
     super.initState();
+    NavigationRiderMarker.bitmap().then((icon) {
+      if (!mounted) return;
+      setState(() {
+        _riderNavIcon = icon;
+        _rebuildRiderNavMarker();
+      });
+    });
     _loadQuickMessages();
     _requestLocationAndListen();
     _loadPartnerData();
@@ -122,19 +247,30 @@ class _HomeScreenState extends State<HomeScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
       if (!mounted) return;
+      _updateNavBearingFromPosition(pos);
       setState(() {
         _currentPosition = LatLng(pos.latitude, pos.longitude);
+        _rebuildRiderNavMarker();
       });
       _updateUserLocation(pos.latitude, pos.longitude);
+      if (_deliveryNavigationActive) _snapNavigationCameraNow();
 
       _positionSubscription = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 3,
+        ),
       ).listen((Position pos) {
         if (!mounted) return;
+        _updateNavBearingFromPosition(pos);
         setState(() {
           _currentPosition = LatLng(pos.latitude, pos.longitude);
+          _rebuildRiderNavMarker();
         });
         _updateUserLocation(pos.latitude, pos.longitude);
+        if (_deliveryNavigationActive) {
+          _followNavigationCameraThrottled();
+        }
       });
     } catch (e) {
       debugPrint('Falha ao obter localizacao atual: $e');
@@ -464,6 +600,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _recenterMap() {
     if (_mapController == null || _currentPosition == null) return;
+    if (_deliveryNavigationActive) {
+      _snapNavigationCameraNow();
+      return;
+    }
     _mapController!.animateCamera(
       CameraUpdate.newLatLngZoom(_currentPosition!, _currentZoom),
       duration: _cameraAnimationDuration,
@@ -497,22 +637,34 @@ class _HomeScreenState extends State<HomeScreen> {
     final originLat = user?.currentLat ?? _currentPosition?.latitude ?? _defaultCenter.latitude;
     final originLng = user?.currentLng ?? _currentPosition?.longitude ?? _defaultCenter.longitude;
 
-    final points = await MapService.getRoutePoints(
+    final routeResult = await MapService.getRoutePoints(
       originLat: originLat,
       originLng: originLng,
       destLat: order.storeLatitude,
       destLng: order.storeLongitude,
     );
+    final points = routeResult.points;
     if (points.isEmpty) return;
 
     if (!mounted) return;
+    if (!routeResult.followsRoads) {
+      final detail = routeResult.errorMessage ?? routeResult.directionsStatus;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            detail != null && detail.isNotEmpty
+                ? 'Rota em linha reta (Directions: $detail). Ajuste a chave/restricoes no Google Cloud.'
+                : 'Rota em linha reta: verifique a chave GOOGLE_DIRECTIONS_API_KEY no Google Cloud.',
+          ),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
     setState(() {
       _polylines = {
-        Polyline(
+        _navStylePolyline(
           polylineId: const PolylineId('route_to_store'),
           points: points.map((p) => LatLng(p['lat']!, p['lng']!)).toList(),
-          color: AppColors.racingOrange,
-          width: 5,
         ),
       };
       _markers = {
@@ -522,34 +674,57 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
         ),
       };
+      _rebuildRiderNavMarker();
     });
 
-    final bounds = _computeBounds(points);
-    if (bounds != null && _mapController != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 60),
-        duration: _cameraAnimationDuration,
-      );
+    if (_deliveryNavigationActive &&
+        _mapController != null &&
+        _currentPosition != null) {
+      _snapNavigationCameraNow();
+    } else {
+      final bounds = _computeBounds(points);
+      if (bounds != null && _mapController != null) {
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngBounds(bounds, 60),
+          duration: _cameraAnimationDuration,
+        );
+      }
     }
   }
 
   Future<void> _drawRouteStoreToClient(DeliveryOrder order) async {
-    final points = await MapService.getRoutePoints(
-      originLat: order.storeLatitude,
-      originLng: order.storeLongitude,
+    final user = Provider.of<AppStateProvider>(context, listen: false).user;
+    final originLat = user?.currentLat ?? _currentPosition?.latitude ?? order.storeLatitude;
+    final originLng = user?.currentLng ?? _currentPosition?.longitude ?? order.storeLongitude;
+
+    final routeResult = await MapService.getRoutePoints(
+      originLat: originLat,
+      originLng: originLng,
       destLat: order.deliveryLatitude,
       destLng: order.deliveryLongitude,
     );
+    final points = routeResult.points;
     if (points.isEmpty) return;
 
     if (!mounted) return;
+    if (!routeResult.followsRoads) {
+      final detail = routeResult.errorMessage ?? routeResult.directionsStatus;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            detail != null && detail.isNotEmpty
+                ? 'Rota em linha reta (Directions: $detail). Ajuste a chave/restricoes no Google Cloud.'
+                : 'Rota em linha reta: verifique a chave GOOGLE_DIRECTIONS_API_KEY no Google Cloud.',
+          ),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
     setState(() {
       _polylines = {
-        Polyline(
+        _navStylePolyline(
           polylineId: const PolylineId('route_to_client'),
           points: points.map((p) => LatLng(p['lat']!, p['lng']!)).toList(),
-          color: AppColors.statusOk,
-          width: 5,
         ),
       };
       _markers = {
@@ -564,14 +739,21 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
         ),
       };
+      _rebuildRiderNavMarker();
     });
 
-    final bounds = _computeBounds(points);
-    if (bounds != null && _mapController != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 60),
-        duration: _cameraAnimationDuration,
-      );
+    if (_deliveryNavigationActive &&
+        _mapController != null &&
+        _currentPosition != null) {
+      _snapNavigationCameraNow();
+    } else {
+      final bounds = _computeBounds(points);
+      if (bounds != null && _mapController != null) {
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngBounds(bounds, 60),
+          duration: _cameraAnimationDuration,
+        );
+      }
     }
   }
 
@@ -673,6 +855,36 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _completeDelivery() async {
+    final order = _activeDeliveryOrder;
+    if (order == null) return;
+
+    setState(() => _isUpdatingDeliveryRoute = true);
+    try {
+      await ApiService.completeOrder(order.id);
+      if (!mounted) return;
+      setState(() {
+        _activeDeliveryOrder = null;
+        _polylines = {};
+        _markers = {};
+        _riderNavMarker = null;
+        _prevNavForBearing = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Entrega finalizada.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nao foi possivel finalizar a entrega: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingDeliveryRoute = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
@@ -697,13 +909,13 @@ class _HomeScreenState extends State<HomeScreen> {
               bearing: 0,
             ),
             onMapCreated: _onMapCreated,
-            myLocationEnabled: true,
+            myLocationEnabled: !_deliveryNavigationActive,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             compassEnabled: true,
             mapToolbarEnabled: false,
             polylines: _polylines,
-            markers: _markers,
+            markers: _allMapMarkers,
             mapType: _mapType,
             minMaxZoomPreference: const MinMaxZoomPreference(4, 19),
             rotateGesturesEnabled: true,
@@ -814,6 +1026,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isLoading: _isUpdatingDeliveryRoute,
               onArrivedAtStore: _confirmArrivalAtStore,
               onCollectAndStart: _collectAndStartDelivery,
+              onCompleteDelivery: _completeDelivery,
             ),
           ),
       ],
@@ -1113,12 +1326,14 @@ class _DeliveryTripStageCard extends StatelessWidget {
   final bool isLoading;
   final VoidCallback onArrivedAtStore;
   final VoidCallback onCollectAndStart;
+  final VoidCallback onCompleteDelivery;
 
   const _DeliveryTripStageCard({
     required this.order,
     required this.isLoading,
     required this.onArrivedAtStore,
     required this.onCollectAndStart,
+    required this.onCompleteDelivery,
   });
 
   @override
@@ -1126,7 +1341,8 @@ class _DeliveryTripStageCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isHeadingToStore = order.status == DeliveryStatus.accepted;
     final isWaitingPickup = order.status == DeliveryStatus.arrivedAtStore;
-    final isInTransit = order.status == DeliveryStatus.inTransit;
+    final isInTransit = order.status == DeliveryStatus.inTransit ||
+        order.status == DeliveryStatus.inProgress;
     final cardColor = theme.brightness == Brightness.dark
         ? AppColors.darkSurface.withOpacity(0.95)
         : AppColors.lightSurface.withOpacity(0.96);
@@ -1154,7 +1370,7 @@ class _DeliveryTripStageCard extends StatelessWidget {
                 ? 'Etapa 1/2: Indo para o estabelecimento'
                 : isWaitingPickup
                     ? 'Etapa 1/2: Aguardando retirada do item'
-                    : 'Etapa 2/2: Indo para o cliente',
+                    : 'Etapa 2/2: Entrega em andamento',
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w700,
             ),
@@ -1218,16 +1434,39 @@ class _DeliveryTripStageCard extends StatelessWidget {
               ),
             ),
           ],
-          if (isInTransit)
+          if (isInTransit) ...[
             Padding(
-              padding: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.only(top: 6),
               child: Text(
-                'Rota ativa da loja para o cliente.',
+                'Siga a rota ate o cliente e finalize quando entregar.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: isLoading ? null : onCompleteDelivery,
+                icon: isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(LucideIcons.checkCircle, size: 18),
+                label: Text(isLoading ? 'Finalizando...' : 'Finalizar entrega'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.statusOk,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

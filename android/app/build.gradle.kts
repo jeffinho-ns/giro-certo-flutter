@@ -5,6 +5,20 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Lê GOOGLE_MAPS_API_KEY sem java.util.Properties (evita "Unresolved reference: util" no Kotlin DSL).
+val googleMapsApiKey = run {
+    val f = rootProject.file("local.properties")
+    if (!f.exists()) return@run ""
+    f.readLines().mapNotNull { line ->
+        val trimmed = line.trim()
+        if (trimmed.startsWith("GOOGLE_MAPS_API_KEY=")) {
+            trimmed.substringAfter("=", "").trim().trim('"')
+        } else {
+            null
+        }
+    }.firstOrNull()
+}?.takeIf { it.isNotEmpty() } ?: (System.getenv("GOOGLE_MAPS_API_KEY") ?: "")
+
 android {
     namespace = "com.example.giro_certo"
     compileSdk = flutter.compileSdkVersion
@@ -29,6 +43,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
     }
 
     buildTypes {

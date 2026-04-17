@@ -28,7 +28,6 @@ import 'app_navigator_key.dart';
 import 'services/api_service.dart';
 import 'services/push_notification_service.dart' as push;
 import 'services/notification_service.dart' as local_notifications;
-import 'utils/colors.dart';
 import 'widgets/realtime_connection.dart';
 
 void main() async {
@@ -112,11 +111,34 @@ class _AuthWrapperState extends State<AuthWrapper> {
   double _rearTirePressure = 2.8;
   bool _isPreloading = true;
   bool _isRegisteringInProgress = false;
+  /// Só entra na Home após o usuario deslizar na splash nesta abertura da app (ou apos logout, nova splash).
+  bool _splashCompletedThisSession = false;
+  AppStateProvider? _appStateRef;
 
   @override
   void initState() {
     super.initState();
+    _appStateRef = Provider.of<AppStateProvider>(context, listen: false);
+    _appStateRef!.addListener(_onAppStateForSplashReset);
     _initializeAuthFlow();
+  }
+
+  @override
+  void dispose() {
+    _appStateRef?.removeListener(_onAppStateForSplashReset);
+    super.dispose();
+  }
+
+  void _onAppStateForSplashReset() {
+    final appState = _appStateRef;
+    if (appState == null) return;
+    if (!appState.resetAuthSplashAfterLogout) return;
+    appState.clearResetAuthSplashAfterLogout();
+    if (!mounted) return;
+    setState(() {
+      _splashCompletedThisSession = false;
+      _currentStep = _stepSplash;
+    });
   }
 
   Future<void> _initializeAuthFlow() async {
@@ -126,13 +148,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       appState.loadSession(),
       Future.delayed(const Duration(milliseconds: 1200)),
     ]);
-    if (appState.isLoggedIn && !appState.hasCompletedSetup) {
-      await _handleLoginAsync();
-    } else if (!appState.isLoggedIn) {
-      _currentStep = _stepLogin;
-    } else {
-      _currentStep = _stepHome;
-    }
+    // Fluxo de onboarding incompleto continua apos o deslize na splash (_onSplashComplete).
     if (!mounted) return;
     setState(() {
       _isPreloading = false;
@@ -173,6 +189,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   void _goToNextStep() {
     _setStep(_currentStep + 1);
+  }
+
+  void _onSplashComplete() {
+    if (!mounted) return;
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    setState(() {
+      _splashCompletedThisSession = true;
+    });
+    if (appState.isLoggedIn &&
+        appState.hasCompletedSetup &&
+        appState.user != null) {
+      return;
+    }
+    if (appState.isLoggedIn && !appState.hasCompletedSetup) {
+      _handleLoginAsync();
+      return;
+    }
+    _setStep(_stepLogin);
   }
 
   void _handleLogin() {
@@ -439,56 +473,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    if (_isPreloading || appState.isSessionLoading || !appState.hasHydratedSession) {
-      return Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: isDark
-                ? LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      theme.scaffoldBackgroundColor,
-                      theme.scaffoldBackgroundColor,
-                    ],
-                  )
-                : LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.lightBackground,
-                      AppColors.lightSurface,
-                    ],
-                  ),
-          ),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  'assets/images/logo.png',
-                  width: 180,
-                  fit: BoxFit.contain,
-                ),
-                const SizedBox(height: 20),
-                CircularProgressIndicator(
-                  color: themeProvider.primaryColor,
-                ),
-              ],
-            ),
-          ),
-        ),
+    final sessionStillLoading =
+        _isPreloading || appState.isSessionLoading || !appState.hasHydratedSession;
+    if (sessionStillLoading) {
+      return SplashScreen(
+        key: const ValueKey<String>('splash-loading'),
+        interactionEnabled: false,
+        onComplete: () {},
       );
     }
 
     // Fluxo de navegação: Login → Setup → Home por tipo de usuário
     // Delivery → home mapa (MainNavigation); Lojista → home lojista (MainNavigation); Casual/Diário/Racing → home social
-    if (appState.isLoggedIn && appState.hasCompletedSetup && appState.user != null) {
+    if (appState.isLoggedIn &&
+        appState.hasCompletedSetup &&
+        appState.user != null &&
+        _splashCompletedThisSession) {
       final userId = appState.user!.id;
       if (appState.shouldShowSocialHome) {
         return RealtimeConnection(userId: userId, child: const SocialHomeScreen());
@@ -499,7 +500,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
     Widget stepScreen;
     switch (_currentStep) {
       case _stepSplash:
-        stepScreen = SplashScreen(onComplete: _goToNextStep);
+        stepScreen = SplashScreen(
+          key: const ValueKey<String>('splash-interactive'),
+          interactionEnabled: true,
+          onComplete: _onSplashComplete,
+        );
         break;
       case _stepLogin:
         stepScreen = LoginScreen(

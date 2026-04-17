@@ -3,10 +3,13 @@ import '../../utils/colors.dart';
 
 class SplashScreen extends StatefulWidget {
   final VoidCallback onComplete;
+  /// Se false, o arraste está desativado (ex.: enquanto a sessão carrega).
+  final bool interactionEnabled;
 
   const SplashScreen({
     super.key,
     required this.onComplete,
+    this.interactionEnabled = true,
   });
 
   @override
@@ -111,7 +114,9 @@ class _SplashScreenState extends State<SplashScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 20, vertical: 40),
-                      child: Container(
+                      child: Stack(
+                        children: [
+                      Container(
                         width: buttonWidth,
                         height: 70,
                         decoration: BoxDecoration(
@@ -167,6 +172,7 @@ class _SplashScreenState extends State<SplashScreen> {
                               top: 5,
                               child: GestureDetector(
                                 onHorizontalDragUpdate: (details) {
+                                  if (!widget.interactionEnabled) return;
                                   if (!_completed) {
                                     setState(() {
                                       _dragPosition += details.delta.dx;
@@ -184,6 +190,7 @@ class _SplashScreenState extends State<SplashScreen> {
                                   }
                                 },
                                 onHorizontalDragEnd: (details) {
+                                  if (!widget.interactionEnabled) return;
                                   if (!_completed &&
                                       _dragPosition <
                                           buttonWidth - slideButtonWidth - 20) {
@@ -234,6 +241,36 @@ class _SplashScreenState extends State<SplashScreen> {
                             ),
                           ],
                         ),
+                      ),
+                      if (!widget.interactionEnabled)
+                        Positioned.fill(
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(35),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                SizedBox(width: 10),
+                                Text(
+                                  'Carregando...',
+                                  style: TextStyle(
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                       ),
                     ),
                     const SizedBox(height: 20),

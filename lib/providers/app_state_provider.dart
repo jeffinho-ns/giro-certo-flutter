@@ -12,6 +12,8 @@ class AppStateProvider extends ChangeNotifier {
   bool _hasCompletedSetup = false;
   bool _isSessionLoading = false;
   bool _hasHydratedSession = false;
+  /// Após [logout], o [AuthWrapper] volta a exibir a splash antes do login.
+  bool _resetAuthSplashAfterLogout = false;
   PilotProfileType? _pilotProfileType;
   DeliveryModerationStatus _deliveryModerationStatus =
       DeliveryModerationStatus.approved;
@@ -22,6 +24,7 @@ class AppStateProvider extends ChangeNotifier {
   bool get hasCompletedSetup => _hasCompletedSetup;
   bool get isSessionLoading => _isSessionLoading;
   bool get hasHydratedSession => _hasHydratedSession;
+  bool get resetAuthSplashAfterLogout => _resetAuthSplashAfterLogout;
   PilotProfileType? get pilotProfileType => _pilotProfileType;
   DeliveryModerationStatus get deliveryModerationStatus =>
       _deliveryModerationStatus;
@@ -167,6 +170,11 @@ class AppStateProvider extends ChangeNotifier {
     _hasHydratedSession = true;
     _pilotProfileType = null;
     _deliveryModerationStatus = DeliveryModerationStatus.approved;
+    _resetAuthSplashAfterLogout = true;
     notifyListeners();
+  }
+
+  void clearResetAuthSplashAfterLogout() {
+    _resetAuthSplashAfterLogout = false;
   }
 }

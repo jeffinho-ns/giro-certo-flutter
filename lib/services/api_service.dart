@@ -54,6 +54,11 @@ class ApiService {
     await _removeToken();
   }
 
+  /// Headers JSON com Bearer (rotas no servidor, etc.).
+  static Future<Map<String, String>> jsonHeadersWithAuth() async {
+    return _getHeaders();
+  }
+
   /// Headers apenas com auth (para imagens - sem Content-Type json)
   static Future<Map<String, String>> getImageHeaders() async {
     final token = await _getToken();
@@ -679,7 +684,10 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
-    return _deliveryOrderFromJson(data);
+    final orderJson = data is Map<String, dynamic>
+        ? (data['order'] as Map<String, dynamic>? ?? data)
+        : <String, dynamic>{};
+    return _deliveryOrderFromJson(orderJson);
   }
 
   /// Confirmar chegada ao estabelecimento
