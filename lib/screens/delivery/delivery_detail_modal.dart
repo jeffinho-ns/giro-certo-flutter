@@ -368,7 +368,7 @@ class DeliveryDetailModal extends StatelessWidget {
                       ),
                     ],
                     
-                    if (isRider && order.status == DeliveryStatus.inProgress && onComplete != null) ...[
+                    if (isRider && (order.status == DeliveryStatus.inTransit || order.status == DeliveryStatus.inProgress) && onComplete != null) ...[
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,

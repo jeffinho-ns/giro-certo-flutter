@@ -98,6 +98,8 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
           _orders = allOrders.where((o) => o.status == DeliveryStatus.pending).toList();
           _myOrders = myOrders.where((o) => 
             o.status == DeliveryStatus.accepted || 
+            o.status == DeliveryStatus.arrivedAtStore ||
+            o.status == DeliveryStatus.inTransit ||
             o.status == DeliveryStatus.inProgress
           ).toList();
           _completedOrders = myOrders.where((o) => o.status == DeliveryStatus.completed).toList();
@@ -113,6 +115,8 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
             _orders = myOrders.where((o) => o.status == DeliveryStatus.pending).toList();
             _myOrders = myOrders.where((o) => 
               o.status == DeliveryStatus.accepted || 
+              o.status == DeliveryStatus.arrivedAtStore ||
+              o.status == DeliveryStatus.inTransit ||
               o.status == DeliveryStatus.inProgress
             ).toList();
             _completedOrders = myOrders.where((o) => o.status == DeliveryStatus.completed).toList();
@@ -151,23 +155,20 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
 
   Future<void> _acceptOrder(DeliveryOrder order) async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
-    final userName = appState.user?.name ?? 'Você';
+    final user = appState.user;
+    if (user == null) return;
     
     try {
-      // TODO: Integrar com API real
-      // final updatedOrder = await ApiService.acceptOrder(order.id);
+      final updatedOrder = await ApiService.acceptOrder(
+        order.id,
+        riderId: user.id,
+        riderName: user.name,
+      );
       
       setState(() {
-        final index = _orders.indexWhere((o) => o.id == order.id);
-        if (index != -1) {
-          _orders[index] = order.copyWith(
-            status: DeliveryStatus.accepted,
-            riderId: 'current_user',
-            riderName: userName,
-            acceptedAt: DateTime.now(),
-          );
-          _myOrders.add(_orders[index]);
-        }
+        _orders.removeWhere((o) => o.id == order.id);
+        _myOrders.removeWhere((o) => o.id == updatedOrder.id);
+        _myOrders.add(updatedOrder);
         
         // Atualizar estatísticas
         _updateStats();
@@ -203,20 +204,12 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
 
   Future<void> _completeOrder(DeliveryOrder order) async {
     try {
-      // TODO: Integrar com API real
-      // final updatedOrder = await ApiService.completeOrder(order.id);
+      final updatedOrder = await ApiService.completeOrder(order.id);
       
       setState(() {
-        final index = _orders.indexWhere((o) => o.id == order.id);
-        if (index != -1) {
-          final completedOrder = _orders[index].copyWith(
-            status: DeliveryStatus.completed,
-            completedAt: DateTime.now(),
-          );
-          _orders[index] = completedOrder;
-          _myOrders.removeWhere((o) => o.id == order.id);
-          _completedOrders.insert(0, completedOrder);
-        }
+        _orders.removeWhere((o) => o.id == order.id);
+        _myOrders.removeWhere((o) => o.id == order.id);
+        _completedOrders.insert(0, updatedOrder);
         
         // Atualizar estatísticas
         _updateStats();
@@ -240,6 +233,48 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
           ),
         );
       }
+    }
+  }
+
+  Future<void> _advanceDeliveryStage(DeliveryOrder order) async {
+    try {
+      DeliveryOrder updatedOrder;
+      String successMessage;
+      if (order.status == DeliveryStatus.accepted) {
+        updatedOrder = await ApiService.markArrivedAtStore(order.id);
+        successMessage = 'Chegada na loja confirmada.';
+      } else if (order.status == DeliveryStatus.arrivedAtStore) {
+        updatedOrder = await ApiService.startTransit(order.id);
+        successMessage = 'Entrega iniciada. Siga para o cliente.';
+      } else if (order.status == DeliveryStatus.inTransit || order.status == DeliveryStatus.inProgress) {
+        await _completeOrder(order);
+        return;
+      } else {
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        final index = _myOrders.indexWhere((o) => o.id == updatedOrder.id);
+        if (index != -1) {
+          _myOrders[index] = updatedOrder;
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(successMessage),
+          backgroundColor: AppColors.neonGreen,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao atualizar etapa da corrida: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -804,12 +839,18 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
           ),
           ..._myOrders.map((order) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: DeliveryOrderCard(
-              order: order,
-              userLat: _userLatitude,
-              userLng: _userLongitude,
-              onTap: () => _showOrderDetail(order),
-              showAcceptButton: false,
+            child: Column(
+              children: [
+                DeliveryOrderCard(
+                  order: order,
+                  userLat: _userLatitude,
+                  userLng: _userLongitude,
+                  onTap: () => _showOrderDetail(order),
+                  showAcceptButton: false,
+                ),
+                const SizedBox(height: 8),
+                _buildRiderStageAction(theme, order),
+              ],
             ),
           )),
           const SizedBox(height: 16),
@@ -900,6 +941,36 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
           const SizedBox(height: 16),
         ],
       ],
+    );
+  }
+
+  Widget _buildRiderStageAction(ThemeData theme, DeliveryOrder order) {
+    String? label;
+    Color backgroundColor = theme.colorScheme.primary;
+    if (order.status == DeliveryStatus.accepted) {
+      label = 'Confirmar chegada na loja';
+      backgroundColor = AppColors.racingOrange;
+    } else if (order.status == DeliveryStatus.arrivedAtStore) {
+      label = 'Coletar e iniciar entrega';
+      backgroundColor = Colors.deepOrange;
+    } else if (order.status == DeliveryStatus.inTransit || order.status == DeliveryStatus.inProgress) {
+      label = 'Finalizar entrega';
+      backgroundColor = AppColors.neonGreen;
+    }
+
+    if (label == null) return const SizedBox.shrink();
+
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _advanceDeliveryStage(order),
+        icon: const Icon(LucideIcons.navigation, size: 16),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: Colors.white,
+        ),
+      ),
     );
   }
 

@@ -36,6 +36,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<MapFilterOption> _filterOptions = {};
   List<QuickMessageItem> _quickMessages = [];
   DeliveryOrder? _pipcarOrder;
+  DeliveryOrder? _activeDeliveryOrder;
+  bool _isUpdatingDeliveryRoute = false;
   MapType _mapType = MapType.normal;
   double _currentZoom = 15.0;
   static const Duration _cameraAnimationDuration = Duration(milliseconds: 800);
@@ -48,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadQuickMessages();
     _requestLocationAndListen();
     _loadPartnerData();
+    _syncDeliveryModerationStatus();
     _pollPendingDeliveriesForRider();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
@@ -174,6 +177,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (appState.user?.isRider != true) return;
     while (mounted) {
       try {
+        await _syncDeliveryModerationStatus();
+        final isDeliveryProfile = appState.user?.userType == UserType.delivery;
+        final isDeliveryApproved =
+            appState.deliveryModerationStatus == DeliveryModerationStatus.approved;
+
+        if (isDeliveryProfile && !isDeliveryApproved) {
+          if (_pipcarOrder != null && mounted) {
+            setState(() => _pipcarOrder = null);
+          }
+          await Future.delayed(const Duration(seconds: 15));
+          continue;
+        }
+
+        if (_activeDeliveryOrder != null) {
+          await Future.delayed(const Duration(seconds: 15));
+          continue;
+        }
+
         final orders = await ApiService.getDeliveryOrders(status: 'pending', limit: 10);
         if (!mounted) break;
         if (orders.isNotEmpty && _pipcarOrder == null) {
@@ -183,6 +204,27 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint('Falha ao consultar corridas pendentes: $e');
       }
       await Future.delayed(const Duration(seconds: 15));
+    }
+  }
+
+  Future<void> _syncDeliveryModerationStatus() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final user = appState.user;
+    if (user?.userType != UserType.delivery) return;
+
+    try {
+      final reg = await ApiService.getDeliveryRegistrationStatus();
+      if (!mounted) return;
+      final rawStatus = (reg?['status'] as String?)?.toUpperCase();
+      final nextStatus = rawStatus == 'APPROVED'
+          ? DeliveryModerationStatus.approved
+          : DeliveryModerationStatus.pending;
+
+      if (appState.deliveryModerationStatus != nextStatus) {
+        appState.setDeliveryModerationStatus(nextStatus);
+      }
+    } catch (e) {
+      debugPrint('Falha ao sincronizar aprovacao de delivery: $e');
     }
   }
 
@@ -450,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _mapType = type);
   }
 
-  Future<void> _fetchRouteAndDraw(DeliveryOrder order) async {
+  Future<void> _drawRouteToStore(DeliveryOrder order) async {
     final user = Provider.of<AppStateProvider>(context, listen: false).user;
     final originLat = user?.currentLat ?? _currentPosition?.latitude ?? _defaultCenter.latitude;
     final originLng = user?.currentLng ?? _currentPosition?.longitude ?? _defaultCenter.longitude;
@@ -463,28 +505,50 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (points.isEmpty) return;
 
-    final storeToDelivery = await MapService.getRoutePoints(
+    if (!mounted) return;
+    setState(() {
+      _polylines = {
+        Polyline(
+          polylineId: const PolylineId('route_to_store'),
+          points: points.map((p) => LatLng(p['lat']!, p['lng']!)).toList(),
+          color: AppColors.racingOrange,
+          width: 5,
+        ),
+      };
+      _markers = {
+        Marker(
+          markerId: const MarkerId('store'),
+          position: LatLng(order.storeLatitude, order.storeLongitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+        ),
+      };
+    });
+
+    final bounds = _computeBounds(points);
+    if (bounds != null && _mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 60),
+        duration: _cameraAnimationDuration,
+      );
+    }
+  }
+
+  Future<void> _drawRouteStoreToClient(DeliveryOrder order) async {
+    final points = await MapService.getRoutePoints(
       originLat: order.storeLatitude,
       originLng: order.storeLongitude,
       destLat: order.deliveryLatitude,
       destLng: order.deliveryLongitude,
     );
-    final allPoints = [...points];
-    if (storeToDelivery.isNotEmpty) {
-      for (final p in storeToDelivery) {
-        if (allPoints.isEmpty || allPoints.last['lat'] != p['lat'] || allPoints.last['lng'] != p['lng']) {
-          allPoints.add(p);
-        }
-      }
-    }
+    if (points.isEmpty) return;
 
     if (!mounted) return;
     setState(() {
       _polylines = {
         Polyline(
-          polylineId: const PolylineId('route'),
-          points: allPoints.map((p) => LatLng(p['lat']!, p['lng']!)).toList(),
-          color: AppColors.racingOrange,
+          polylineId: const PolylineId('route_to_client'),
+          points: points.map((p) => LatLng(p['lat']!, p['lng']!)).toList(),
+          color: AppColors.statusOk,
           width: 5,
         ),
       };
@@ -502,7 +566,7 @@ class _HomeScreenState extends State<HomeScreen> {
       };
     });
 
-    final bounds = _computeBounds(allPoints);
+    final bounds = _computeBounds(points);
     if (bounds != null && _mapController != null) {
       _mapController!.animateCamera(
         CameraUpdate.newLatLngBounds(bounds, 60),
@@ -530,11 +594,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _acceptPipcar(DeliveryOrder order) async {
+    final user = Provider.of<AppStateProvider>(context, listen: false).user;
+    if (user == null) return;
+
     setState(() => _pipcarOrder = null);
     try {
-      final accepted = await ApiService.acceptOrder(order.id);
+      final accepted = await ApiService.acceptOrder(
+        order.id,
+        riderId: user.id,
+        riderName: user.name,
+      );
       if (!mounted) return;
-      await _fetchRouteAndDraw(accepted);
+      setState(() {
+        _activeDeliveryOrder = accepted;
+      });
+      await _drawRouteToStore(accepted);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -544,12 +618,66 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _confirmArrivalAtStore() async {
+    final order = _activeDeliveryOrder;
+    if (order == null) return;
+
+    setState(() => _isUpdatingDeliveryRoute = true);
+    try {
+      final arrivedOrder = await ApiService.markArrivedAtStore(order.id);
+      if (!mounted) return;
+      setState(() {
+        _activeDeliveryOrder = arrivedOrder;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chegada confirmada. Aguardando retirada do pedido.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nao foi possivel confirmar chegada: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingDeliveryRoute = false);
+      }
+    }
+  }
+
+  Future<void> _collectAndStartDelivery() async {
+    final order = _activeDeliveryOrder;
+    if (order == null) return;
+
+    setState(() => _isUpdatingDeliveryRoute = true);
+    try {
+      final inTransitOrder = await ApiService.startTransit(order.id);
+      if (!mounted) return;
+      setState(() {
+        _activeDeliveryOrder = inTransitOrder;
+      });
+      await _drawRouteStoreToClient(inTransitOrder);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Entrega iniciada. Siga para o cliente.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nao foi possivel atualizar a etapa da corrida: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingDeliveryRoute = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
     final user = appState.user;
     final isRider = user?.isRider ?? true;
-    final theme = Theme.of(context);
     final isDeliveryProfile = user?.userType == UserType.delivery;
     final showDeliveryPendingBanner =
         appState.deliveryModerationStatus == DeliveryModerationStatus.pending &&
@@ -674,6 +802,19 @@ class _HomeScreenState extends State<HomeScreen> {
         if (!isRider && _isLoading)
           const Positioned.fill(
             child: Center(child: CircularProgressIndicator()),
+          ),
+
+        if (_activeDeliveryOrder != null)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 105,
+            child: _DeliveryTripStageCard(
+              order: _activeDeliveryOrder!,
+              isLoading: _isUpdatingDeliveryRoute,
+              onArrivedAtStore: _confirmArrivalAtStore,
+              onCollectAndStart: _collectAndStartDelivery,
+            ),
           ),
       ],
     );
@@ -963,6 +1104,132 @@ class _NotificationsFullSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _DeliveryTripStageCard extends StatelessWidget {
+  final DeliveryOrder order;
+  final bool isLoading;
+  final VoidCallback onArrivedAtStore;
+  final VoidCallback onCollectAndStart;
+
+  const _DeliveryTripStageCard({
+    required this.order,
+    required this.isLoading,
+    required this.onArrivedAtStore,
+    required this.onCollectAndStart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isHeadingToStore = order.status == DeliveryStatus.accepted;
+    final isWaitingPickup = order.status == DeliveryStatus.arrivedAtStore;
+    final isInTransit = order.status == DeliveryStatus.inTransit;
+    final cardColor = theme.brightness == Brightness.dark
+        ? AppColors.darkSurface.withOpacity(0.95)
+        : AppColors.lightSurface.withOpacity(0.96);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.racingOrange.withOpacity(0.28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.14),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            isHeadingToStore
+                ? 'Etapa 1/2: Indo para o estabelecimento'
+                : isWaitingPickup
+                    ? 'Etapa 1/2: Aguardando retirada do item'
+                    : 'Etapa 2/2: Indo para o cliente',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isHeadingToStore || isWaitingPickup
+                ? order.storeAddress
+                : order.deliveryAddress,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (isHeadingToStore) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: isLoading ? null : onArrivedAtStore,
+                icon: isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(LucideIcons.flag, size: 18),
+                label: Text(isLoading ? 'Atualizando rota...' : 'Cheguei no estabelecimento'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.racingOrange,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+          if (isWaitingPickup) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: isLoading ? null : onCollectAndStart,
+                icon: isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(LucideIcons.package, size: 18),
+                label: Text(isLoading ? 'Atualizando...' : 'Coletar e iniciar entrega'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.statusOk,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+          if (isInTransit)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                'Rota ativa da loja para o cliente.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

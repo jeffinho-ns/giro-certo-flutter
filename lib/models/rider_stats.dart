@@ -156,6 +156,8 @@ class RiderStats {
     
     final activeOrders = orders.where((o) => 
       o.status == DeliveryStatus.accepted || 
+      o.status == DeliveryStatus.arrivedAtStore ||
+      o.status == DeliveryStatus.inTransit ||
       o.status == DeliveryStatus.inProgress
     ).toList();
     

@@ -44,7 +44,10 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
       final allOrders = await ApiService.getDeliveryOrders(storeId: user.partnerId);
       final activeOrders = allOrders
           .where((o) =>
-              o.status == DeliveryStatus.accepted || o.status == DeliveryStatus.inProgress)
+              o.status == DeliveryStatus.accepted ||
+              o.status == DeliveryStatus.arrivedAtStore ||
+              o.status == DeliveryStatus.inTransit ||
+              o.status == DeliveryStatus.inProgress)
           .toList();
       final pendingOrders = allOrders.where((o) => o.status == DeliveryStatus.pending).toList();
       final completedOrders = allOrders.where((o) => o.status == DeliveryStatus.completed).toList();

@@ -61,8 +61,12 @@ class _MainNavigationState extends State<MainNavigation> {
       final reg = await ApiService.getDeliveryRegistrationStatus();
       if (reg == null || !mounted) return;
       final status = reg['status'] as String?;
-      if (status != null && status.toUpperCase() == 'APPROVED') {
-        appState.setDeliveryModerationStatus(DeliveryModerationStatus.approved);
+      final moderationStatus =
+          status != null && status.toUpperCase() == 'APPROVED'
+              ? DeliveryModerationStatus.approved
+              : DeliveryModerationStatus.pending;
+      if (appState.deliveryModerationStatus != moderationStatus) {
+        appState.setDeliveryModerationStatus(moderationStatus);
       }
       if (appState.bike == null) {
         final plate = reg['plateLicense'] as String? ?? reg['plate_license'] as String? ?? '';

@@ -645,16 +645,27 @@ class ApiService {
   }
 
   /// Aceitar corrida (motociclista)
-  static Future<DeliveryOrder> acceptOrder(String orderId) async {
+  static Future<DeliveryOrder> acceptOrder(
+    String orderId, {
+    required String riderId,
+    required String riderName,
+  }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/delivery/$orderId/accept'),
       headers: await _getHeaders(),
+      body: json.encode({
+        'riderId': riderId,
+        'riderName': riderName,
+      }),
     );
 
     _handleError(response);
 
     final data = json.decode(response.body);
-    return _deliveryOrderFromJson(data);
+    final orderJson = data is Map<String, dynamic>
+        ? (data['order'] as Map<String, dynamic>? ?? data)
+        : <String, dynamic>{};
+    return _deliveryOrderFromJson(orderJson);
   }
 
   /// Concluir corrida
@@ -669,6 +680,40 @@ class ApiService {
 
     final data = json.decode(response.body);
     return _deliveryOrderFromJson(data);
+  }
+
+  /// Confirmar chegada ao estabelecimento
+  static Future<DeliveryOrder> markArrivedAtStore(String orderId) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/delivery/$orderId/status'),
+      headers: await _getHeaders(),
+      body: json.encode({'status': 'arrivedAtStore'}),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final orderJson = data is Map<String, dynamic>
+        ? (data['order'] as Map<String, dynamic>? ?? data)
+        : <String, dynamic>{};
+    return _deliveryOrderFromJson(orderJson);
+  }
+
+  /// Iniciar deslocamento para o cliente após coleta
+  static Future<DeliveryOrder> startTransit(String orderId) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/delivery/$orderId/status'),
+      headers: await _getHeaders(),
+      body: json.encode({'status': 'inTransit'}),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final orderJson = data is Map<String, dynamic>
+        ? (data['order'] as Map<String, dynamic>? ?? data)
+        : <String, dynamic>{};
+    return _deliveryOrderFromJson(orderJson);
   }
 
   /// Obter detalhes do pedido
@@ -722,11 +767,18 @@ class ApiService {
   }
 
   static DeliveryStatus _parseDeliveryStatus(String status) {
-    switch (status.toLowerCase()) {
+    final normalized = status.toLowerCase();
+    switch (normalized) {
       case 'pending':
         return DeliveryStatus.pending;
       case 'accepted':
         return DeliveryStatus.accepted;
+      case 'arrivedatstore':
+      case 'arrived_at_store':
+        return DeliveryStatus.arrivedAtStore;
+      case 'intransit':
+      case 'in_transit':
+        return DeliveryStatus.inTransit;
       case 'inprogress':
         return DeliveryStatus.inProgress;
       case 'completed':

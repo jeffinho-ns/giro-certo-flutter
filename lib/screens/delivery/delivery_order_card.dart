@@ -66,6 +66,10 @@ class DeliveryOrderCard extends StatelessWidget {
         return Colors.orange;
       case DeliveryStatus.accepted:
         return Colors.blue;
+      case DeliveryStatus.arrivedAtStore:
+        return Colors.deepOrange;
+      case DeliveryStatus.inTransit:
+        return theme.colorScheme.primary;
       case DeliveryStatus.inProgress:
         return theme.colorScheme.primary;
       case DeliveryStatus.completed:
@@ -81,6 +85,10 @@ class DeliveryOrderCard extends StatelessWidget {
         return 'Aguardando';
       case DeliveryStatus.accepted:
         return 'Aceito';
+      case DeliveryStatus.arrivedAtStore:
+        return 'Chegou na loja';
+      case DeliveryStatus.inTransit:
+        return 'Em transito';
       case DeliveryStatus.inProgress:
         return 'Em andamento';
       case DeliveryStatus.completed:
