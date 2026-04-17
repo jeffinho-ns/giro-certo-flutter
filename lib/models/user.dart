@@ -4,6 +4,63 @@ enum UserRole {
   admin,
 }
 
+enum UserType {
+  casual,
+  diario,
+  racing,
+  delivery,
+  lojista,
+  unknown,
+}
+
+UserType parseUserType(String? value) {
+  if (value == null) return UserType.unknown;
+  final normalized = value
+      .toUpperCase()
+      .trim()
+      .replaceAll('-', '_')
+      .replaceAll(' ', '_');
+
+  switch (normalized) {
+    case 'CASUAL':
+    case 'FIM_DE_SEMANA':
+    case 'FIM_SEMANA':
+      return UserType.casual;
+    case 'DIARIO':
+    case 'URBANO':
+      return UserType.diario;
+    case 'RACING':
+    case 'PISTA':
+      return UserType.racing;
+    case 'DELIVERY':
+    case 'TRABALHO':
+      return UserType.delivery;
+    case 'LOJISTA':
+      return UserType.lojista;
+    default:
+      return UserType.unknown;
+  }
+}
+
+extension UserTypeExtension on UserType {
+  String get value {
+    switch (this) {
+      case UserType.casual:
+        return 'CASUAL';
+      case UserType.diario:
+        return 'DIARIO';
+      case UserType.racing:
+        return 'RACING';
+      case UserType.delivery:
+        return 'DELIVERY';
+      case UserType.lojista:
+        return 'LOJISTA';
+      case UserType.unknown:
+        return 'UNKNOWN';
+    }
+  }
+}
+
 extension UserRoleExtension on UserRole {
   String get value {
     switch (this) {
@@ -35,6 +92,7 @@ class User {
   final int age;
   final String? photoUrl;
   final String pilotProfile; // Fim de Semana, Urbano, Trabalho, Pista
+  final UserType userType;
   final UserRole role;
   final String? partnerId; // Se for lojista, contém o ID do Partner
   final bool isSubscriber;
@@ -53,6 +111,7 @@ class User {
     required this.age,
     this.photoUrl,
     required this.pilotProfile,
+    this.userType = UserType.unknown,
     this.role = UserRole.user,
     this.partnerId,
     this.isSubscriber = false,
@@ -66,14 +125,13 @@ class User {
   });
 
   // Verifica se o usuário é um lojista
-  bool get isPartner => partnerId != null;
+  bool get isPartner => userType == UserType.lojista || partnerId != null;
 
   // Verifica se o usuário é um motociclista
   bool get isRider => partnerId == null;
 
   /// True se o perfil de piloto for "Trabalho" (entregador).
-  bool get isDeliveryPilot =>
-      pilotProfile.toUpperCase().trim() == 'TRABALHO';
+  bool get isDeliveryPilot => userType == UserType.delivery;
 
   /// Label para badge no perfil e posts: "Delivery" ou "Piloto".
   String get pilotTypeLabel => isDeliveryPilot ? 'Delivery' : 'Piloto';
@@ -87,6 +145,12 @@ class User {
       age: json['age'] as int,
       photoUrl: json['photoUrl'] as String?,
       pilotProfile: json['pilotProfile'] as String? ?? 'URBANO',
+      userType: parseUserType(
+        json['userType'] as String? ??
+            (json['partnerId'] != null
+                ? 'LOJISTA'
+                : json['pilotProfile'] as String?),
+      ),
       role: json['role'] != null
           ? UserRoleExtension.fromString(json['role'] as String)
           : UserRole.user,
@@ -115,6 +179,7 @@ class User {
       'age': age,
       'photoUrl': photoUrl,
       'pilotProfile': pilotProfile,
+      'userType': userType.value,
       'role': role.value,
       'partnerId': partnerId,
       'isSubscriber': isSubscriber,
@@ -136,6 +201,7 @@ class User {
     int? age,
     String? photoUrl,
     String? pilotProfile,
+    UserType? userType,
     UserRole? role,
     String? partnerId,
     bool? isSubscriber,
@@ -154,6 +220,7 @@ class User {
       age: age ?? this.age,
       photoUrl: photoUrl ?? this.photoUrl,
       pilotProfile: pilotProfile ?? this.pilotProfile,
+      userType: userType ?? this.userType,
       role: role ?? this.role,
       partnerId: partnerId ?? this.partnerId,
       isSubscriber: isSubscriber ?? this.isSubscriber,

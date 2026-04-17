@@ -111,12 +111,25 @@ class _AuthWrapperState extends State<AuthWrapper> {
   double _frontTirePressure = 2.5;
   double _rearTirePressure = 2.8;
   bool _isPreloading = true;
+  bool _isBootstrappingSession = true;
   bool _isRegisteringInProgress = false;
 
   @override
   void initState() {
     super.initState();
-    _preloadAssets();
+    _initializeAuthFlow();
+  }
+
+  Future<void> _initializeAuthFlow() async {
+    await Future.wait([
+      _preloadAssets(),
+      _bootstrapSession(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _isPreloading = false;
+      _isBootstrappingSession = false;
+    });
   }
 
   Future<void> _preloadAssets() async {
@@ -134,13 +147,71 @@ class _AuthWrapperState extends State<AuthWrapper> {
         },
       );
     } catch (e) {
-      // Continua mesmo se houver erro
+      debugPrint('Erro ao pre-carregar assets: $e');
     }
+  }
 
-    if (mounted) {
-      setState(() {
-        _isPreloading = false;
-      });
+  Future<void> _bootstrapSession() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    try {
+      final hasToken = await ApiService.hasStoredToken();
+      if (!hasToken) {
+        if (mounted) {
+          setState(() => _currentStep = _stepLogin);
+        }
+        return;
+      }
+
+      final user = await ApiService.getCurrentUser();
+      appState.setUser(user);
+      appState.completeLogin();
+
+      final pilotType = _mapPilotProfileType(user.pilotProfile);
+      if (pilotType != null) {
+        appState.setPilotProfileType(pilotType);
+      }
+      appState.setDeliveryModerationStatus(
+        user.hasVerifiedDocuments
+            ? DeliveryModerationStatus.approved
+            : DeliveryModerationStatus.pending,
+      );
+
+      final setupComplete =
+          user.onboardingCompleted || await _hasCompletedSetupForUserType(user);
+      appState.setSetupCompleted(setupComplete);
+      await _handleLoginAsync();
+    } catch (e) {
+      debugPrint('Falha no bootstrap de sessão: $e');
+      appState.logout();
+      await ApiService.logout();
+      if (mounted) {
+        setState(() => _currentStep = _stepLogin);
+      }
+    }
+  }
+
+  Future<bool> _hasCompletedSetupForUserType(User user) async {
+    if (user.userType == UserType.lojista ||
+        user.userType == UserType.delivery) {
+      return true;
+    }
+    return ApiService.userHasBikes();
+  }
+
+  PilotProfileType? _mapPilotProfileType(String? profile) {
+    final userType = parseUserType(profile);
+    switch (userType) {
+      case UserType.casual:
+        return PilotProfileType.casual;
+      case UserType.diario:
+        return PilotProfileType.diario;
+      case UserType.racing:
+        return PilotProfileType.racing;
+      case UserType.delivery:
+        return PilotProfileType.delivery;
+      case UserType.lojista:
+      case UserType.unknown:
+        return null;
     }
   }
 
@@ -185,7 +256,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
       serverStep = onboarding['onboardingStep'] as int?;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Falha ao buscar onboarding no servidor: $e');
       // fallback para armazenamento local
     }
 
@@ -205,11 +277,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     if (!mounted) return;
-    if (!mounted) return;
     _setStep(restoredStep);
 
     final savedPilotType = await OnboardingService.getPilotType();
-    if (savedPilotType != null) {
+    if (savedPilotType != null && appState.pilotProfileType == null) {
       _pilotProfileType = savedPilotType;
       appState.setPilotProfileType(savedPilotType);
       _pilotProfile = savedPilotType.label;
@@ -364,13 +435,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     final existingUser = appState.user;
     final user = existingUser != null
-        ? existingUser.copyWith(pilotProfile: resolvedProfile.label)
+        ? existingUser.copyWith(
+            pilotProfile: resolvedProfile.apiValue,
+            userType: parseUserType(resolvedProfile.apiValue),
+          )
         : User(
             id: '1',
             name: _userName,
             email: _userEmail,
             age: _userAge,
-            pilotProfile: resolvedProfile.label,
+            pilotProfile: resolvedProfile.apiValue,
+            userType: parseUserType(resolvedProfile.apiValue),
           );
 
     final brand = _bikeBrand.isNotEmpty
@@ -425,7 +500,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    if (_isPreloading) {
+    if (_isPreloading || _isBootstrappingSession) {
       return Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         body: Container(

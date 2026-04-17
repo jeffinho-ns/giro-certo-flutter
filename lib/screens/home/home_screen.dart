@@ -9,6 +9,7 @@ import '../../providers/notifications_count_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/map_service.dart';
 import '../../models/delivery_order.dart';
+import '../../models/user.dart';
 import '../../models/pilot_profile.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
@@ -53,7 +54,9 @@ class _HomeScreenState extends State<HomeScreen> {
         final p = Provider.of<NotificationsCountProvider>(context, listen: false);
         p.loadFromApi();
         p.subscribeToRealtime();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Falha ao iniciar notificacoes em tempo real: $e');
+      }
     });
   }
   
@@ -96,7 +99,8 @@ class _HomeScreenState extends State<HomeScreen> {
           return QuickMessageItem(icon: icon, color: color, title: title, subtitle: body);
         }).toList();
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Falha ao carregar mensagens rapidas: $e');
       setState(() {
         _quickMessages = [
           const QuickMessageItem(icon: LucideIcons.checkCircle, color: AppColors.statusOk, title: 'Sistema ativo', subtitle: 'Sem alertas recentes'),
@@ -129,7 +133,17 @@ class _HomeScreenState extends State<HomeScreen> {
         });
         _updateUserLocation(pos.latitude, pos.longitude);
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Falha ao obter localizacao atual: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Nao foi possivel obter sua localizacao. Exibindo uma localizacao padrao.',
+            ),
+          ),
+        );
+      }
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       final user = appState.user;
       if (user?.currentLat != null && user?.currentLng != null) {
@@ -150,7 +164,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (user != null) {
         appState.setUser(user.copyWith(currentLat: lat, currentLng: lng));
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Falha ao atualizar localizacao no servidor: $e');
+    }
   }
 
   Future<void> _pollPendingDeliveriesForRider() async {
@@ -163,7 +179,9 @@ class _HomeScreenState extends State<HomeScreen> {
         if (orders.isNotEmpty && _pipcarOrder == null) {
           setState(() => _pipcarOrder = orders.first);
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Falha ao consultar corridas pendentes: $e');
+      }
       await Future.delayed(const Duration(seconds: 15));
     }
   }
@@ -186,6 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
     } catch (e) {
+      debugPrint('Falha ao carregar dados do parceiro: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -531,12 +550,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = appState.user;
     final isRider = user?.isRider ?? true;
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final isDeliveryProfile = appState.pilotProfileType?.isDelivery ??
-        (() {
-          final profile = user?.pilotProfile.toLowerCase() ?? '';
-          return profile.contains('delivery') || profile.contains('trabalho');
-        })();
+    final isDeliveryProfile = user?.userType == UserType.delivery;
     final showDeliveryPendingBanner =
         appState.deliveryModerationStatus == DeliveryModerationStatus.pending &&
             isDeliveryProfile;

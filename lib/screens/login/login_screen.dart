@@ -156,7 +156,8 @@ class _LoginScreenState extends State<LoginScreen> {
           password: _passwordController.text,
           save: _saveCredentials,
         );
-      } catch (_) {
+      } catch (e) {
+        if (kDebugMode) print('Falha ao salvar credenciais: $e');
         // Falha ao guardar não impede o login
         if (mounted && _saveCredentials) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -206,7 +207,8 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       email = await CredentialsService.getSavedEmail();
       password = await CredentialsService.getSavedPassword();
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) print('Falha ao ler credenciais salvas: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Não foi possível ler as credenciais guardadas. Faça login manualmente.')),
@@ -567,26 +569,26 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Verifica se o utilizador já completou o setup (Perfil do piloto + Minha garagem).
   /// Lojista e Delivery não precisam; riders (Casual/Diário/Racing) precisam ter bikes.
   Future<bool> _hasCompletedSetup(User user) async {
-    if (user.partnerId != null) return true; // Lojista
-    if (user.pilotProfile == 'TRABALHO') return true; // Delivery
+    if (user.userType == UserType.lojista || user.userType == UserType.delivery) {
+      return true;
+    }
     return ApiService.userHasBikes(); // Riders: precisa ter pelo menos uma moto
   }
 
   PilotProfileType? _mapPilotProfileType(String? profile) {
-    if (profile == null) return null;
-    final normalized = profile.toLowerCase();
-    if (normalized.contains('trabalho') || normalized.contains('delivery')) {
-      return PilotProfileType.delivery;
+    final userType = parseUserType(profile);
+    switch (userType) {
+      case UserType.delivery:
+        return PilotProfileType.delivery;
+      case UserType.racing:
+        return PilotProfileType.racing;
+      case UserType.casual:
+        return PilotProfileType.casual;
+      case UserType.diario:
+        return PilotProfileType.diario;
+      case UserType.lojista:
+      case UserType.unknown:
+        return null;
     }
-    if (normalized.contains('pista') || normalized.contains('racing')) {
-      return PilotProfileType.racing;
-    }
-    if (normalized.contains('fim') || normalized.contains('semana')) {
-      return PilotProfileType.casual;
-    }
-    if (normalized.contains('urbano') || normalized.contains('diario')) {
-      return PilotProfileType.diario;
-    }
-    return null;
   }
 }

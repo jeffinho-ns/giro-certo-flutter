@@ -22,15 +22,22 @@ class AppStateProvider extends ChangeNotifier {
       _deliveryModerationStatus;
 
   /// Destino após login por tipo de usuário:
-  /// - Lojista (partnerId != null) → MainNavigation (home lojista)
-  /// - Delivery (pilotProfile TRABALHO) → MainNavigation (home mapa)
-  /// - Casual, Diário, Racing → SocialHomeScreen (home social)
+  /// - Lojista/Delivery → MainNavigation
+  /// - Casual/Diário/Racing → SocialHomeScreen
   bool get shouldShowSocialHome {
     final u = _user;
     if (u == null) return false;
-    if (u.partnerId != null) return false; // Lojista → mapa/lojista
-    if (u.pilotProfile == 'TRABALHO') return false; // Delivery → mapa
-    return true; // Casual, Diário, Racing → social
+    if (u.partnerId != null) return false;
+    switch (u.userType) {
+      case UserType.casual:
+      case UserType.diario:
+      case UserType.racing:
+        return true;
+      case UserType.delivery:
+      case UserType.lojista:
+      case UserType.unknown:
+        return false;
+    }
   }
 
   void setUser(User user) {

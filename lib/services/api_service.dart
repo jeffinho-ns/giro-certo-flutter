@@ -25,6 +25,11 @@ class ApiService {
     return _cachedToken;
   }
 
+  static Future<bool> hasStoredToken() async {
+    final token = await _getToken();
+    return token != null && token.isNotEmpty;
+  }
+
   // Salvar token
   static Future<void> _saveToken(String token) async {
     _cachedToken = token;

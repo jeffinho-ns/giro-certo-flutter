@@ -90,4 +90,9 @@ class OnboardingService {
     await prefs.remove(_motorcycleIdKey);
     await prefs.remove(_motorcycleImageKey);
   }
+
+  /// Limpeza obrigatória no logout para evitar vazamento entre contas.
+  static Future<void> clearForLogout() async {
+    await clear();
+  }
 }

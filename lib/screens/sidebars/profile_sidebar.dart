@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/onboarding_service.dart';
 import '../../providers/notifications_count_provider.dart';
 import '../../services/realtime_service.dart';
 import '../../models/user.dart';
@@ -373,7 +374,19 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         Navigator.pop(context);
                         try {
                           await ApiService.logout();
-                        } catch (_) {}
+                        } catch (e) {
+                          debugPrint('Falha ao finalizar sessao no servidor: $e');
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Sessao local encerrada, mas houve falha ao notificar o servidor.',
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                        await OnboardingService.clearForLogout();
                         final appState = Provider.of<AppStateProvider>(context, listen: false);
                         RealtimeService.instance.disconnect();
                         Provider.of<NotificationsCountProvider>(context, listen: false).unsubscribe();

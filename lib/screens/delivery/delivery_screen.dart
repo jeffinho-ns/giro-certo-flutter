@@ -5,7 +5,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/delivery_order.dart';
 import '../../models/rider_stats.dart';
-import '../../services/mock_data_service.dart';
 import '../../services/api_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
@@ -33,6 +32,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
   double _userLongitude = -46.6333;
   
   bool _isLoading = false;
+  String? _loadError;
   List<DeliveryOrder> _orders = [];
   List<DeliveryOrder> _myOrders = []; // Corridas aceitas pelo usuário
   List<DeliveryOrder> _completedOrders = []; // Corridas concluídas
@@ -73,6 +73,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
   Future<void> _loadOrders() async {
     setState(() {
       _isLoading = true;
+      _loadError = null;
     });
 
     try {
@@ -82,6 +83,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
       if (user == null) {
         setState(() {
           _isLoading = false;
+          _loadError = 'Sessao expirada. Faca login novamente.';
         });
         return;
       }
@@ -126,13 +128,14 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
         }
       }
     } catch (e) {
-      // Em caso de erro, usar dados mockados
-      _loadMockOrders();
-      
+      final message = 'Erro ao carregar pedidos: $e';
       if (mounted) {
+        setState(() {
+          _loadError = message;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao carregar pedidos: $e'),
+            content: Text(message),
             backgroundColor: Colors.red,
           ),
         );
@@ -144,78 +147,6 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
         });
       }
     }
-  }
-
-  void _loadMockOrders() {
-    final orders = MockDataService.getMockDeliveryOrders(_userLatitude, _userLongitude);
-    
-    // Adicionar algumas corridas concluídas para demonstração
-    final completedOrders = List<DeliveryOrder>.from([
-      DeliveryOrder(
-        id: 'd_completed_1',
-        storeId: 'p1',
-        storeName: 'MotoPeças Central',
-        storeAddress: 'Av. Paulista, 1000',
-        storeLatitude: -23.5505,
-        storeLongitude: -46.6333,
-        deliveryAddress: 'Rua Augusta, 200',
-        deliveryLatitude: -23.5475,
-        deliveryLongitude: -46.6512,
-        value: 150.00,
-        deliveryFee: 15.50,
-        status: DeliveryStatus.completed,
-        priority: DeliveryPriority.normal,
-        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-        acceptedAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 30)),
-        completedAt: DateTime.now().subtract(const Duration(hours: 1, minutes: 45)),
-        riderId: 'current_user',
-        riderName: 'Você',
-        distance: 2.3,
-        estimatedTime: 15,
-      ),
-      DeliveryOrder(
-        id: 'd_completed_2',
-        storeId: 'p2',
-        storeName: 'Loja de Pneus Premium',
-        storeAddress: 'Rua Oscar Freire, 500',
-        storeLatitude: -23.5550,
-        storeLongitude: -46.6710,
-        deliveryAddress: 'Av. Faria Lima, 300',
-        deliveryLatitude: -23.5676,
-        deliveryLongitude: -46.6928,
-        value: 280.00,
-        deliveryFee: 18.00,
-        status: DeliveryStatus.completed,
-        priority: DeliveryPriority.high,
-        createdAt: DateTime.now().subtract(const Duration(hours: 4)),
-        acceptedAt: DateTime.now().subtract(const Duration(hours: 4, minutes: 15)),
-        completedAt: DateTime.now().subtract(const Duration(hours: 3, minutes: 30)),
-        riderId: 'current_user',
-        riderName: 'Você',
-        distance: 3.5,
-        estimatedTime: 20,
-      ),
-    ]);
-    
-    setState(() {
-      _orders = orders;
-      _myOrders = orders.where((o) => 
-        o.status == DeliveryStatus.accepted || 
-        o.status == DeliveryStatus.inProgress
-      ).toList();
-      
-      // Combinar corridas completas
-      final allCompleted = [
-        ...completedOrders,
-        ...orders.where((o) => o.status == DeliveryStatus.completed),
-      ];
-      _completedOrders = allCompleted;
-      
-      // Calcular estatísticas
-      if (_isRiderMode) {
-        _riderStats = RiderStats.fromOrders(allCompleted);
-      }
-    });
   }
 
   Future<void> _acceptOrder(DeliveryOrder order) async {
@@ -371,6 +302,8 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
                     color: primaryColor,
                   ),
                 )
+              : _loadError != null
+                ? _buildLoadErrorState(theme, primaryColor)
               : _tabController != null && _tabController!.length == (_isRiderMode ? 3 : 2)
                 ? Stack(
                     children: [
@@ -427,6 +360,50 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
     );
   }
 
+
+  Widget _buildLoadErrorState(ThemeData theme, Color primaryColor) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              LucideIcons.wifiOff,
+              size: 56,
+              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.45),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Nao foi possivel carregar os pedidos.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _loadError ?? 'Falha de conexao.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _loadOrders,
+              icon: const Icon(LucideIcons.refreshCw),
+              label: const Text('Tentar Novamente'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildMapView(ThemeData theme, List<DeliveryOrder> orders, Color primaryColor) {
     final userLocation = LatLng(_userLatitude, _userLongitude);
