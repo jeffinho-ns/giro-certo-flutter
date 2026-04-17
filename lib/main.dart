@@ -111,7 +111,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   double _frontTirePressure = 2.5;
   double _rearTirePressure = 2.8;
   bool _isPreloading = true;
-  bool _isBootstrappingSession = true;
   bool _isRegisteringInProgress = false;
 
   @override
@@ -121,14 +120,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _initializeAuthFlow() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
     await Future.wait([
       _preloadAssets(),
-      _bootstrapSession(),
+      appState.loadSession(),
+      Future.delayed(const Duration(milliseconds: 1200)),
     ]);
+    if (appState.isLoggedIn && !appState.hasCompletedSetup) {
+      await _handleLoginAsync();
+    } else if (!appState.isLoggedIn) {
+      _currentStep = _stepLogin;
+    } else {
+      _currentStep = _stepHome;
+    }
     if (!mounted) return;
     setState(() {
       _isPreloading = false;
-      _isBootstrappingSession = false;
     });
   }
 
@@ -148,70 +155,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     } catch (e) {
       debugPrint('Erro ao pre-carregar assets: $e');
-    }
-  }
-
-  Future<void> _bootstrapSession() async {
-    final appState = Provider.of<AppStateProvider>(context, listen: false);
-    try {
-      final hasToken = await ApiService.hasStoredToken();
-      if (!hasToken) {
-        if (mounted) {
-          setState(() => _currentStep = _stepLogin);
-        }
-        return;
-      }
-
-      final user = await ApiService.getCurrentUser();
-      appState.setUser(user);
-      appState.completeLogin();
-
-      final pilotType = _mapPilotProfileType(user.pilotProfile);
-      if (pilotType != null) {
-        appState.setPilotProfileType(pilotType);
-      }
-      appState.setDeliveryModerationStatus(
-        user.hasVerifiedDocuments
-            ? DeliveryModerationStatus.approved
-            : DeliveryModerationStatus.pending,
-      );
-
-      final setupComplete =
-          user.onboardingCompleted || await _hasCompletedSetupForUserType(user);
-      appState.setSetupCompleted(setupComplete);
-      await _handleLoginAsync();
-    } catch (e) {
-      debugPrint('Falha no bootstrap de sessão: $e');
-      appState.logout();
-      await ApiService.logout();
-      if (mounted) {
-        setState(() => _currentStep = _stepLogin);
-      }
-    }
-  }
-
-  Future<bool> _hasCompletedSetupForUserType(User user) async {
-    if (user.userType == UserType.lojista ||
-        user.userType == UserType.delivery) {
-      return true;
-    }
-    return ApiService.userHasBikes();
-  }
-
-  PilotProfileType? _mapPilotProfileType(String? profile) {
-    final userType = parseUserType(profile);
-    switch (userType) {
-      case UserType.casual:
-        return PilotProfileType.casual;
-      case UserType.diario:
-        return PilotProfileType.diario;
-      case UserType.racing:
-        return PilotProfileType.racing;
-      case UserType.delivery:
-        return PilotProfileType.delivery;
-      case UserType.lojista:
-      case UserType.unknown:
-        return null;
     }
   }
 
@@ -500,7 +443,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    if (_isPreloading || _isBootstrappingSession) {
+    if (_isPreloading || appState.isSessionLoading || !appState.hasHydratedSession) {
       return Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         body: Container(
@@ -524,8 +467,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
                   ),
           ),
           child: Center(
-            child: CircularProgressIndicator(
-              color: themeProvider.primaryColor,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/images/logo.png',
+                  width: 180,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 20),
+                CircularProgressIndicator(
+                  color: themeProvider.primaryColor,
+                ),
+              ],
             ),
           ),
         ),

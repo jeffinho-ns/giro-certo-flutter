@@ -569,7 +569,8 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Verifica se o utilizador já completou o setup (Perfil do piloto + Minha garagem).
   /// Lojista e Delivery não precisam; riders (Casual/Diário/Racing) precisam ter bikes.
   Future<bool> _hasCompletedSetup(User user) async {
-    if (user.userType == UserType.lojista || user.userType == UserType.delivery) {
+    // Regra de produto: login de usuário já registrado sempre vai para home.
+    if (user.userType != UserType.unknown || user.onboardingCompleted) {
       return true;
     }
     return ApiService.userHasBikes(); // Riders: precisa ter pelo menos uma moto

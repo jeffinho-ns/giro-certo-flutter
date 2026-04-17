@@ -372,8 +372,22 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                       color: AppColors.alertRed,
                       onTap: () async {
                         Navigator.pop(context);
+                        final appState =
+                            Provider.of<AppStateProvider>(context, listen: false);
+                        Provider.of<NotificationsCountProvider>(context,
+                                listen: false)
+                            .unsubscribe();
+                        RealtimeService.instance.disconnect();
+
+                        // Faz logout local imediatamente para a UI reagir sem depender da rede.
+                        await ApiService.clearStoredToken();
+                        await OnboardingService.clearForLogout();
+                        appState.logout();
+
                         try {
-                          await ApiService.logout();
+                          await ApiService.logout().timeout(
+                            const Duration(seconds: 4),
+                          );
                         } catch (e) {
                           debugPrint('Falha ao finalizar sessao no servidor: $e');
                           if (context.mounted) {
@@ -386,12 +400,6 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                             );
                           }
                         }
-                        await OnboardingService.clearForLogout();
-                        final appState = Provider.of<AppStateProvider>(context, listen: false);
-                        RealtimeService.instance.disconnect();
-                        Provider.of<NotificationsCountProvider>(context, listen: false).unsubscribe();
-                        appState.logout();
-                        // AuthWrapper reage a isLoggedIn e mostra LoginScreen
                       },
                     ),
                   ],

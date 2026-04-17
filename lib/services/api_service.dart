@@ -30,6 +30,11 @@ class ApiService {
     return token != null && token.isNotEmpty;
   }
 
+  /// Inicializa cache de autenticação no startup.
+  static Future<void> warmupAuthToken() async {
+    await _getToken();
+  }
+
   // Salvar token
   static Future<void> _saveToken(String token) async {
     _cachedToken = token;
@@ -42,6 +47,11 @@ class ApiService {
     _cachedToken = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
+  }
+
+  /// Limpa token local imediatamente (sem chamada de rede).
+  static Future<void> clearStoredToken() async {
+    await _removeToken();
   }
 
   /// Headers apenas com auth (para imagens - sem Content-Type json)
