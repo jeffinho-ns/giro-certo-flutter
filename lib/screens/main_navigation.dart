@@ -16,6 +16,7 @@ import '../models/bike.dart';
 import '../models/user.dart';
 import '../models/pilot_profile.dart';
 import '../services/api_service.dart';
+import '../services/onboarding_service.dart';
 
 /// Navegação principal com 5 destinos:
 /// 0 = Chat (CommunityScreen), 1 = Eventos (RankingScreen), 2 = Menu/Mapa (HomeScreen),
@@ -65,6 +66,11 @@ class _MainNavigationState extends State<MainNavigation> {
           status != null && status.toUpperCase() == 'APPROVED'
               ? DeliveryModerationStatus.approved
               : DeliveryModerationStatus.pending;
+      if (moderationStatus == DeliveryModerationStatus.approved) {
+        await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.approved);
+      } else if (status != null && status.toUpperCase() == 'REJECTED') {
+        await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.pending);
+      }
       if (appState.deliveryModerationStatus != moderationStatus) {
         appState.setDeliveryModerationStatus(moderationStatus);
       }

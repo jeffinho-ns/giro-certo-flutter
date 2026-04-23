@@ -4,6 +4,7 @@ import '../models/bike.dart';
 import '../models/pilot_profile.dart';
 import '../services/mock_data_service.dart';
 import '../services/api_service.dart';
+import '../services/onboarding_service.dart';
 
 class AppStateProvider extends ChangeNotifier {
   User? _user;
@@ -116,9 +117,22 @@ class AppStateProvider extends ChangeNotifier {
       _user = sessionUser;
       _isLoggedIn = true;
       _pilotProfileType = _mapPilotProfileType(sessionUser.pilotProfile);
-      _deliveryModerationStatus = sessionUser.hasVerifiedDocuments
-          ? DeliveryModerationStatus.approved
-          : DeliveryModerationStatus.pending;
+      // Delivery: se o admin já aprovou uma vez, fica persistido (como "e-mail verificado")
+      // e não voltamos a mostrar "em análise" até o primeiro fetch por hasVerifiedDocuments.
+      if (sessionUser.userType == UserType.delivery) {
+        final cached = await OnboardingService.getDeliveryStatus();
+        if (cached == DeliveryModerationStatus.approved) {
+          _deliveryModerationStatus = DeliveryModerationStatus.approved;
+        } else {
+          _deliveryModerationStatus = sessionUser.hasVerifiedDocuments
+              ? DeliveryModerationStatus.approved
+              : DeliveryModerationStatus.pending;
+        }
+      } else {
+        _deliveryModerationStatus = sessionUser.hasVerifiedDocuments
+            ? DeliveryModerationStatus.approved
+            : DeliveryModerationStatus.pending;
+      }
 
       // Regra de produto: usuário já existente que conseguiu autenticar
       // deve ir direto para a home do perfil; onboarding só no fluxo de cadastro.

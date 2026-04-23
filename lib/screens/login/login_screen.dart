@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../utils/colors.dart';
 import '../../services/api_service.dart';
+import '../../services/onboarding_service.dart';
 import '../../services/credentials_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../models/user.dart';
@@ -140,12 +141,17 @@ class _LoginScreenState extends State<LoginScreen> {
       if (pilotType != null) {
         appState.setPilotProfileType(pilotType);
       }
-      appState.setDeliveryModerationStatus(
-        user.hasVerifiedDocuments
-            ? DeliveryModerationStatus.approved
-            : DeliveryModerationStatus.pending,
-      );
-      
+      var deliveryMod = user.hasVerifiedDocuments
+          ? DeliveryModerationStatus.approved
+          : DeliveryModerationStatus.pending;
+      if (user.userType == UserType.delivery) {
+        final cached = await OnboardingService.getDeliveryStatus();
+        if (cached == DeliveryModerationStatus.approved) {
+          deliveryMod = DeliveryModerationStatus.approved;
+        }
+      }
+      appState.setDeliveryModerationStatus(deliveryMod);
+
       // Debug: verificar após salvar
       if (kDebugMode) print('🔍 Login - User salvo no AppState: ${appState.user?.email}, partnerId: ${appState.user?.partnerId}');
 
@@ -267,11 +273,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (pilotType != null) {
         appState.setPilotProfileType(pilotType);
       }
-      appState.setDeliveryModerationStatus(
-        user.hasVerifiedDocuments
-            ? DeliveryModerationStatus.approved
-            : DeliveryModerationStatus.pending,
-      );
+      var deliveryModBio = user.hasVerifiedDocuments
+          ? DeliveryModerationStatus.approved
+          : DeliveryModerationStatus.pending;
+      if (user.userType == UserType.delivery) {
+        final cached = await OnboardingService.getDeliveryStatus();
+        if (cached == DeliveryModerationStatus.approved) {
+          deliveryModBio = DeliveryModerationStatus.approved;
+        }
+      }
+      appState.setDeliveryModerationStatus(deliveryModBio);
       widget.onLogin();
     } catch (e) {
       if (mounted) {

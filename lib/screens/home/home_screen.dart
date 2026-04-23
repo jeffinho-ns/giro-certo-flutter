@@ -10,6 +10,7 @@ import '../../providers/notifications_count_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/map_service.dart';
 import '../../services/realtime_service.dart';
+import '../../services/onboarding_service.dart';
 import '../../models/delivery_order.dart';
 import '../../models/user.dart';
 import '../../models/pilot_profile.dart';
@@ -374,6 +375,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final nextStatus = rawStatus == 'APPROVED'
           ? DeliveryModerationStatus.approved
           : DeliveryModerationStatus.pending;
+
+      if (nextStatus == DeliveryModerationStatus.approved) {
+        await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.approved);
+      } else if (rawStatus == 'REJECTED') {
+        await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.pending);
+      }
 
       if (appState.deliveryModerationStatus != nextStatus) {
         appState.setDeliveryModerationStatus(nextStatus);
