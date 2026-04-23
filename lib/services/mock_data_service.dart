@@ -45,6 +45,13 @@ class MockDataService {
       oilType: '10W-40 Sintético',
       frontTirePressure: 2.5,
       rearTirePressure: 2.8,
+      photoUrl: 'assets/images/moto-black.png',
+      nickname: 'Fera do Asfalto',
+      ridingStyle: 'Urbano',
+      accessories: const ['Suporte celular', 'Bau', 'Iluminacao LED'],
+      nextUpgrade: 'Escapamento esportivo',
+      preferredColor: 'Vermelho',
+      additionalPhotos: const ['assets/images/moto-black.png'],
     );
     return _cachedBike!;
   }

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/delivery_order.dart';
 import '../models/partner.dart';
+import '../models/bike.dart';
 import '../utils/geo_coordinates_brazil.dart';
 
 class ApiService {
@@ -951,6 +952,223 @@ class ApiService {
     } catch (_) {
       return false;
     }
+  }
+
+  static Bike _bikeFromJson(Map<String, dynamic> json) {
+    final galleryRaw = json['galleryUrls'];
+    final gallery = galleryRaw is List
+        ? galleryRaw.whereType<String>().where((s) => s.trim().isNotEmpty).toList()
+        : <String>[];
+    final extras = [
+      if (json['photoUrl'] is String && (json['photoUrl'] as String).trim().isNotEmpty)
+        json['photoUrl'] as String,
+      if (json['vehiclePhotoUrl'] is String &&
+          (json['vehiclePhotoUrl'] as String).trim().isNotEmpty)
+        json['vehiclePhotoUrl'] as String,
+      if (json['platePhotoUrl'] is String &&
+          (json['platePhotoUrl'] as String).trim().isNotEmpty)
+        json['platePhotoUrl'] as String,
+      ...gallery,
+    ].toSet().toList();
+
+    return Bike(
+      id: (json['id'] as String?) ?? 'bike-1',
+      model: (json['model'] as String?) ?? 'Moto',
+      brand: (json['brand'] as String?) ?? '',
+      plate: (json['plate'] as String?) ?? '',
+      currentKm: (json['currentKm'] as num?)?.toInt() ?? 0,
+      oilType: (json['oilType'] as String?) ?? '',
+      frontTirePressure: (json['frontTirePressure'] as num?)?.toDouble() ?? 2.5,
+      rearTirePressure: (json['rearTirePressure'] as num?)?.toDouble() ?? 2.8,
+      photoUrl: json['photoUrl'] as String?,
+      nickname: json['nickname'] as String?,
+      ridingStyle: json['ridingStyle'] as String?,
+      accessories: (json['accessories'] as List<dynamic>?)
+              ?.whereType<String>()
+              .toList() ??
+          const [],
+      nextUpgrade: json['nextUpgrade'] as String?,
+      preferredColor: json['preferredColor'] as String?,
+      additionalPhotos: extras,
+    );
+  }
+
+  static Future<List<Bike>> getMyBikes() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/bikes/me/bikes'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final rows = data['bikes'] as List<dynamic>? ?? [];
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(_bikeFromJson)
+        .toList();
+  }
+
+  static Future<Bike> createBike({
+    required String model,
+    required String brand,
+    required String plate,
+    required int currentKm,
+    required String oilType,
+    required double frontTirePressure,
+    required double rearTirePressure,
+    String? photoUrl,
+    String? nickname,
+    String? ridingStyle,
+    List<String>? accessories,
+    String? nextUpgrade,
+    String? preferredColor,
+    List<String>? galleryUrls,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/bikes'),
+      headers: await _getHeaders(),
+      body: json.encode({
+        'model': model,
+        'brand': brand,
+        'plate': plate,
+        'currentKm': currentKm,
+        'oilType': oilType,
+        'frontTirePressure': frontTirePressure,
+        'rearTirePressure': rearTirePressure,
+        if (photoUrl != null) 'photoUrl': photoUrl,
+        if (nickname != null) 'nickname': nickname,
+        if (ridingStyle != null) 'ridingStyle': ridingStyle,
+        if (accessories != null) 'accessories': accessories,
+        if (nextUpgrade != null) 'nextUpgrade': nextUpgrade,
+        if (preferredColor != null) 'preferredColor': preferredColor,
+        if (galleryUrls != null) 'galleryUrls': galleryUrls,
+      }),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final bikeJson = data['bike'] as Map<String, dynamic>;
+    return _bikeFromJson(bikeJson);
+  }
+
+  static Future<Bike> updateBike(
+    String bikeId, {
+    int? currentKm,
+    String? oilType,
+    double? frontTirePressure,
+    double? rearTirePressure,
+    String? photoUrl,
+    String? nickname,
+    String? ridingStyle,
+    List<String>? accessories,
+    String? nextUpgrade,
+    String? preferredColor,
+    List<String>? galleryUrls,
+  }) async {
+    final body = <String, dynamic>{};
+    if (currentKm != null) body['currentKm'] = currentKm;
+    if (oilType != null) body['oilType'] = oilType;
+    if (frontTirePressure != null) body['frontTirePressure'] = frontTirePressure;
+    if (rearTirePressure != null) body['rearTirePressure'] = rearTirePressure;
+    if (photoUrl != null) body['photoUrl'] = photoUrl;
+    if (nickname != null) body['nickname'] = nickname;
+    if (ridingStyle != null) body['ridingStyle'] = ridingStyle;
+    if (accessories != null) body['accessories'] = accessories;
+    if (nextUpgrade != null) body['nextUpgrade'] = nextUpgrade;
+    if (preferredColor != null) body['preferredColor'] = preferredColor;
+    if (galleryUrls != null) body['galleryUrls'] = galleryUrls;
+
+    final response = await http.patch(
+      Uri.parse('$baseUrl/bikes/$bikeId'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final bikeJson = data['bike'] as Map<String, dynamic>;
+    return _bikeFromJson(bikeJson);
+  }
+
+  static Future<List<Map<String, dynamic>>> getBikeMaintenanceLogs(String bikeId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/bikes/$bikeId/maintenance'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final logs = data['logs'] as List<dynamic>? ?? [];
+    return logs.whereType<Map<String, dynamic>>().toList();
+  }
+
+  static Future<Map<String, dynamic>> createBikeMaintenanceLog(
+    String bikeId, {
+    required String partName,
+    required String category,
+    required int lastChangeKm,
+    required int recommendedChangeKm,
+    required int currentKm,
+    required String status,
+  }) async {
+    final cycle = (recommendedChangeKm - lastChangeKm).abs();
+    final used = (currentKm - lastChangeKm).clamp(0, cycle <= 0 ? 1 : cycle);
+    final wear = cycle <= 0 ? 1.0 : (used / cycle).clamp(0.0, 1.0);
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/bikes/$bikeId/maintenance'),
+      headers: await _getHeaders(),
+      body: json.encode({
+        'partName': partName,
+        'category': category,
+        'lastChangeKm': lastChangeKm,
+        'recommendedChangeKm': recommendedChangeKm,
+        'currentKm': currentKm,
+        'wearPercentage': wear,
+        'status': status,
+      }),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data['maintenanceLog'] as Map<String, dynamic>;
+  }
+
+  static Future<String> uploadUserScopedImage(String userId, String filePath) async {
+    final token = await _getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Sessão expirada. Faça login novamente.');
+    }
+    final cleanPath = filePath.replaceFirst(RegExp(r'^file://'), '');
+    final file = File(cleanPath);
+    if (!file.existsSync()) {
+      throw Exception('Arquivo de imagem não encontrado.');
+    }
+
+    final filename = cleanPath.split(RegExp(r'[/\\]')).last;
+    final bytes = await file.readAsBytes();
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/images/upload/user/$userId'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: filename.isEmpty ? 'bike.jpg' : filename,
+        contentType: _mediaTypeFromFilename(filename.isEmpty ? 'bike.jpg' : filename),
+      ),
+    );
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode >= 400) {
+      throw Exception('Falha ao enviar foto (${response.statusCode})');
+    }
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final image = data['image'] as Map<String, dynamic>?;
+    final url = image?['url'] as String? ?? data['url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw Exception('Upload concluído sem URL válida.');
+    }
+    if (url.startsWith('http')) return url;
+    final origin = Uri.parse(baseUrl).origin;
+    return '$origin${url.startsWith('/') ? url : '/$url'}';
   }
 
   /// Atualizar localização do usuário

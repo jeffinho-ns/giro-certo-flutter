@@ -117,6 +117,12 @@ class AppStateProvider extends ChangeNotifier {
       _user = sessionUser;
       _isLoggedIn = true;
       _pilotProfileType = _mapPilotProfileType(sessionUser.pilotProfile);
+      try {
+        final bikes = await ApiService.getMyBikes();
+        _bike = bikes.isNotEmpty ? bikes.first : null;
+      } catch (_) {
+        // mantém o estado atual da bike em caso de falha de rede
+      }
       // Delivery: se o admin já aprovou uma vez, fica persistido (como "e-mail verificado")
       // e não voltamos a mostrar "em análise" até o primeiro fetch por hasVerifiedDocuments.
       if (sessionUser.userType == UserType.delivery) {

@@ -443,15 +443,42 @@ class _AuthWrapperState extends State<AuthWrapper> {
       oilType: _oilType,
       frontTirePressure: _frontTirePressure,
       rearTirePressure: _rearTirePressure,
+      photoUrl: _selectedMotorcycleImagePath ?? _selectedMotorcycle?.modelImagePath,
       nickname: garageDetails?.nickname ?? model,
       ridingStyle: garageDetails?.ridingStyle,
       accessories: garageDetails?.accessories ?? const [],
       nextUpgrade: garageDetails?.nextUpgrade,
       preferredColor: garageDetails?.colorLabel,
+      additionalPhotos: [
+        if (_selectedMotorcycleImagePath != null) _selectedMotorcycleImagePath!,
+        if (_selectedMotorcycle?.modelImagePath != null &&
+            _selectedMotorcycle!.modelImagePath != _selectedMotorcycleImagePath)
+          _selectedMotorcycle!.modelImagePath,
+      ],
     );
 
     appState.setUser(user);
-    appState.setBike(bike);
+    try {
+      final persistedBike = await ApiService.createBike(
+        model: bike.model,
+        brand: bike.brand,
+        plate: bike.plate,
+        currentKm: bike.currentKm,
+        oilType: bike.oilType,
+        frontTirePressure: bike.frontTirePressure,
+        rearTirePressure: bike.rearTirePressure,
+        photoUrl: bike.photoUrl,
+        nickname: bike.nickname,
+        ridingStyle: bike.ridingStyle,
+        accessories: bike.accessories,
+        nextUpgrade: bike.nextUpgrade,
+        preferredColor: bike.preferredColor,
+        galleryUrls: bike.additionalPhotos,
+      );
+      appState.setBike(persistedBike);
+    } catch (_) {
+      appState.setBike(bike);
+    }
     appState.setPilotProfileType(resolvedProfile);
     appState.setDeliveryModerationStatus(deliveryStatus);
     appState.completeLogin();

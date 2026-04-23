@@ -13,6 +13,7 @@ class Bike {
   final List<String> accessories;
   final String? nextUpgrade;
   final String? preferredColor;
+  final List<String> additionalPhotos;
 
   Bike({
     required this.id,
@@ -29,5 +30,6 @@ class Bike {
     this.accessories = const [],
     this.nextUpgrade,
     this.preferredColor,
+    this.additionalPhotos = const [],
   });
 }
