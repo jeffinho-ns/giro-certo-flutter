@@ -117,6 +117,10 @@ void _navigateFromNotification(Map<String, dynamic> data) {
         ),
       ));
     }
+  } else if (type == 'delivery_offer') {
+    // Para corrida nova, apenas abrir a app e manter no fluxo principal.
+    // A Home irá puxar pendências e mostrar o card de corrida automaticamente.
+    return;
   } else {
     navigator.push(MaterialPageRoute<void>(
       builder: (_) => const NotificationsScreen(),
