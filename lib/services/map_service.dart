@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_service.dart';
+import '../utils/geo_coordinates_brazil.dart';
 
 /// Resultado de [MapService.getRoutePoints]: pontos da polyline e se seguem vias (Directions OK).
 class MapRoutePointsResult {
@@ -49,29 +50,36 @@ class MapService {
     required double destLat,
     required double destLng,
   }) async {
+    final norm = GeoCoordinatesBrazil.normalizeRouteEndpoints(
+      originLat,
+      originLng,
+      destLat,
+      destLng,
+    );
+
     final fromBackend = await _tryFetchRouteFromGiroApi(
-      originLat: originLat,
-      originLng: originLng,
-      destLat: destLat,
-      destLng: destLng,
+      originLat: norm.originLat,
+      originLng: norm.originLng,
+      destLat: norm.destLat,
+      destLng: norm.destLng,
     );
     if (fromBackend != null && fromBackend.followsRoads) {
       return fromBackend;
     }
 
     final google = await _clientGoogleRoutePoints(
-      originLat: originLat,
-      originLng: originLng,
-      destLat: destLat,
-      destLng: destLng,
+      originLat: norm.originLat,
+      originLng: norm.originLng,
+      destLat: norm.destLat,
+      destLng: norm.destLng,
     );
     if (google.followsRoads) return google;
 
     final osrm = await _tryOsrmRoute(
-      originLat: originLat,
-      originLng: originLng,
-      destLat: destLat,
-      destLng: destLng,
+      originLat: norm.originLat,
+      originLng: norm.originLng,
+      destLat: norm.destLat,
+      destLng: norm.destLng,
     );
     if (osrm != null && osrm.followsRoads) return osrm;
 
@@ -87,9 +95,9 @@ class MapService {
   }) async {
     try {
       final base = _osrmBase.replaceAll(RegExp(r'/$'), '');
-      final path =
-          '$originLng,$originLat;$destLng,$destLat';
-      final uri = Uri.parse('$base/route/v1/driving/$path').replace(
+      final path = '$originLng,$originLat;$destLng,$destLat';
+      final encodedPath = Uri.encodeComponent(path);
+      final uri = Uri.parse('$base/route/v1/driving/$encodedPath').replace(
         queryParameters: const {
           'overview': 'full',
           'geometries': 'geojson',
@@ -356,7 +364,7 @@ class MapService {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': _directionsApiKey,
                 'X-Goog-FieldMask':
-                    'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline',
+                    'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline',
                 'User-Agent': 'GiroCerto/1.0 Flutter',
               },
               body: body,
@@ -448,6 +456,15 @@ class MapService {
 
   static List<Map<String, double>> _decodePolyline(String? encoded) {
     if (encoded == null || encoded.isEmpty) return [];
+    try {
+      return _decodePolylineImpl(encoded);
+    } catch (e, st) {
+      debugPrint('Polyline decode: $e $st');
+      return [];
+    }
+  }
+
+  static List<Map<String, double>> _decodePolylineImpl(String encoded) {
     final points = <Map<String, double>>[];
     int index = 0;
     int lat = 0;
@@ -458,6 +475,7 @@ class MapService {
       int shift = 0;
       int b;
       do {
+        if (index >= encoded.length) return points;
         b = encoded.codeUnitAt(index++) - 63;
         result |= (b & 0x1f) << shift;
         shift += 5;
@@ -468,6 +486,7 @@ class MapService {
       result = 0;
       shift = 0;
       do {
+        if (index >= encoded.length) return points;
         b = encoded.codeUnitAt(index++) - 63;
         result |= (b & 0x1f) << shift;
         shift += 5;

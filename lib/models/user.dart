@@ -1,3 +1,5 @@
+import '../utils/geo_coordinates_brazil.dart';
+
 enum UserRole {
   user,
   moderator,
@@ -138,6 +140,22 @@ class User {
 
   // Factory para criar User a partir de JSON (da API)
   factory User.fromJson(Map<String, dynamic> json) {
+    double? curLat;
+    double? curLng;
+    if (json['currentLat'] != null && json['currentLng'] != null) {
+      final n = GeoCoordinatesBrazil.normalizeRoutingPair(
+        (json['currentLat'] as num).toDouble(),
+        (json['currentLng'] as num).toDouble(),
+      );
+      curLat = n.lat;
+      curLng = n.lng;
+    } else {
+      curLat =
+          json['currentLat'] != null ? (json['currentLat'] as num).toDouble() : null;
+      curLng =
+          json['currentLng'] != null ? (json['currentLng'] as num).toDouble() : null;
+    }
+
     return User(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -161,12 +179,8 @@ class User {
       isOnline: json['isOnline'] as bool? ?? false,
       onboardingCompleted: json['onboardingCompleted'] as bool? ?? false,
       onboardingStep: json['onboardingStep'] as int? ?? 0,
-      currentLat: json['currentLat'] != null
-          ? (json['currentLat'] as num).toDouble()
-          : null,
-      currentLng: json['currentLng'] != null
-          ? (json['currentLng'] as num).toDouble()
-          : null,
+      currentLat: curLat,
+      currentLng: curLng,
     );
   }
 

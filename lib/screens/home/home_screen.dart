@@ -9,6 +9,7 @@ import '../../providers/app_state_provider.dart';
 import '../../providers/notifications_count_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/map_service.dart';
+import '../../services/realtime_service.dart';
 import '../../models/delivery_order.dart';
 import '../../models/user.dart';
 import '../../models/pilot_profile.dart';
@@ -252,7 +253,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentPosition = LatLng(pos.latitude, pos.longitude);
         _rebuildRiderNavMarker();
       });
-      _updateUserLocation(pos.latitude, pos.longitude);
+      _updateUserLocation(
+        pos.latitude,
+        pos.longitude,
+        activeOrder: _activeDeliveryOrder,
+      );
       if (_deliveryNavigationActive) _snapNavigationCameraNow();
 
       _positionSubscription = Geolocator.getPositionStream(
@@ -267,7 +272,11 @@ class _HomeScreenState extends State<HomeScreen> {
           _currentPosition = LatLng(pos.latitude, pos.longitude);
           _rebuildRiderNavMarker();
         });
-        _updateUserLocation(pos.latitude, pos.longitude);
+        _updateUserLocation(
+          pos.latitude,
+          pos.longitude,
+          activeOrder: _activeDeliveryOrder,
+        );
         if (_deliveryNavigationActive) {
           _followNavigationCameraThrottled();
         }
@@ -295,7 +304,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _updateUserLocation(double lat, double lng) async {
+  Future<void> _updateUserLocation(
+    double lat,
+    double lng, {
+    DeliveryOrder? activeOrder,
+  }) async {
     try {
       await ApiService.updateUserLocation(latitude: lat, longitude: lng);
       final appState = Provider.of<AppStateProvider>(context, listen: false);
@@ -303,6 +316,12 @@ class _HomeScreenState extends State<HomeScreen> {
       if (user != null) {
         appState.setUser(user.copyWith(currentLat: lat, currentLng: lng));
       }
+      RealtimeService.instance.emitRiderLocationThrottled(
+        lat: lat,
+        lng: lng,
+        orderId: activeOrder?.id,
+        orderStatus: activeOrder != null ? activeOrder.status.name : null,
+      );
     } catch (e) {
       debugPrint('Falha ao atualizar localizacao no servidor: $e');
     }

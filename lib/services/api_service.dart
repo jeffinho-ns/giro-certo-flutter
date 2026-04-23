@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/delivery_order.dart';
 import '../models/partner.dart';
+import '../utils/geo_coordinates_brazil.dart';
 
 class ApiService {
   // TODO: Configurar via variável de ambiente
@@ -609,6 +610,15 @@ class ApiService {
     required double deliveryFee,
     String? priority,
   }) async {
+    final store = GeoCoordinatesBrazil.normalizeRoutingPair(
+      storeLatitude,
+      storeLongitude,
+    );
+    final delivery = GeoCoordinatesBrazil.normalizeRoutingPair(
+      deliveryLatitude,
+      deliveryLongitude,
+    );
+
     final response = await http
         .post(
       Uri.parse('$baseUrl/delivery'),
@@ -617,11 +627,11 @@ class ApiService {
         'storeId': storeId,
         'storeName': storeName,
         'storeAddress': storeAddress,
-        'storeLatitude': storeLatitude,
-        'storeLongitude': storeLongitude,
+        'storeLatitude': store.lat,
+        'storeLongitude': store.lng,
         'deliveryAddress': deliveryAddress,
-        'deliveryLatitude': deliveryLatitude,
-        'deliveryLongitude': deliveryLongitude,
+        'deliveryLatitude': delivery.lat,
+        'deliveryLongitude': delivery.lng,
         if (recipientName != null) 'recipientName': recipientName,
         if (recipientPhone != null) 'recipientPhone': recipientPhone,
         if (notes != null) 'notes': notes,
@@ -739,16 +749,23 @@ class ApiService {
 
   // Converter JSON da API para DeliveryOrder
   static DeliveryOrder _deliveryOrderFromJson(Map<String, dynamic> json) {
+    final rawStoreLat = (json['storeLatitude'] as num).toDouble();
+    final rawStoreLng = (json['storeLongitude'] as num).toDouble();
+    final rawDelLat = (json['deliveryLatitude'] as num).toDouble();
+    final rawDelLng = (json['deliveryLongitude'] as num).toDouble();
+    final store = GeoCoordinatesBrazil.normalizeRoutingPair(rawStoreLat, rawStoreLng);
+    final delivery = GeoCoordinatesBrazil.normalizeRoutingPair(rawDelLat, rawDelLng);
+
     return DeliveryOrder(
       id: json['id'] as String,
       storeId: json['storeId'] as String,
       storeName: json['storeName'] as String,
       storeAddress: json['storeAddress'] as String,
-      storeLatitude: (json['storeLatitude'] as num).toDouble(),
-      storeLongitude: (json['storeLongitude'] as num).toDouble(),
+      storeLatitude: store.lat,
+      storeLongitude: store.lng,
       deliveryAddress: json['deliveryAddress'] as String,
-      deliveryLatitude: (json['deliveryLatitude'] as num).toDouble(),
-      deliveryLongitude: (json['deliveryLongitude'] as num).toDouble(),
+      deliveryLatitude: delivery.lat,
+      deliveryLongitude: delivery.lng,
       recipientName: json['recipientName'] as String?,
       recipientPhone: json['recipientPhone'] as String?,
       notes: json['notes'] as String?,
@@ -942,12 +959,13 @@ class ApiService {
     required double longitude,
     bool? isOnline,
   }) async {
+    final pos = GeoCoordinatesBrazil.normalizeRoutingPair(latitude, longitude);
     final response = await http.put(
       Uri.parse('$baseUrl/users/me/location'),
       headers: await _getHeaders(),
       body: json.encode({
-        'latitude': latitude,
-        'longitude': longitude,
+        'latitude': pos.lat,
+        'longitude': pos.lng,
         if (isOnline != null) 'isOnline': isOnline,
       }),
     );

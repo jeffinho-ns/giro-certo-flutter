@@ -18,6 +18,10 @@ class RealtimeService {
   static final RealtimeService instance = RealtimeService._();
 
   io.Socket? _socket;
+  String? _connectedUserId;
+  int _lastRiderLocationEmitMs = 0;
+  static const int _riderLocationEmitMinMs = 8000;
+
   final _chatMessageController = StreamController<ChatMessagePayload>.broadcast();
   final _notificationController = StreamController<Map<String, dynamic>>.broadcast();
 
@@ -34,10 +38,11 @@ class RealtimeService {
   }
 
   void connect(String userId) {
-    if (_socket?.connected == true) {
-      if (_socket!.id != null) return;
-      disconnect();
+    _connectedUserId = userId;
+    if (_socket?.connected == true && _socket?.id != null) {
+      return;
     }
+    disconnect(clearUserId: false);
     _socket = io.io(
       _socketUrl,
       io.OptionBuilder()
@@ -102,14 +107,38 @@ class RealtimeService {
     _socket!.onConnectError((e) {});
   }
 
-  void disconnect() {
+  /// Emite posição para a Torre de Controle (throttle ~8s). Espelha o PUT /users/me/location.
+  void emitRiderLocationThrottled({
+    required double lat,
+    required double lng,
+    String? orderId,
+    String? orderStatus,
+  }) {
+    if (_socket?.connected != true || _connectedUserId == null) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastRiderLocationEmitMs < _riderLocationEmitMinMs) return;
+    _lastRiderLocationEmitMs = now;
+    _socket!.emit('rider:location', {
+      'userId': _connectedUserId,
+      'lat': lat,
+      'lng': lng,
+      if (orderId != null) 'orderId': orderId,
+      if (orderStatus != null) 'status': orderStatus,
+      'at': now,
+    });
+  }
+
+  void disconnect({bool clearUserId = true}) {
     _socket?.disconnect();
     _socket?.dispose();
     _socket = null;
+    if (clearUserId) {
+      _connectedUserId = null;
+    }
   }
 
   void dispose() {
-    disconnect();
+    disconnect(clearUserId: true);
     _chatMessageController.close();
     _notificationController.close();
   }
