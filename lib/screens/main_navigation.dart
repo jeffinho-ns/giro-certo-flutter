@@ -68,26 +68,29 @@ class _MainNavigationState extends State<MainNavigation> {
       if (appState.deliveryModerationStatus != moderationStatus) {
         appState.setDeliveryModerationStatus(moderationStatus);
       }
-      if (appState.bike == null) {
-        final plate = reg['plateLicense'] as String? ?? reg['plate_license'] as String? ?? '';
-        final currentKm = reg['currentKilometers'] as int? ?? reg['current_kilometers'] as int? ?? 0;
-        if (plate.isNotEmpty && mounted) {
-          final regVt = reg['vehicleType'] as String? ?? 'MOTORCYCLE';
-          final bike = Bike(
-            id: '1',
-            brand: 'Moto',
-            model: 'Delivery',
-            plate: plate,
-            currentKm: currentKm,
-            oilType: '10W-40',
-            frontTirePressure: 2.5,
-            rearTirePressure: 2.8,
-            vehicleType: regVt.toUpperCase() == 'BICYCLE'
-                ? AppVehicleType.bicycle
-                : AppVehicleType.motorcycle,
-          );
-          appState.setBike(bike);
-        }
+      if (appState.bike == null && mounted) {
+        final plateRaw =
+            reg['plateLicense'] as String? ?? reg['plate_license'] as String? ?? '';
+        final plate = plateRaw.trim().isEmpty ? 'S/N' : plateRaw.trim();
+        final currentKm = (reg['currentKilometers'] as num? ??
+                reg['current_kilometers'] as num? ??
+                0)
+            .toInt();
+        final regVt = (reg['vehicleType'] as String? ?? 'MOTORCYCLE').toUpperCase();
+        final bike = Bike(
+          id: 'delivery-registration-fallback',
+          brand: regVt == 'BICYCLE' ? 'Bicicleta' : 'Moto',
+          model: 'Delivery',
+          plate: plate,
+          currentKm: currentKm,
+          oilType: regVt == 'BICYCLE' ? '—' : '10W-40',
+          frontTirePressure: regVt == 'BICYCLE' ? 0 : 2.5,
+          rearTirePressure: regVt == 'BICYCLE' ? 0 : 2.8,
+          vehicleType: regVt == 'BICYCLE'
+              ? AppVehicleType.bicycle
+              : AppVehicleType.motorcycle,
+        );
+        appState.setBike(bike);
       }
     } catch (e) {
       debugPrint('Falha ao carregar dados delivery da moto: $e');

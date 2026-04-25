@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../models/bike.dart';
 import '../models/pilot_profile.dart';
+import '../models/vehicle_type.dart';
 import '../services/mock_data_service.dart';
 import '../services/api_service.dart';
 import '../services/onboarding_service.dart';
@@ -139,8 +140,44 @@ class AppStateProvider extends ChangeNotifier {
       }
       // Delivery: se o admin já aprovou uma vez, fica persistido (como "e-mail verificado")
       // e não voltamos a mostrar "em análise" até o primeiro fetch por hasVerifiedDocuments.
-      final sessionIsDelivery = sessionUser.userType == UserType.delivery ||
+      Map<String, dynamic>? deliveryRegistration;
+      var sessionIsDelivery = sessionUser.userType == UserType.delivery ||
           parseUserType(sessionUser.pilotProfile) == UserType.delivery;
+      try {
+        deliveryRegistration = await ApiService.getDeliveryRegistrationStatus();
+        if (deliveryRegistration != null) {
+          sessionIsDelivery = true;
+          _pilotProfileType = PilotProfileType.delivery;
+          if (_bike == null) {
+            final regVt =
+                (deliveryRegistration['vehicleType'] as String? ?? 'MOTORCYCLE')
+                    .toUpperCase();
+            final regPlate = (deliveryRegistration['plateLicense'] as String? ??
+                    deliveryRegistration['plate_license'] as String? ??
+                    '')
+                .trim();
+            final regKm = (deliveryRegistration['currentKilometers'] as num? ??
+                    deliveryRegistration['current_kilometers'] as num? ??
+                    0)
+                .toInt();
+            _bike = Bike(
+              id: 'delivery-registration-fallback',
+              model: 'Delivery',
+              brand: regVt == 'BICYCLE' ? 'Bicicleta' : 'Moto',
+              plate: regPlate.isEmpty ? 'S/N' : regPlate,
+              currentKm: regKm,
+              oilType: regVt == 'BICYCLE' ? '—' : '10W-40',
+              frontTirePressure: regVt == 'BICYCLE' ? 0 : 2.5,
+              rearTirePressure: regVt == 'BICYCLE' ? 0 : 2.8,
+              vehicleType: regVt == 'BICYCLE'
+                  ? AppVehicleType.bicycle
+                  : AppVehicleType.motorcycle,
+            );
+          }
+        }
+      } catch (_) {
+        // sem fallback de rede, mantém detecção local
+      }
       if (sessionIsDelivery) {
         final cached = await OnboardingService.getDeliveryStatus();
         if (cached == DeliveryModerationStatus.approved) {
