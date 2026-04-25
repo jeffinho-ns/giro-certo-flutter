@@ -16,22 +16,21 @@ import '../../utils/colors.dart';
 import '../../widgets/social/social_search_bar.dart';
 import '../../widgets/social/story_tile.dart';
 import '../../widgets/social/post_card.dart';
-import '../../widgets/social/social_bottom_nav.dart';
+import '../../widgets/floating_bottom_nav.dart';
+import '../../widgets/menu_grid_modal.dart';
 import '../../widgets/social/feed_skeleton.dart';
 import 'story_view_screen.dart';
 import 'story_preview_edit_screen.dart';
-import 'create_post_modal.dart';
 import 'create_story_sheet.dart';
-import 'create_action_sheet.dart';
-import 'create_community_modal.dart';
-import 'send_notification_sheet.dart';
 import 'post_comments_sheet.dart';
 import 'report_post_sheet.dart';
 import 'notifications_screen.dart';
-import 'explorar_screen.dart';
 import 'profile_page.dart';
 import 'user_profile_screen.dart';
 import 'user_search_screen.dart';
+import '../ranking/ranking_screen.dart';
+import '../momentos/momentos_screen.dart';
+import '../garage/garage_screen.dart';
 import '../chat/chat_screen.dart';
 
 class SocialHomeScreen extends StatefulWidget {
@@ -171,51 +170,6 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
     );
   }
 
-  void _openCreatePost() async {
-    final user = Provider.of<AppStateProvider>(context, listen: false).user;
-    final bike = Provider.of<AppStateProvider>(context, listen: false).bike;
-    final feed = Provider.of<SocialFeedProvider>(context, listen: false);
-    if (user == null) return;
-    final post = await showModalBottomSheet<Post>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => CreatePostModal(
-        user: user,
-        userBikeModel: bike?.model ?? 'Moto',
-      ),
-    );
-    if (post != null) {
-      feed.prependPost(post);
-    }
-  }
-
-  void _openCreateAction() async {
-    final action = await CreateActionSheet.show(context);
-    if (action == null || !mounted) return;
-    switch (action) {
-      case CreateActionType.post:
-        _openCreatePost();
-        break;
-      case CreateActionType.community:
-        final community = await showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => const CreateCommunityModal(),
-        );
-        if (community != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Comunidade criada com sucesso!')),
-          );
-        }
-        break;
-      case CreateActionType.notification:
-        await SendNotificationSheet.show(context);
-        break;
-    }
-  }
-
   Future<void> _openCreateStory() async {
     final result = await CreateStorySheet.show(context);
     if (result is Map && result['openPreview'] == true) {
@@ -234,30 +188,80 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
 
   void _onNavTap(int index) {
     if (index == 2) {
-      _openCreateAction();
+      _openUnifiedMenu();
       return;
     }
     if (index == 3) {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ChatScreen()),
+        MaterialPageRoute(builder: (_) => const MomentosScreen()),
       );
       return;
     }
     if (index == 4) {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const ProfilePage(),
-        ),
+        MaterialPageRoute(builder: (_) => const GarageScreen()),
       );
       return;
     }
     if (index == 1) {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ExplorarScreen()),
+        MaterialPageRoute(builder: (_) => const RankingScreen()),
+      );
+      return;
+    }
+    if (index == 0) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ChatScreen()),
       );
       return;
     }
     setState(() => _currentNavIndex = index);
+  }
+
+  void _openUnifiedMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      enableDrag: true,
+      isDismissible: true,
+      builder: (context) {
+        final appState = Provider.of<AppStateProvider>(context, listen: false);
+        return MenuGridModal(
+          onClose: () {},
+          isDeliveryPilot: appState.isDeliveryPilot,
+          isPartner: appState.user?.isPartner ?? false,
+          onNavigateToIndex: (routeIndex) {
+            if (routeIndex == 0) {
+              setState(() => _currentNavIndex = 0);
+              return;
+            }
+            if (routeIndex == 1) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const RankingScreen()),
+              );
+              return;
+            }
+            if (routeIndex == 2) {
+              return;
+            }
+            if (routeIndex == 3) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MomentosScreen()),
+              );
+              return;
+            }
+            if (routeIndex == 4) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const GarageScreen()),
+              );
+              return;
+            }
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -507,7 +511,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: SocialBottomNav(
+      bottomNavigationBar: FloatingBottomNav(
         currentIndex: _currentNavIndex,
         onTap: _onNavTap,
       ),

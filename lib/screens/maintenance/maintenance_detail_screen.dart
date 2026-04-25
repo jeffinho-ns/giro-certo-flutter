@@ -21,58 +21,67 @@ class MaintenanceDetailScreen extends StatelessWidget {
 
     // Se não houver bike, mostrar mensagem
     if (bike == null) {
-      return SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            const ModernHeader(
-              title: 'Manutenção Detalhada',
-              showBackButton: false,
-            ),
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      LucideIcons.bike,
-                      size: 64,
-                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Configure sua moto na garagem',
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Para visualizar as manutenções, você precisa cadastrar uma moto.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+      return Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              ModernHeader(
+                title: 'Manutenção Detalhada',
+                showBackButton: true,
+                onBackPressed: () => Navigator.of(context).maybePop(),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        LucideIcons.bike,
+                        size: 64,
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      Text(
+                        'Configure sua moto na garagem',
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Para visualizar as manutenções, você precisa cadastrar uma moto.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.textTheme.bodyMedium?.color
+                              ?.withOpacity(0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     final maintenances = MockDataService.getMockMaintenances(bike.currentKm);
 
-    return SafeArea(
-      bottom: false,
-      child: Column(
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
           children: [
             // Header
-            const ModernHeader(
+            ModernHeader(
               title: 'Manutenção Detalhada',
-              showBackButton: false,
+              showBackButton: true,
+              onBackPressed: () => Navigator.of(context).maybePop(),
             ),
-            
+
             // Lista de manutenções
             Expanded(
               child: ListView.builder(
@@ -80,19 +89,22 @@ class MaintenanceDetailScreen extends StatelessWidget {
                 itemCount: maintenances.length,
                 itemBuilder: (context, index) {
                   final maintenance = maintenances[index];
-                  return _buildModernMaintenanceCard(context, maintenance, theme);
+                  return _buildModernMaintenanceCard(
+                      context, maintenance, theme);
                 },
               ),
             ),
           ],
         ),
-      );
+      ),
+    );
   }
 
-  Widget _buildModernMaintenanceCard(BuildContext context, Maintenance maintenance, ThemeData theme) {
+  Widget _buildModernMaintenanceCard(
+      BuildContext context, Maintenance maintenance, ThemeData theme) {
     Color statusColor;
     IconData statusIcon;
-    
+
     if (maintenance.status == 'OK') {
       statusColor = AppColors.statusOk;
       statusIcon = LucideIcons.checkCircle;
@@ -108,25 +120,17 @@ class MaintenanceDetailScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            statusColor.withOpacity(0.1),
-            statusColor.withOpacity(0.05),
-          ],
-        ),
         color: theme.cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: statusColor.withOpacity(0.3),
-          width: 1.5,
+          color: statusColor.withOpacity(0.22),
+          width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: statusColor.withOpacity(0.15),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: theme.shadowColor.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -165,14 +169,16 @@ class MaintenanceDetailScreen extends StatelessWidget {
                       maintenance.category,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontSize: 14,
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
                       ),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -192,9 +198,9 @@ class MaintenanceDetailScreen extends StatelessWidget {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Barra de progresso moderna
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,7 +231,8 @@ class MaintenanceDetailScreen extends StatelessWidget {
                       Icon(
                         LucideIcons.mapPin,
                         size: 16,
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -250,9 +257,9 @@ class MaintenanceDetailScreen extends StatelessWidget {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Informações em grid
           Container(
             padding: const EdgeInsets.all(16),
@@ -267,7 +274,8 @@ class MaintenanceDetailScreen extends StatelessWidget {
                     theme: theme,
                     icon: LucideIcons.clock,
                     label: 'Última Troca',
-                    value: '${NumberFormat('#,###').format(maintenance.lastChangeKm)} km',
+                    value:
+                        '${NumberFormat('#,###').format(maintenance.lastChangeKm)} km',
                   ),
                 ),
                 Container(
@@ -280,52 +288,54 @@ class MaintenanceDetailScreen extends StatelessWidget {
                     theme: theme,
                     icon: LucideIcons.target,
                     label: 'Recomendado',
-                    value: '${NumberFormat('#,###').format(maintenance.recommendedChangeKm)} km',
+                    value:
+                        '${NumberFormat('#,###').format(maintenance.recommendedChangeKm)} km',
                   ),
                 ),
               ],
             ),
           ),
-          
+
           // Sugestão de parceiro para itens com status Atenção ou Crítico
-          if (maintenance.status == 'Atenção' || maintenance.status == 'Crítico')
+          if (maintenance.status == 'Atenção' ||
+              maintenance.status == 'Crítico')
             _buildPartnerSuggestion(context, maintenance, theme),
         ],
       ),
     );
   }
 
-  Widget _buildPartnerSuggestion(BuildContext context, Maintenance maintenance, ThemeData theme) {
+  Widget _buildPartnerSuggestion(
+      BuildContext context, Maintenance maintenance, ThemeData theme) {
     // Localização simulada do usuário
     const double userLatitude = -23.5505;
     const double userLongitude = -46.6333;
-    
+
     final partners = MockDataService.getMockPartners();
-    
+
     // Encontrar parceiros relevantes que tenham promoções para a categoria
     final relevantPartners = partners.where((partner) {
       // Verifica se o parceiro tem especialidade na categoria ou promoção relacionada
-      final hasSpecialty = partner.specialties.any(
-        (specialty) => specialty.toLowerCase() == maintenance.category.toLowerCase()
-      );
-      final hasPromotion = partner.activePromotions.any(
-        (promo) => promo.category?.toLowerCase() == maintenance.category.toLowerCase()
-      );
-      return (hasSpecialty || hasPromotion) && partner.activePromotions.isNotEmpty;
+      final hasSpecialty = partner.specialties.any((specialty) =>
+          specialty.toLowerCase() == maintenance.category.toLowerCase());
+      final hasPromotion = partner.activePromotions.any((promo) =>
+          promo.category?.toLowerCase() == maintenance.category.toLowerCase());
+      return (hasSpecialty || hasPromotion) &&
+          partner.activePromotions.isNotEmpty;
     }).toList();
-    
+
     if (relevantPartners.isEmpty) return const SizedBox.shrink();
-    
+
     // Ordenar por distância
-    relevantPartners.sort((a, b) => 
-      a.distanceTo(userLatitude, userLongitude)
-        .compareTo(b.distanceTo(userLatitude, userLongitude))
-    );
-    
+    relevantPartners.sort((a, b) => a
+        .distanceTo(userLatitude, userLongitude)
+        .compareTo(b.distanceTo(userLatitude, userLongitude)));
+
     final nearestPartner = relevantPartners.first;
     final distance = nearestPartner.distanceTo(userLatitude, userLongitude);
     final relevantPromotion = nearestPartner.activePromotions.firstWhere(
-      (promo) => promo.category?.toLowerCase() == maintenance.category.toLowerCase(),
+      (promo) =>
+          promo.category?.toLowerCase() == maintenance.category.toLowerCase(),
       orElse: () => nearestPartner.activePromotions.first,
     );
 
@@ -406,7 +416,8 @@ class MaintenanceDetailScreen extends StatelessWidget {
                   const Spacer(),
                   if (nearestPartner.isTrusted)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: AppColors.neonGreen.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),

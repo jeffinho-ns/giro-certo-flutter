@@ -10,6 +10,11 @@ import '../screens/partners/partners_screen.dart';
 import '../screens/delivery/delivery_screen.dart';
 import '../screens/social/social_home_screen.dart';
 import '../screens/social/user_search_screen.dart';
+import '../screens/chat/chat_screen.dart';
+import '../screens/social/create_post_modal.dart';
+import '../screens/social/create_action_sheet.dart';
+import '../screens/social/create_community_modal.dart';
+import '../screens/social/send_notification_sheet.dart';
 
 class MenuGridModal extends StatefulWidget {
   final VoidCallback? onClose;
@@ -151,27 +156,96 @@ class _MenuGridModalState extends State<MenuGridModal> {
   List<MenuGridItem> _baseItems() {
     if (_isPartner) {
       return const [
-        MenuGridItem(id: 'maintenance', icon: LucideIcons.wrench, label: 'Manutenção', routeIndex: 101),
-        MenuGridItem(id: 'partners', icon: LucideIcons.store, label: 'Parceiros', routeIndex: 102),
-        MenuGridItem(id: 'orders', icon: LucideIcons.package, label: 'Pedidos', routeIndex: 105, highlight: true),
-        MenuGridItem(id: 'photo', icon: LucideIcons.camera, label: 'Foto Sport', routeIndex: 109),
-        MenuGridItem(id: 'routes', icon: LucideIcons.mapPin, label: 'Rotas', routeIndex: 111),
-        MenuGridItem(id: 'help', icon: LucideIcons.helpCircle, label: 'Help', routeIndex: 112),
-        MenuGridItem(id: 'news', icon: LucideIcons.newspaper, label: 'News', routeIndex: 106),
-        MenuGridItem(id: 'drive', icon: LucideIcons.car, label: 'Modo Drive', routeIndex: 113),
-        MenuGridItem(id: 'vehicles', icon: LucideIcons.bike, label: 'Veículos', routeIndex: 4),
-        MenuGridItem(id: 'communities', icon: LucideIcons.users, label: 'Comunidades', routeIndex: 0),
-        MenuGridItem(id: 'search', icon: LucideIcons.search, label: 'Pesquisa', routeIndex: 107),
-        MenuGridItem(id: 'friends', icon: LucideIcons.userPlus, label: 'Amigos', routeIndex: 107),
-        MenuGridItem(id: 'publish', icon: LucideIcons.edit2, label: 'Publicar', routeIndex: 109),
-        MenuGridItem(id: 'messages', icon: LucideIcons.messageCircle, label: 'Mensagens', routeIndex: 110),
-        MenuGridItem(id: 'profile', icon: LucideIcons.userCircle2, label: 'Perfil', routeIndex: 108),
+        MenuGridItem(
+            id: 'maintenance',
+            icon: LucideIcons.wrench,
+            label: 'Manutenção',
+            routeIndex: 101),
+        MenuGridItem(
+            id: 'partners',
+            icon: LucideIcons.store,
+            label: 'Parceiros',
+            routeIndex: 102),
+        MenuGridItem(
+            id: 'orders',
+            icon: LucideIcons.package,
+            label: 'Pedidos',
+            routeIndex: 105,
+            highlight: true),
+        MenuGridItem(
+            id: 'photo',
+            icon: LucideIcons.camera,
+            label: 'Foto Sport',
+            routeIndex: 109),
+        MenuGridItem(
+            id: 'routes',
+            icon: LucideIcons.mapPin,
+            label: 'Rotas',
+            routeIndex: 111),
+        MenuGridItem(
+            id: 'help',
+            icon: LucideIcons.helpCircle,
+            label: 'Help',
+            routeIndex: 112),
+        MenuGridItem(
+            id: 'news',
+            icon: LucideIcons.newspaper,
+            label: 'News',
+            routeIndex: 106),
+        MenuGridItem(
+            id: 'drive',
+            icon: LucideIcons.car,
+            label: 'Modo Drive',
+            routeIndex: 113),
+        MenuGridItem(
+            id: 'vehicles',
+            icon: LucideIcons.bike,
+            label: 'Veículos',
+            routeIndex: 4),
+        MenuGridItem(
+            id: 'communities',
+            icon: LucideIcons.users,
+            label: 'Comunidades',
+            routeIndex: 0),
+        MenuGridItem(
+            id: 'search',
+            icon: LucideIcons.search,
+            label: 'Pesquisa',
+            routeIndex: 107),
+        MenuGridItem(
+            id: 'friends',
+            icon: LucideIcons.userPlus,
+            label: 'Amigos',
+            routeIndex: 107),
+        MenuGridItem(
+            id: 'publish',
+            icon: LucideIcons.edit2,
+            label: 'Publicar',
+            routeIndex: 109),
+        MenuGridItem(
+            id: 'messages',
+            icon: LucideIcons.messageCircle,
+            label: 'Mensagens',
+            routeIndex: 110),
+        MenuGridItem(
+            id: 'profile',
+            icon: LucideIcons.userCircle2,
+            label: 'Perfil',
+            routeIndex: 108),
       ];
     }
 
     return [
-      const MenuGridItem(id: 'maintenance', icon: LucideIcons.wrench, label: 'Manutenção', routeIndex: 101),
-      const MenuGridItem(id: 'partners', icon: LucideIcons.store, label: 'Parceiros', routeIndex: 102),
+      const MenuGridItem(
+          id: 'maintenance',
+          icon: LucideIcons.wrench,
+          label: 'Manutenção',
+          routeIndex: 101),
+      const MenuGridItem(
+          id: 'partners',
+          icon: LucideIcons.store,
+          label: 'Parceiros',
+          routeIndex: 102),
       MenuGridItem(
         id: 'rides',
         icon: LucideIcons.package,
@@ -181,23 +255,75 @@ class _MenuGridModalState extends State<MenuGridModal> {
         enabled: _isDelivery,
         badgeText: _isDelivery ? null : 'Delivery',
       ),
-      const MenuGridItem(id: 'photo', icon: LucideIcons.camera, label: 'Foto Sport', routeIndex: 109),
-      const MenuGridItem(id: 'routes', icon: LucideIcons.mapPin, label: 'Rotas', routeIndex: 111),
-      const MenuGridItem(id: 'help', icon: LucideIcons.helpCircle, label: 'Help', routeIndex: 112),
-      const MenuGridItem(id: 'news', icon: LucideIcons.newspaper, label: 'News', routeIndex: 106),
-      const MenuGridItem(id: 'drive', icon: LucideIcons.car, label: 'Modo Drive', routeIndex: 113),
-      const MenuGridItem(id: 'vehicles', icon: LucideIcons.bike, label: 'Veículos', routeIndex: 4),
-      const MenuGridItem(id: 'communities', icon: LucideIcons.users, label: 'Comunidades', routeIndex: 0),
-      const MenuGridItem(id: 'search', icon: LucideIcons.search, label: 'Pesquisa', routeIndex: 107),
-      const MenuGridItem(id: 'friends', icon: LucideIcons.userPlus, label: 'Amigos', routeIndex: 107),
-      const MenuGridItem(id: 'publish', icon: LucideIcons.edit2, label: 'Publicar', routeIndex: 109),
-      const MenuGridItem(id: 'messages', icon: LucideIcons.messageCircle, label: 'Mensagens', routeIndex: 110),
-      const MenuGridItem(id: 'profile', icon: LucideIcons.userCircle2, label: 'Perfil', routeIndex: 108),
+      const MenuGridItem(
+          id: 'photo',
+          icon: LucideIcons.camera,
+          label: 'Foto Sport',
+          routeIndex: 109),
+      const MenuGridItem(
+          id: 'routes',
+          icon: LucideIcons.mapPin,
+          label: 'Rotas',
+          routeIndex: 111),
+      const MenuGridItem(
+          id: 'help',
+          icon: LucideIcons.helpCircle,
+          label: 'Help',
+          routeIndex: 112),
+      const MenuGridItem(
+          id: 'news',
+          icon: LucideIcons.newspaper,
+          label: 'News',
+          routeIndex: 106),
+      const MenuGridItem(
+          id: 'drive',
+          icon: LucideIcons.car,
+          label: 'Modo Drive',
+          routeIndex: 113),
+      const MenuGridItem(
+          id: 'vehicles',
+          icon: LucideIcons.bike,
+          label: 'Veículos',
+          routeIndex: 4),
+      const MenuGridItem(
+          id: 'communities',
+          icon: LucideIcons.users,
+          label: 'Comunidades',
+          routeIndex: 0),
+      const MenuGridItem(
+          id: 'search',
+          icon: LucideIcons.search,
+          label: 'Pesquisa',
+          routeIndex: 107),
+      const MenuGridItem(
+          id: 'friends',
+          icon: LucideIcons.userPlus,
+          label: 'Amigos',
+          routeIndex: 107),
+      const MenuGridItem(
+          id: 'publish',
+          icon: LucideIcons.edit2,
+          label: 'Publicar',
+          routeIndex: 109),
+      const MenuGridItem(
+          id: 'messages',
+          icon: LucideIcons.messageCircle,
+          label: 'Mensagens',
+          routeIndex: 110),
+      const MenuGridItem(
+          id: 'profile',
+          icon: LucideIcons.userCircle2,
+          label: 'Perfil',
+          routeIndex: 108),
     ];
   }
 
   List<MenuGridItem> _sortedByUsage(List<MenuGridItem> items) {
-    final pinnedIds = {'maintenance', 'partners', _isPartner ? 'orders' : 'rides'};
+    final pinnedIds = {
+      'maintenance',
+      'partners',
+      _isPartner ? 'orders' : 'rides'
+    };
     final pinned = <MenuGridItem>[];
     final adaptive = <MenuGridItem>[];
 
@@ -234,7 +360,16 @@ class _MenuGridModalState extends State<MenuGridModal> {
     if (!mounted) return;
     Navigator.of(context).pop();
 
-    if (item.routeIndex >= 0 && item.routeIndex <= 4 && widget.onNavigateToIndex != null) {
+    if (item.id == 'communities') {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ChatScreen()),
+      );
+      return;
+    }
+
+    if (item.routeIndex >= 0 &&
+        item.routeIndex <= 4 &&
+        widget.onNavigateToIndex != null) {
       widget.onNavigateToIndex!(item.routeIndex);
       return;
     }
@@ -256,10 +391,13 @@ class _MenuGridModalState extends State<MenuGridModal> {
         );
         break;
       case 106:
-      case 109:
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const SocialHomeScreen(fromMenu: true)),
+          MaterialPageRoute(
+              builder: (_) => const SocialHomeScreen(fromMenu: true)),
         );
+        break;
+      case 109:
+        await _openCreateActionModal();
         break;
       case 107:
         Navigator.of(context).push(
@@ -270,7 +408,9 @@ class _MenuGridModalState extends State<MenuGridModal> {
         Provider.of<DrawerProvider>(context, listen: false).openProfileDrawer();
         break;
       case 110:
-        widget.onNavigateToIndex?.call(0);
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ChatScreen()),
+        );
         break;
       case 111:
       case 113:
@@ -279,11 +419,59 @@ class _MenuGridModalState extends State<MenuGridModal> {
       case 112:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Central de ajuda em evolução. Em breve, FAQ e suporte.'),
+            content:
+                Text('Central de ajuda em evolução. Em breve, FAQ e suporte.'),
           ),
         );
         break;
       default:
+        break;
+    }
+  }
+
+  Future<void> _openCreateActionModal() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final user = appState.user;
+    if (user == null) return;
+
+    final action = await CreateActionSheet.show(context);
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case CreateActionType.post:
+        final bikeModel = appState.bike?.model ?? 'Moto';
+        final post = await showModalBottomSheet<dynamic>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => CreatePostModal(
+            user: user,
+            userBikeModel: bikeModel,
+          ),
+        );
+        if (!mounted) return;
+        if (post != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Publicação enviada com sucesso!')),
+          );
+        }
+        break;
+      case CreateActionType.community:
+        final community = await showModalBottomSheet<dynamic>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => const CreateCommunityModal(),
+        );
+        if (!mounted) return;
+        if (community != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Comunidade criada com sucesso!')),
+          );
+        }
+        break;
+      case CreateActionType.notification:
+        await SendNotificationSheet.show(context);
         break;
     }
   }
@@ -429,7 +617,8 @@ class _QuickActionsRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                     onTap: () => onTap(a),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 8),
                       child: Column(
                         children: [
                           Icon(
@@ -445,7 +634,9 @@ class _QuickActionsRow extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              fontWeight: a.highlight ? FontWeight.w700 : FontWeight.w600,
+                              fontWeight: a.highlight
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
                             ),
                           ),
                         ],
@@ -539,7 +730,8 @@ class _GridTile extends StatelessWidget {
                   size: 20,
                   color: isHighlight
                       ? AppColors.racingOrange.withOpacity(0.95)
-                      : theme.colorScheme.primary.withOpacity(isEnabled ? 0.8 : 0.45),
+                      : theme.colorScheme.primary
+                          .withOpacity(isEnabled ? 0.8 : 0.45),
                 ),
               ),
               const SizedBox(height: 8),
@@ -554,14 +746,15 @@ class _GridTile extends StatelessWidget {
                   color: isHighlight
                       ? AppColors.racingOrange.withOpacity(0.95)
                       : theme.textTheme.bodySmall?.color?.withOpacity(
-                            isEnabled ? 0.85 : 0.45,
-                          ),
+                          isEnabled ? 0.85 : 0.45,
+                        ),
                 ),
               ),
               if (item.badgeText != null) ...[
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primary.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(999),

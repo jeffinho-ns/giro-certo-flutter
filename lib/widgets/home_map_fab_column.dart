@@ -5,15 +5,26 @@ import '../utils/colors.dart';
 import '../providers/notifications_count_provider.dart';
 import '../screens/sidebars/notifications_sidebar.dart';
 
-enum MapFilterOption { mechanics, autoParts, events }
+enum MapFilterOption {
+  hotOrders,
+  highPay,
+  partnerDensity,
+  mechanics,
+  autoParts,
+  events
+}
+
+enum MapTimeWindowOption { now, lunchPeak, eveningPeak }
 
 class HomeMapFabColumn extends StatefulWidget {
   final VoidCallback? onDriveMode;
   final VoidCallback? onRecenter;
   final ValueChanged<bool>? onHeatmapChanged;
   final ValueChanged<Set<MapFilterOption>>? onFilterChanged;
+  final ValueChanged<MapTimeWindowOption>? onTimeWindowChanged;
   final bool isHeatmapOn;
   final Set<MapFilterOption> selectedFilters;
+  final MapTimeWindowOption selectedTimeWindow;
 
   const HomeMapFabColumn({
     super.key,
@@ -21,8 +32,10 @@ class HomeMapFabColumn extends StatefulWidget {
     this.onRecenter,
     this.onHeatmapChanged,
     this.onFilterChanged,
+    this.onTimeWindowChanged,
     this.isHeatmapOn = false,
     this.selectedFilters = const {},
+    this.selectedTimeWindow = MapTimeWindowOption.now,
   });
 
   @override
@@ -32,6 +45,7 @@ class HomeMapFabColumn extends StatefulWidget {
 class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
   bool _heatmapOn = false;
   Set<MapFilterOption> _filters = {};
+  MapTimeWindowOption _timeWindow = MapTimeWindowOption.now;
   bool _filterMenuOpen = false;
 
   @override
@@ -39,13 +53,19 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
     super.initState();
     _heatmapOn = widget.isHeatmapOn;
     _filters = Set.from(widget.selectedFilters);
+    _timeWindow = widget.selectedTimeWindow;
   }
 
   @override
   void didUpdateWidget(HomeMapFabColumn oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isHeatmapOn != widget.isHeatmapOn) _heatmapOn = widget.isHeatmapOn;
-    if (oldWidget.selectedFilters != widget.selectedFilters) _filters = Set.from(widget.selectedFilters);
+    if (oldWidget.isHeatmapOn != widget.isHeatmapOn)
+      _heatmapOn = widget.isHeatmapOn;
+    if (oldWidget.selectedFilters != widget.selectedFilters)
+      _filters = Set.from(widget.selectedFilters);
+    if (oldWidget.selectedTimeWindow != widget.selectedTimeWindow) {
+      _timeWindow = widget.selectedTimeWindow;
+    }
   }
 
   void _showNotifications() async {
@@ -56,7 +76,8 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
       builder: (context) => const NotificationsSidebar(),
     );
     if (mounted) {
-      Provider.of<NotificationsCountProvider>(context, listen: false).loadFromApi();
+      Provider.of<NotificationsCountProvider>(context, listen: false)
+          .loadFromApi();
     }
   }
 
@@ -78,6 +99,11 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
       }
     });
     widget.onFilterChanged?.call(Set.from(_filters));
+  }
+
+  void _setTimeWindow(MapTimeWindowOption value) {
+    setState(() => _timeWindow = value);
+    widget.onTimeWindowChanged?.call(value);
   }
 
   @override
@@ -107,7 +133,9 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
                 context: context,
                 icon: LucideIcons.bell,
                 label: 'Notificações',
-                color: isDark ? Colors.white.withOpacity(0.6) : Colors.black.withOpacity(0.55),
+                color: isDark
+                    ? Colors.white.withOpacity(0.6)
+                    : Colors.black.withOpacity(0.55),
                 onTap: _showNotifications,
               ),
             );
@@ -118,7 +146,11 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
           context: context,
           icon: LucideIcons.flame,
           label: 'Zona Quente',
-          color: _heatmapOn ? AppColors.racingOrange.withOpacity(0.9) : (isDark ? Colors.white.withOpacity(0.45) : Colors.black.withOpacity(0.45)),
+          color: _heatmapOn
+              ? AppColors.racingOrange.withOpacity(0.9)
+              : (isDark
+                  ? Colors.white.withOpacity(0.45)
+                  : Colors.black.withOpacity(0.45)),
           onTap: _toggleHeatmap,
         ),
         const SizedBox(height: 12),
@@ -126,7 +158,9 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
           context: context,
           icon: LucideIcons.filter,
           label: 'Filtros',
-          color: isDark ? Colors.white.withOpacity(0.6) : Colors.black.withOpacity(0.55),
+          color: isDark
+              ? Colors.white.withOpacity(0.6)
+              : Colors.black.withOpacity(0.55),
           onTap: _filterMenuOpen ? null : _toggleFilterMenu,
         ),
         if (_filterMenuOpen) ...[
@@ -138,7 +172,9 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
           context: context,
           icon: LucideIcons.crosshair,
           label: 'Re-center',
-          color: isDark ? Colors.white.withOpacity(0.6) : Colors.black.withOpacity(0.55),
+          color: isDark
+              ? Colors.white.withOpacity(0.6)
+              : Colors.black.withOpacity(0.55),
           onTap: widget.onRecenter,
         ),
       ],
@@ -166,7 +202,11 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: isHighlight ? color.withOpacity(0.9) : (theme.brightness == Brightness.dark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.06)),
+              color: isHighlight
+                  ? color.withOpacity(0.9)
+                  : (theme.brightness == Brightness.dark
+                      ? Colors.white.withOpacity(0.12)
+                      : Colors.black.withOpacity(0.06)),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
@@ -226,7 +266,27 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
             children: [
               _chip('Mecânicos', MapFilterOption.mechanics, theme),
               _chip('Auto Peças', MapFilterOption.autoParts, theme),
+              _chip('Mais Corridas', MapFilterOption.hotOrders, theme),
+              _chip('Melhor Pagamento', MapFilterOption.highPay, theme),
+              _chip('Mais Parceiros', MapFilterOption.partnerDensity, theme),
               _chip('Eventos', MapFilterOption.events, theme),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Horário',
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _timeChip('Agora', MapTimeWindowOption.now),
+              _timeChip('Pico almoço', MapTimeWindowOption.lunchPeak),
+              _timeChip('Pico noite', MapTimeWindowOption.eveningPeak),
             ],
           ),
           const SizedBox(height: 4),
@@ -247,6 +307,16 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
       onSelected: (_) => _toggleFilter(opt),
       selectedColor: AppColors.racingOrange.withOpacity(0.3),
       checkmarkColor: AppColors.racingOrange,
+    );
+  }
+
+  Widget _timeChip(String label, MapTimeWindowOption value) {
+    final selected = _timeWindow == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => _setTimeWindow(value),
+      selectedColor: AppColors.racingOrange.withOpacity(0.25),
     );
   }
 }

@@ -77,9 +77,9 @@ class ApiService {
       if (uri == null || !uri.hasScheme) return null;
       final headers = await getImageHeaders();
       final response = await http.get(uri, headers: headers).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw Exception('Timeout'),
-      );
+            const Duration(seconds: 15),
+            onTimeout: () => throw Exception('Timeout'),
+          );
       if (response.statusCode >= 400) return null;
       return response;
     } catch (_) {
@@ -128,16 +128,16 @@ class ApiService {
       String email, String password) async {
     final response = await http
         .post(
-          Uri.parse('$baseUrl/auth/login'),
-          headers: await _getHeaders(includeAuth: false),
-          body: json.encode({
-            'email': email,
-            'password': password,
-          }),
-        )
+      Uri.parse('$baseUrl/auth/login'),
+      headers: await _getHeaders(includeAuth: false),
+      body: json.encode({
+        'email': email,
+        'password': password,
+      }),
+    )
         .timeout(_requestTimeout, onTimeout: () {
-          throw Exception('Tempo esgotado. Verifique sua conexão.');
-        });
+      throw Exception('Tempo esgotado. Verifique sua conexão.');
+    });
 
     _handleError(response);
 
@@ -213,12 +213,12 @@ class ApiService {
   static Future<User> getCurrentUser() async {
     final response = await http
         .get(
-          Uri.parse('$baseUrl/users/me/profile'),
-          headers: await _getHeaders(),
-        )
+      Uri.parse('$baseUrl/users/me/profile'),
+      headers: await _getHeaders(),
+    )
         .timeout(_requestTimeout, onTimeout: () {
-          throw Exception('Tempo esgotado. Verifique sua conexão.');
-        });
+      throw Exception('Tempo esgotado. Verifique sua conexão.');
+    });
 
     _handleError(response);
 
@@ -260,7 +260,8 @@ class ApiService {
 
   /// Upload de imagem para perfil (avatar ou capa). Retorna URL completa.
   /// Usa bytes + Content-Type (image/*) para o servidor aceitar. Lança exceção em falha.
-  static Future<String> uploadProfileImage(String filePath, {String type = 'avatar'}) async {
+  static Future<String> uploadProfileImage(String filePath,
+      {String type = 'avatar'}) async {
     final token = await _getToken();
     if (token == null) {
       throw Exception('Sessão expirada. Faz login novamente.');
@@ -295,9 +296,10 @@ class ApiService {
     ));
 
     final streamed = await request.send().timeout(
-      _requestTimeout,
-      onTimeout: () => throw Exception('Tempo esgotado. Verifica a ligação.'),
-    );
+          _requestTimeout,
+          onTimeout: () =>
+              throw Exception('Tempo esgotado. Verifica a ligação.'),
+        );
     final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode >= 400) {
@@ -349,14 +351,17 @@ class ApiService {
 
       final response = await http
           .get(uri, headers: await _getHeaders())
-          .timeout(_requestTimeout, onTimeout: () => throw Exception('Tempo esgotado'));
+          .timeout(_requestTimeout,
+              onTimeout: () => throw Exception('Tempo esgotado'));
 
       if (response.statusCode == 404) return [];
 
       _handleError(response);
 
       final data = json.decode(response.body) as Map<String, dynamic>;
-      final list = data['users'] as List<dynamic>? ?? data['results'] as List<dynamic>? ?? [];
+      final list = data['users'] as List<dynamic>? ??
+          data['results'] as List<dynamic>? ??
+          [];
       return list.map((e) => e as Map<String, dynamic>).toList();
     } catch (_) {
       return [];
@@ -370,7 +375,8 @@ class ApiService {
         Uri.parse('$baseUrl/users/$userId/follow-request'),
         headers: await _getHeaders(),
       );
-      if (response.statusCode == 404 || response.statusCode == 501) return false;
+      if (response.statusCode == 404 || response.statusCode == 501)
+        return false;
       _handleError(response);
       return true;
     } catch (_) {
@@ -411,7 +417,8 @@ class ApiService {
   }
 
   /// Aceitar pedido de seguimento (e opcionalmente seguir de volta)
-  static Future<bool> acceptFollowRequest(String requestId, {bool followBack = false}) async {
+  static Future<bool> acceptFollowRequest(String requestId,
+      {bool followBack = false}) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/users/me/follow-requests/$requestId/accept'),
@@ -517,7 +524,9 @@ class ApiService {
       final data = json.decode(response.body) as Map<String, dynamic>;
       final list = data['followingIds'] as List<dynamic>? ??
           data['ids'] as List<dynamic>? ??
-          (data['users'] as List<dynamic>?)?.map((u) => (u as Map)['id']).toList() ??
+          (data['users'] as List<dynamic>?)
+              ?.map((u) => (u as Map)['id'])
+              .toList() ??
           [];
       return list.map((e) => e.toString()).toList();
     } catch (_) {
@@ -586,8 +595,8 @@ class ApiService {
     final response = await http
         .get(uri, headers: await _getHeaders())
         .timeout(_requestTimeout, onTimeout: () {
-          throw Exception('Tempo esgotado. Verifique sua conexão.');
-        });
+      throw Exception('Tempo esgotado. Verifique sua conexão.');
+    });
 
     _handleError(response);
 
@@ -757,8 +766,10 @@ class ApiService {
     final rawStoreLng = (json['storeLongitude'] as num).toDouble();
     final rawDelLat = (json['deliveryLatitude'] as num).toDouble();
     final rawDelLng = (json['deliveryLongitude'] as num).toDouble();
-    final store = GeoCoordinatesBrazil.normalizeRoutingPair(rawStoreLat, rawStoreLng);
-    final delivery = GeoCoordinatesBrazil.normalizeRoutingPair(rawDelLat, rawDelLng);
+    final store =
+        GeoCoordinatesBrazil.normalizeRoutingPair(rawStoreLat, rawStoreLng);
+    final delivery =
+        GeoCoordinatesBrazil.normalizeRoutingPair(rawDelLat, rawDelLng);
 
     return DeliveryOrder(
       id: json['id'] as String,
@@ -873,7 +884,10 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
-    return _partnerFromJson(data);
+    final partnerJson = data is Map<String, dynamic> && data['partner'] != null
+        ? data['partner'] as Map<String, dynamic>
+        : data as Map<String, dynamic>;
+    return _partnerFromJson(partnerJson);
   }
 
   /// Obter própria loja (para lojistas)
@@ -960,10 +974,14 @@ class ApiService {
   static Bike _bikeFromJson(Map<String, dynamic> json) {
     final galleryRaw = json['galleryUrls'];
     final gallery = galleryRaw is List
-        ? galleryRaw.whereType<String>().where((s) => s.trim().isNotEmpty).toList()
+        ? galleryRaw
+            .whereType<String>()
+            .where((s) => s.trim().isNotEmpty)
+            .toList()
         : <String>[];
     final extras = [
-      if (json['photoUrl'] is String && (json['photoUrl'] as String).trim().isNotEmpty)
+      if (json['photoUrl'] is String &&
+          (json['photoUrl'] as String).trim().isNotEmpty)
         json['photoUrl'] as String,
       if (json['vehiclePhotoUrl'] is String &&
           (json['vehiclePhotoUrl'] as String).trim().isNotEmpty)
@@ -1008,10 +1026,7 @@ class ApiService {
     _handleError(response);
     final data = json.decode(response.body) as Map<String, dynamic>;
     final rows = data['bikes'] as List<dynamic>? ?? [];
-    return rows
-        .whereType<Map<String, dynamic>>()
-        .map(_bikeFromJson)
-        .toList();
+    return rows.whereType<Map<String, dynamic>>().map(_bikeFromJson).toList();
   }
 
   static Future<Bike> createBike({
@@ -1078,7 +1093,8 @@ class ApiService {
     final body = <String, dynamic>{};
     if (currentKm != null) body['currentKm'] = currentKm;
     if (oilType != null) body['oilType'] = oilType;
-    if (frontTirePressure != null) body['frontTirePressure'] = frontTirePressure;
+    if (frontTirePressure != null)
+      body['frontTirePressure'] = frontTirePressure;
     if (rearTirePressure != null) body['rearTirePressure'] = rearTirePressure;
     if (photoUrl != null) body['photoUrl'] = photoUrl;
     if (vehiclePhotoUrl != null) body['vehiclePhotoUrl'] = vehiclePhotoUrl;
@@ -1100,7 +1116,8 @@ class ApiService {
     return _bikeFromJson(bikeJson);
   }
 
-  static Future<List<Map<String, dynamic>>> getBikeMaintenanceLogs(String bikeId) async {
+  static Future<List<Map<String, dynamic>>> getBikeMaintenanceLogs(
+      String bikeId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/bikes/$bikeId/maintenance'),
       headers: await _getHeaders(),
@@ -1142,7 +1159,8 @@ class ApiService {
     return data['maintenanceLog'] as Map<String, dynamic>;
   }
 
-  static Future<String> uploadUserScopedImage(String userId, String filePath) async {
+  static Future<String> uploadUserScopedImage(
+      String userId, String filePath) async {
     final token = await _getToken();
     if (token == null || token.isEmpty) {
       throw Exception('Sessão expirada. Faça login novamente.');
@@ -1165,7 +1183,8 @@ class ApiService {
         'image',
         bytes,
         filename: filename.isEmpty ? 'bike.jpg' : filename,
-        contentType: _mediaTypeFromFilename(filename.isEmpty ? 'bike.jpg' : filename),
+        contentType:
+            _mediaTypeFromFilename(filename.isEmpty ? 'bike.jpg' : filename),
       ),
     );
     final streamed = await request.send();
@@ -1279,8 +1298,14 @@ class ApiService {
 
     try {
       // Converter todos os arquivos para base64
-      final [selfieBase64, motoBase64, plateBase64, cnhBase64, crlvBase64, receiptB64] =
-          await Future.wait([
+      final [
+        selfieBase64,
+        motoBase64,
+        plateBase64,
+        cnhBase64,
+        crlvBase64,
+        receiptB64
+      ] = await Future.wait([
         fileToBase64(selfieWithDocPath),
         fileToBase64(motoWithPlatePath),
         fileToBase64(platePlateCloseupPath),
@@ -1460,7 +1485,8 @@ class ApiService {
       'offset': offset.toString(),
     };
     if (userId != null && userId.isNotEmpty) params['userId'] = userId;
-    if (pilotType != null && pilotType.isNotEmpty) params['pilotType'] = pilotType;
+    if (pilotType != null && pilotType.isNotEmpty)
+      params['pilotType'] = pilotType;
     if (hashtag != null && hashtag.isNotEmpty) params['hashtag'] = hashtag;
     if (postType != null && postType.isNotEmpty) params['postType'] = postType;
     final uri = Uri.parse('$baseUrl/posts').replace(
@@ -1470,8 +1496,8 @@ class ApiService {
     final response = await http
         .get(uri, headers: await _getHeaders())
         .timeout(_requestTimeout, onTimeout: () {
-          throw Exception('Tempo esgotado. Verifique sua conexão.');
-        });
+      throw Exception('Tempo esgotado. Verifique sua conexão.');
+    });
 
     _handleError(response);
 
@@ -1495,7 +1521,8 @@ class ApiService {
     try {
       final file = File(path);
       if (!file.existsSync()) {
-        throw Exception('Ficheiro da imagem já não existe. Escolhe a imagem outra vez.');
+        throw Exception(
+            'Ficheiro da imagem já não existe. Escolhe a imagem outra vez.');
       }
       bytes = await file.readAsBytes();
       final name = path.split(RegExp(r'[/\\]')).last;
@@ -1517,9 +1544,10 @@ class ApiService {
     ));
 
     final streamed = await request.send().timeout(
-      _requestTimeout,
-      onTimeout: () => throw Exception('Tempo esgotado. Verifica a ligação.'),
-    );
+          _requestTimeout,
+          onTimeout: () =>
+              throw Exception('Tempo esgotado. Verifica a ligação.'),
+        );
     final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode >= 400) {
@@ -1535,7 +1563,8 @@ class ApiService {
     final data = json.decode(response.body) as Map<String, dynamic>?;
     final relUrl = data?['image']?['url'] as String? ?? data?['url'] as String?;
     if (relUrl == null || relUrl.isEmpty) {
-      throw Exception('Resposta do servidor sem URL da imagem. Tenta novamente.');
+      throw Exception(
+          'Resposta do servidor sem URL da imagem. Tenta novamente.');
     }
     if (relUrl.startsWith('http')) return relUrl;
     final origin = Uri.parse(baseUrl).origin;
@@ -1580,7 +1609,8 @@ class ApiService {
   }
 
   /// Listar comentários de um post
-  static Future<List<Map<String, dynamic>>> getPostComments(String postId) async {
+  static Future<List<Map<String, dynamic>>> getPostComments(
+      String postId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/posts/$postId/comments'),
       headers: await _getHeaders(),
@@ -1639,7 +1669,8 @@ class ApiService {
     try {
       final params = <String, String>{'limit': '100'};
       if (userId != null && userId.isNotEmpty) params['userId'] = userId;
-      final uri = Uri.parse('$baseUrl/stories').replace(queryParameters: params);
+      final uri =
+          Uri.parse('$baseUrl/stories').replace(queryParameters: params);
       final response = await http.get(uri, headers: await _getHeaders());
       if (response.statusCode == 404 || response.statusCode == 501) return [];
       _handleError(response);
@@ -1684,7 +1715,8 @@ class ApiService {
     try {
       final file = File(path);
       if (!file.existsSync()) {
-        throw Exception('Ficheiro da imagem já não existe. Escolhe a imagem outra vez e publica de imediato.');
+        throw Exception(
+            'Ficheiro da imagem já não existe. Escolhe a imagem outra vez e publica de imediato.');
       }
       bytes = await file.readAsBytes();
       final name = path.split(RegExp(r'[/\\]')).last;
@@ -1707,9 +1739,10 @@ class ApiService {
     ));
 
     final streamed = await request.send().timeout(
-      _requestTimeout,
-      onTimeout: () => throw Exception('Tempo esgotado. Verifica a ligação.'),
-    );
+          _requestTimeout,
+          onTimeout: () =>
+              throw Exception('Tempo esgotado. Verifica a ligação.'),
+        );
     final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode >= 400) {
@@ -1725,7 +1758,8 @@ class ApiService {
     final data = json.decode(response.body) as Map<String, dynamic>?;
     final relUrl = data?['image']?['url'] as String? ?? data?['url'] as String?;
     if (relUrl == null || relUrl.isEmpty) {
-      throw Exception('Resposta do servidor sem URL da imagem. Tenta novamente.');
+      throw Exception(
+          'Resposta do servidor sem URL da imagem. Tenta novamente.');
     }
     if (relUrl.startsWith('http')) return relUrl;
     final origin = Uri.parse(baseUrl).origin;
@@ -1733,7 +1767,8 @@ class ApiService {
   }
 
   /// Criar story. [caption] é opcional.
-  static Future<Map<String, dynamic>> createStory(String mediaUrl, {String? caption}) async {
+  static Future<Map<String, dynamic>> createStory(String mediaUrl,
+      {String? caption}) async {
     final body = <String, dynamic>{'mediaUrl': mediaUrl};
     if (caption != null && caption.isNotEmpty) body['caption'] = caption;
     final response = await http.post(
@@ -1777,7 +1812,8 @@ class ApiService {
   }
 
   /// Obter ou criar conversa privada.
-  static Future<Map<String, dynamic>> getOrCreatePrivateChat(String recipientId) async {
+  static Future<Map<String, dynamic>> getOrCreatePrivateChat(
+      String recipientId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/chats/private'),
       headers: await _getHeaders(),
@@ -1789,7 +1825,8 @@ class ApiService {
   }
 
   /// Listar mensagens de uma conversa.
-  static Future<List<Map<String, dynamic>>> getChatMessages(String chatId) async {
+  static Future<List<Map<String, dynamic>>> getChatMessages(
+      String chatId) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/chats/$chatId/messages'),
@@ -1806,7 +1843,8 @@ class ApiService {
   }
 
   /// Enviar mensagem.
-  static Future<Map<String, dynamic>> sendChatMessage(String chatId, String text) async {
+  static Future<Map<String, dynamic>> sendChatMessage(
+      String chatId, String text) async {
     final response = await http.post(
       Uri.parse('$baseUrl/chats/$chatId/messages'),
       headers: await _getHeaders(),
@@ -1855,16 +1893,20 @@ class ApiService {
   // ============================================
 
   /// Eventos da rede social (para pins no mapa e lista).
-  static Future<List<Map<String, dynamic>>> getEvents({String? communityId, int limit = 50}) async {
+  static Future<List<Map<String, dynamic>>> getEvents(
+      {String? communityId, int limit = 50}) async {
     try {
       final params = <String, String>{'limit': limit.toString()};
-      if (communityId != null && communityId.isNotEmpty) params['communityId'] = communityId;
-      final uri = Uri.parse('$baseUrl/social/events').replace(queryParameters: params);
+      if (communityId != null && communityId.isNotEmpty)
+        params['communityId'] = communityId;
+      final uri =
+          Uri.parse('$baseUrl/social/events').replace(queryParameters: params);
       final response = await http.get(uri, headers: await _getHeaders());
       if (response.statusCode == 404 || response.statusCode == 501) return [];
       _handleError(response);
       final data = json.decode(response.body) as Map<String, dynamic>;
-      final list = data['events'] as List<dynamic>? ?? data as List<dynamic>? ?? [];
+      final list =
+          data['events'] as List<dynamic>? ?? data as List<dynamic>? ?? [];
       return list.map((e) => e as Map<String, dynamic>).toList();
     } catch (_) {
       return [];
@@ -1872,7 +1914,8 @@ class ApiService {
   }
 
   /// Conquistas do utilizador logado.
-  static Future<List<Map<String, dynamic>>> getAchievements(String userId) async {
+  static Future<List<Map<String, dynamic>>> getAchievements(
+      String userId) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/users/$userId/achievements'),
@@ -1889,16 +1932,20 @@ class ApiService {
   }
 
   /// Sugestões "quem seguir" (entregadores na zona, mesma moto, etc.).
-  static Future<List<Map<String, dynamic>>> getSuggestedFollows({int limit = 10}) async {
+  static Future<List<Map<String, dynamic>>> getSuggestedFollows(
+      {int limit = 10}) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/users/me/suggested-follows').replace(queryParameters: {'limit': limit.toString()}),
+        Uri.parse('$baseUrl/users/me/suggested-follows')
+            .replace(queryParameters: {'limit': limit.toString()}),
         headers: await _getHeaders(),
       );
       if (response.statusCode == 404 || response.statusCode == 501) return [];
       _handleError(response);
       final data = json.decode(response.body) as Map<String, dynamic>;
-      final list = data['suggestions'] as List<dynamic>? ?? data['users'] as List<dynamic>? ?? [];
+      final list = data['suggestions'] as List<dynamic>? ??
+          data['users'] as List<dynamic>? ??
+          [];
       return list.map((e) => e as Map<String, dynamic>).toList();
     } catch (_) {
       return [];
@@ -1921,7 +1968,8 @@ class ApiService {
   }
 
   /// Atualizar visibilidade no mapa.
-  static Future<void> updateMapVisibility({bool? showOnMap, bool? showAsDelivery}) async {
+  static Future<void> updateMapVisibility(
+      {bool? showOnMap, bool? showAsDelivery}) async {
     try {
       await http.put(
         Uri.parse('$baseUrl/users/me/map-visibility'),
@@ -1935,18 +1983,21 @@ class ApiService {
   }
 
   /// Pontos de interesse partilhados (mecânicos, postos, paragens) para o mapa.
-  static Future<List<Map<String, dynamic>>> getPointsOfInterest({double? lat, double? lng, double? radiusKm}) async {
+  static Future<List<Map<String, dynamic>>> getPointsOfInterest(
+      {double? lat, double? lng, double? radiusKm}) async {
     try {
       final params = <String, String>{};
       if (lat != null) params['lat'] = lat.toString();
       if (lng != null) params['lng'] = lng.toString();
       if (radiusKm != null) params['radiusKm'] = radiusKm.toString();
-      final uri = Uri.parse('$baseUrl/social/points-of-interest').replace(queryParameters: params.isEmpty ? null : params);
+      final uri = Uri.parse('$baseUrl/social/points-of-interest')
+          .replace(queryParameters: params.isEmpty ? null : params);
       final response = await http.get(uri, headers: await _getHeaders());
       if (response.statusCode == 404 || response.statusCode == 501) return [];
       _handleError(response);
       final data = json.decode(response.body) as Map<String, dynamic>;
-      final list = data['points'] as List<dynamic>? ?? data as List<dynamic>? ?? [];
+      final list =
+          data['points'] as List<dynamic>? ?? data as List<dynamic>? ?? [];
       return list.map((e) => e as Map<String, dynamic>).toList();
     } catch (_) {
       return [];
@@ -1954,13 +2005,15 @@ class ApiService {
   }
 
   /// Pilotos/entregadores visíveis no mapa (quem autorizou visibilidade).
-  static Future<List<Map<String, dynamic>>> getMapNearbyUsers({double? lat, double? lng, bool? deliveryOnly}) async {
+  static Future<List<Map<String, dynamic>>> getMapNearbyUsers(
+      {double? lat, double? lng, bool? deliveryOnly}) async {
     try {
       final params = <String, String>{};
       if (lat != null) params['lat'] = lat.toString();
       if (lng != null) params['lng'] = lng.toString();
       if (deliveryOnly == true) params['deliveryOnly'] = 'true';
-      final uri = Uri.parse('$baseUrl/social/map-nearby').replace(queryParameters: params.isEmpty ? null : params);
+      final uri = Uri.parse('$baseUrl/social/map-nearby')
+          .replace(queryParameters: params.isEmpty ? null : params);
       final response = await http.get(uri, headers: await _getHeaders());
       if (response.statusCode == 404 || response.statusCode == 501) return [];
       _handleError(response);
@@ -1973,7 +2026,8 @@ class ApiService {
   }
 
   /// Chat por comunidade (canais de grupo).
-  static Future<List<Map<String, dynamic>>> getCommunityChannels(String communityId) async {
+  static Future<List<Map<String, dynamic>>> getCommunityChannels(
+      String communityId) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/communities/$communityId/channels'),
@@ -1990,10 +2044,12 @@ class ApiService {
   }
 
   /// Feed "Minha loja" para lojista (posts que mencionam a loja).
-  static Future<List<Map<String, dynamic>>> getPartnerFeed(String partnerId, {int limit = 30}) async {
+  static Future<List<Map<String, dynamic>>> getPartnerFeed(String partnerId,
+      {int limit = 30}) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/partners/$partnerId/feed').replace(queryParameters: {'limit': limit.toString()}),
+        Uri.parse('$baseUrl/partners/$partnerId/feed')
+            .replace(queryParameters: {'limit': limit.toString()}),
         headers: await _getHeaders(),
       );
       if (response.statusCode == 404 || response.statusCode == 501) return [];
@@ -2007,11 +2063,14 @@ class ApiService {
   }
 
   /// Ranking de entregadores (para lojista).
-  static Future<List<Map<String, dynamic>>> getDeliveryRanking({String? partnerId, int limit = 20}) async {
+  static Future<List<Map<String, dynamic>>> getDeliveryRanking(
+      {String? partnerId, int limit = 20}) async {
     try {
       final params = <String, String>{'limit': limit.toString()};
-      if (partnerId != null && partnerId.isNotEmpty) params['partnerId'] = partnerId;
-      final uri = Uri.parse('$baseUrl/social/delivery-ranking').replace(queryParameters: params);
+      if (partnerId != null && partnerId.isNotEmpty)
+        params['partnerId'] = partnerId;
+      final uri = Uri.parse('$baseUrl/social/delivery-ranking')
+          .replace(queryParameters: params);
       final response = await http.get(uri, headers: await _getHeaders());
       if (response.statusCode == 404 || response.statusCode == 501) return [];
       _handleError(response);

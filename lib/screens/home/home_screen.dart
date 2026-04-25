@@ -13,7 +13,7 @@ import '../../services/realtime_service.dart';
 import '../../services/onboarding_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/delivery_order.dart';
-import '../../models/user.dart';
+import '../../models/partner.dart';
 import '../../models/pilot_profile.dart';
 import '../../utils/colors.dart';
 import '../../utils/navigation_rider_marker.dart';
@@ -34,15 +34,20 @@ class _HomeScreenState extends State<HomeScreen> {
   GoogleMapController? _mapController;
   Set<Polyline> _polylines = {};
   Set<Marker> _markers = {};
+  Set<Circle> _marketCircles = {};
   LatLng? _currentPosition;
   bool _isLoading = false;
   StreamSubscription<Position>? _positionSubscription;
   bool _heatmapOn = false;
   Set<MapFilterOption> _filterOptions = {};
+  MapTimeWindowOption _mapTimeWindow = MapTimeWindowOption.now;
   List<QuickMessageItem> _quickMessages = [];
   DeliveryOrder? _pipcarOrder;
   DeliveryOrder? _activeDeliveryOrder;
+  List<DeliveryOrder> _marketPendingOrders = [];
+  List<Partner> _marketPartners = [];
   bool _isUpdatingDeliveryRoute = false;
+
   /// Modo “navegação” (corrida ativa): polyline azul, câmera 3D e marcador com rotação.
   BitmapDescriptor? _riderNavIcon;
   Marker? _riderNavMarker;
@@ -83,7 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final lat2 = b.latitude * math.pi / 180;
     final sinDLat = math.sin(dLat / 2);
     final sinDLng = math.sin(dLng / 2);
-    final q = sinDLat * sinDLat + math.cos(lat1) * math.cos(lat2) * sinDLng * sinDLng;
+    final q =
+        sinDLat * sinDLat + math.cos(lat1) * math.cos(lat2) * sinDLng * sinDLng;
     return 2 * earth * math.asin(math.min(1.0, math.sqrt(q)));
   }
 
@@ -92,7 +98,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final lat2 = b.latitude * math.pi / 180;
     final dLng = (b.longitude - a.longitude) * math.pi / 180;
     final y = math.sin(dLng) * math.cos(lat2);
-    final x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+    final x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
     final brng = math.atan2(y, x) * 180 / math.pi;
     return (brng + 360) % 360;
   }
@@ -178,11 +185,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadQuickMessages();
     _requestLocationAndListen();
     _loadPartnerData();
+    _loadMarketIntelligenceData();
     _syncDeliveryModerationStatus();
     _pollPendingDeliveriesForRider();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        final p = Provider.of<NotificationsCountProvider>(context, listen: false);
+        final p =
+            Provider.of<NotificationsCountProvider>(context, listen: false);
         p.loadFromApi();
         p.subscribeToRealtime();
       } catch (e) {
@@ -190,14 +199,14 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
   }
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Atualizar estilo do mapa quando o tema mudar
     _updateMapStyle();
   }
-  
+
   Future<void> _updateMapStyle() async {
     if (_mapController == null) return;
     final theme = Theme.of(context);
@@ -227,14 +236,19 @@ class _HomeScreenState extends State<HomeScreen> {
           } else if (severity == 'info') {
             icon = LucideIcons.info;
           }
-          return QuickMessageItem(icon: icon, color: color, title: title, subtitle: body);
+          return QuickMessageItem(
+              icon: icon, color: color, title: title, subtitle: body);
         }).toList();
       });
     } catch (e) {
       debugPrint('Falha ao carregar mensagens rapidas: $e');
       setState(() {
         _quickMessages = [
-          const QuickMessageItem(icon: LucideIcons.checkCircle, color: AppColors.statusOk, title: 'Sistema ativo', subtitle: 'Sem alertas recentes'),
+          const QuickMessageItem(
+              icon: LucideIcons.checkCircle,
+              color: AppColors.statusOk,
+              title: 'Sistema ativo',
+              subtitle: 'Sem alertas recentes'),
         ];
       });
     }
@@ -336,8 +350,8 @@ class _HomeScreenState extends State<HomeScreen> {
       try {
         await _syncDeliveryModerationStatus();
         final isDeliveryProfile = appState.isDeliveryPilot;
-        final isDeliveryApproved =
-            appState.deliveryModerationStatus == DeliveryModerationStatus.approved;
+        final isDeliveryApproved = appState.deliveryModerationStatus ==
+            DeliveryModerationStatus.approved;
 
         if (isDeliveryProfile && !isDeliveryApproved) {
           if (_pipcarOrder != null && mounted) {
@@ -352,7 +366,8 @@ class _HomeScreenState extends State<HomeScreen> {
           continue;
         }
 
-        final orders = await ApiService.getDeliveryOrders(status: 'pending', limit: 10);
+        final orders =
+            await ApiService.getDeliveryOrders(status: 'pending', limit: 10);
         if (!mounted) break;
         if (orders.isNotEmpty && _pipcarOrder == null) {
           setState(() => _pipcarOrder = orders.first);
@@ -372,9 +387,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final reg = await ApiService.getDeliveryRegistrationStatus();
       if (!mounted) return;
       final rawStatus = (reg?['status'] as String?)?.toUpperCase() ?? '';
-      final previous =
-          (await OnboardingService.getLastKnownDeliveryRegStatus())?.toUpperCase() ??
-              '';
+      final previous = (await OnboardingService.getLastKnownDeliveryRegStatus())
+              ?.toUpperCase() ??
+          '';
 
       final nextStatus =
           DeliveryModerationStatusExtension.fromRegistrationApiStatus(
@@ -441,6 +456,168 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _loadMarketIntelligenceData() async {
+    try {
+      final results = await Future.wait([
+        ApiService.getDeliveryOrders(),
+        ApiService.getPartners(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _marketPendingOrders = (results[0] as List<DeliveryOrder>)
+            .where((o) => o.status == DeliveryStatus.pending)
+            .toList();
+        _marketPartners = results[1] as List<Partner>;
+      });
+      _refreshMarketIntelligenceOverlays();
+    } catch (e) {
+      debugPrint('Falha ao carregar inteligencia do mapa: $e');
+    }
+  }
+
+  void _refreshMarketIntelligenceOverlays() {
+    if (_deliveryNavigationActive) return;
+    final showHotOrders =
+        _filterOptions.contains(MapFilterOption.hotOrders) || _heatmapOn;
+    final showHighPay =
+        _filterOptions.contains(MapFilterOption.highPay) || _heatmapOn;
+    final showPartnerDensity =
+        _filterOptions.contains(MapFilterOption.partnerDensity) || _heatmapOn;
+    final showPartners = _filterOptions.contains(MapFilterOption.autoParts) ||
+        _filterOptions.contains(MapFilterOption.mechanics) ||
+        _filterOptions.contains(MapFilterOption.partnerDensity) ||
+        _filterOptions.isEmpty;
+
+    final markers = <Marker>{};
+    final circles = <Circle>{};
+
+    if (showPartners) {
+      for (final p in _marketPartners.take(120)) {
+        markers.add(
+          Marker(
+            markerId: MarkerId('partner_${p.id}'),
+            position: LatLng(p.latitude, p.longitude),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              p.type == PartnerType.store
+                  ? BitmapDescriptor.hueOrange
+                  : BitmapDescriptor.hueGreen,
+            ),
+            infoWindow: InfoWindow(title: p.name, snippet: p.address),
+          ),
+        );
+      }
+    }
+
+    final grouped = <String, Map<String, dynamic>>{};
+    String keyFor(double lat, double lng) =>
+        '${(lat * 50).round() / 50}_${(lng * 50).round() / 50}';
+
+    for (final o in _marketPendingOrders) {
+      final hourWeight = _timeWindowWeight(o.createdAt.hour);
+      final k = keyFor(o.storeLatitude, o.storeLongitude);
+      final g = grouped.putIfAbsent(
+        k,
+        () => {
+          'lat': o.storeLatitude,
+          'lng': o.storeLongitude,
+          'orders': 0,
+          'weightedOrders': 0.0,
+          'pay': 0.0,
+          'partners': 0,
+        },
+      );
+      g['orders'] = (g['orders'] as int) + 1;
+      g['weightedOrders'] = (g['weightedOrders'] as double) + hourWeight;
+      g['pay'] = (g['pay'] as double) + o.deliveryFee;
+    }
+    for (final p in _marketPartners) {
+      final k = keyFor(p.latitude, p.longitude);
+      final g = grouped.putIfAbsent(
+        k,
+        () => {
+          'lat': p.latitude,
+          'lng': p.longitude,
+          'orders': 0,
+          'weightedOrders': 0.0,
+          'pay': 0.0,
+          'partners': 0,
+        },
+      );
+      g['partners'] = (g['partners'] as int) + 1;
+    }
+
+    final topZones = grouped.values.toList()
+      ..sort((a, b) {
+        final aOrders = a['weightedOrders'] as double;
+        final bOrders = b['weightedOrders'] as double;
+        final aPartners = a['partners'] as int;
+        final bPartners = b['partners'] as int;
+        final aAvgPay = aOrders > 0 ? (a['pay'] as double) / aOrders : 0.0;
+        final bAvgPay = bOrders > 0 ? (b['pay'] as double) / bOrders : 0.0;
+        final aScore = (showHotOrders ? aOrders * 2.0 : 0.0) +
+            (showPartnerDensity ? aPartners * 2 : 0) +
+            (showHighPay ? aAvgPay : 0);
+        final bScore = (showHotOrders ? bOrders * 2.0 : 0.0) +
+            (showPartnerDensity ? bPartners * 2 : 0) +
+            (showHighPay ? bAvgPay : 0);
+        return bScore.compareTo(aScore);
+      });
+
+    for (final z in topZones.take(10)) {
+      final orders = z['orders'] as int;
+      final partners = z['partners'] as int;
+      final avgPay = orders > 0 ? (z['pay'] as double) / orders : 0.0;
+      final intensity =
+          ((orders * 0.6) + (partners * 0.5) + (avgPay * 0.2)).clamp(1, 8);
+      circles.add(
+        Circle(
+          circleId: CircleId('zone_${z['lat']}_${z['lng']}'),
+          center: LatLng(z['lat'] as double, z['lng'] as double),
+          radius: 130 + (intensity * 45),
+          fillColor: AppColors.racingOrange.withOpacity(0.14),
+          strokeColor: AppColors.racingOrange.withOpacity(0.45),
+          strokeWidth: 2,
+        ),
+      );
+      markers.add(
+        Marker(
+          markerId: MarkerId('zone_label_${z['lat']}_${z['lng']}'),
+          position: LatLng(z['lat'] as double, z['lng'] as double),
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+          infoWindow: InfoWindow(
+            title: 'Zona estratégica',
+            snippet:
+                'Corridas: $orders | Parceiros: $partners | Ticket méd.: R\$${avgPay.toStringAsFixed(2)}',
+          ),
+        ),
+      );
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _markers = markers;
+      _marketCircles = circles;
+      _rebuildRiderNavMarker();
+    });
+  }
+
+  double _timeWindowWeight(int hour) {
+    switch (_mapTimeWindow) {
+      case MapTimeWindowOption.now:
+        final now = DateTime.now().hour;
+        final d = (hour - now).abs();
+        if (d == 0) return 2.0;
+        if (d <= 1) return 1.4;
+        if (d <= 2) return 1.1;
+        return 0.8;
+      case MapTimeWindowOption.lunchPeak:
+        return (hour >= 11 && hour <= 14) ? 1.9 : 0.9;
+      case MapTimeWindowOption.eveningPeak:
+        return (hour >= 18 && hour <= 22) ? 2.0 : 0.85;
+    }
+  }
+
   void _onMapCreated(GoogleMapController controller) async {
     _mapController = controller;
     if (_currentPosition != null) {
@@ -449,7 +626,7 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: _cameraAnimationDuration,
       );
     }
-    
+
     // Aplicar estilo do mapa baseado no tema atual
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -458,10 +635,11 @@ class _HomeScreenState extends State<HomeScreen> {
       await controller.setMapStyle(mapStyle);
     }
   }
-  
+
   // Estilo do mapa para modo claro
-  static const String? _lightMapStyle = null; // Usa estilo padrão do Google Maps
-  
+  static const String? _lightMapStyle =
+      null; // Usa estilo padrão do Google Maps
+
   // Estilo do mapa para modo escuro
   static const String? _darkMapStyle = '''
 [
@@ -688,8 +866,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _drawRouteToStore(DeliveryOrder order) async {
     final user = Provider.of<AppStateProvider>(context, listen: false).user;
-    final originLat = user?.currentLat ?? _currentPosition?.latitude ?? _defaultCenter.latitude;
-    final originLng = user?.currentLng ?? _currentPosition?.longitude ?? _defaultCenter.longitude;
+    final originLat = user?.currentLat ??
+        _currentPosition?.latitude ??
+        _defaultCenter.latitude;
+    final originLng = user?.currentLng ??
+        _currentPosition?.longitude ??
+        _defaultCenter.longitude;
 
     final routeResult = await MapService.getRoutePoints(
       originLat: originLat,
@@ -725,9 +907,11 @@ class _HomeScreenState extends State<HomeScreen> {
         Marker(
           markerId: const MarkerId('store'),
           position: LatLng(order.storeLatitude, order.storeLongitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
         ),
       };
+      _marketCircles = {};
       _rebuildRiderNavMarker();
     });
 
@@ -748,8 +932,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _drawRouteStoreToClient(DeliveryOrder order) async {
     final user = Provider.of<AppStateProvider>(context, listen: false).user;
-    final originLat = user?.currentLat ?? _currentPosition?.latitude ?? order.storeLatitude;
-    final originLng = user?.currentLng ?? _currentPosition?.longitude ?? order.storeLongitude;
+    final originLat =
+        user?.currentLat ?? _currentPosition?.latitude ?? order.storeLatitude;
+    final originLng =
+        user?.currentLng ?? _currentPosition?.longitude ?? order.storeLongitude;
 
     final routeResult = await MapService.getRoutePoints(
       originLat: originLat,
@@ -785,14 +971,17 @@ class _HomeScreenState extends State<HomeScreen> {
         Marker(
           markerId: const MarkerId('store'),
           position: LatLng(order.storeLatitude, order.storeLongitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
         ),
         Marker(
           markerId: const MarkerId('delivery'),
           position: LatLng(order.deliveryLatitude, order.deliveryLongitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
         ),
       };
+      _marketCircles = {};
       _rebuildRiderNavMarker();
     });
 
@@ -867,7 +1056,9 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chegada confirmada. Aguardando retirada do pedido.')),
+        const SnackBar(
+            content:
+                Text('Chegada confirmada. Aguardando retirada do pedido.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -900,7 +1091,8 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel atualizar a etapa da corrida: $e')),
+        SnackBar(
+            content: Text('Nao foi possivel atualizar a etapa da corrida: $e')),
       );
     } finally {
       if (mounted) {
@@ -921,9 +1113,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _activeDeliveryOrder = null;
         _polylines = {};
         _markers = {};
+        _marketCircles = {};
         _riderNavMarker = null;
         _prevNavForBearing = null;
       });
+      _refreshMarketIntelligenceOverlays();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Entrega finalizada.')),
       );
@@ -969,6 +1163,7 @@ class _HomeScreenState extends State<HomeScreen> {
             mapToolbarEnabled: false,
             polylines: _polylines,
             markers: _allMapMarkers,
+            circles: _marketCircles,
             mapType: _mapType,
             minMaxZoomPreference: const MinMaxZoomPreference(4, 19),
             rotateGesturesEnabled: true,
@@ -996,7 +1191,9 @@ class _HomeScreenState extends State<HomeScreen> {
           left: 0,
           right: 0,
           child: ModernHeader(
-            title: isRider ? '' : 'Minha Loja', // Removido "Mapa" pois está na Home
+            title: isRider
+                ? ''
+                : 'Minha Loja', // Removido "Mapa" pois está na Home
             transparentOverMap: true,
           ),
         ),
@@ -1037,15 +1234,27 @@ class _HomeScreenState extends State<HomeScreen> {
             child: HomeMapFabColumn(
               isHeatmapOn: _heatmapOn,
               selectedFilters: _filterOptions,
+              selectedTimeWindow: _mapTimeWindow,
               onDriveMode: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const MaintenanceDetailScreen()),
+                  MaterialPageRoute(
+                      builder: (_) => const MaintenanceDetailScreen()),
                 );
               },
               onRecenter: _recenterMap,
-              onHeatmapChanged: (v) => setState(() => _heatmapOn = v),
-              onFilterChanged: (v) => setState(() => _filterOptions = v),
+              onHeatmapChanged: (v) {
+                setState(() => _heatmapOn = v);
+                _refreshMarketIntelligenceOverlays();
+              },
+              onFilterChanged: (v) {
+                setState(() => _filterOptions = v);
+                _refreshMarketIntelligenceOverlays();
+              },
+              onTimeWindowChanged: (v) {
+                setState(() => _mapTimeWindow = v);
+                _refreshMarketIntelligenceOverlays();
+              },
             ),
           ),
         ),
@@ -1240,7 +1449,8 @@ class _ControlButton extends StatelessWidget {
         child: SizedBox(
           width: 32,
           height: 32,
-          child: Icon(icon, size: 16, color: theme.iconTheme.color?.withOpacity(0.85)),
+          child: Icon(icon,
+              size: 16, color: theme.iconTheme.color?.withOpacity(0.85)),
         ),
       ),
     );
@@ -1280,7 +1490,9 @@ class _MapTypeChip extends StatelessWidget {
                         ? LucideIcons.satellite
                         : LucideIcons.layers,
                 size: 14,
-                color: selected ? AppColors.racingOrange.withOpacity(0.95) : theme.iconTheme.color?.withOpacity(0.7),
+                color: selected
+                    ? AppColors.racingOrange.withOpacity(0.95)
+                    : theme.iconTheme.color?.withOpacity(0.7),
               ),
               const SizedBox(width: 5),
               Text(
@@ -1288,7 +1500,9 @@ class _MapTypeChip extends StatelessWidget {
                 style: theme.textTheme.labelSmall?.copyWith(
                   fontSize: 10,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                  color: selected ? AppColors.racingOrange.withOpacity(0.95) : theme.textTheme.bodySmall?.color?.withOpacity(0.75),
+                  color: selected
+                      ? AppColors.racingOrange.withOpacity(0.95)
+                      : theme.textTheme.bodySmall?.color?.withOpacity(0.75),
                 ),
               ),
             ],
@@ -1330,8 +1544,8 @@ class _NotificationsFullSheet extends StatelessWidget {
                 child: Text(
                   'Notificações',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ),
               Expanded(
@@ -1455,7 +1669,9 @@ class _DeliveryTripStageCard extends StatelessWidget {
                         ),
                       )
                     : const Icon(LucideIcons.flag, size: 18),
-                label: Text(isLoading ? 'Atualizando rota...' : 'Cheguei no estabelecimento'),
+                label: Text(isLoading
+                    ? 'Atualizando rota...'
+                    : 'Cheguei no estabelecimento'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.racingOrange,
                   foregroundColor: Colors.white,
@@ -1479,7 +1695,8 @@ class _DeliveryTripStageCard extends StatelessWidget {
                         ),
                       )
                     : const Icon(LucideIcons.package, size: 18),
-                label: Text(isLoading ? 'Atualizando...' : 'Coletar e iniciar entrega'),
+                label: Text(
+                    isLoading ? 'Atualizando...' : 'Coletar e iniciar entrega'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.statusOk,
                   foregroundColor: Colors.white,

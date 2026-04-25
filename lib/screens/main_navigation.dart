@@ -4,7 +4,7 @@ import 'home/home_screen.dart';
 import 'home/partner_home_screen.dart';
 import 'garage/garage_screen.dart';
 import 'ranking/ranking_screen.dart';
-import 'community/community_screen.dart';
+import 'chat/chat_screen.dart';
 import 'momentos/momentos_screen.dart';
 import '../widgets/floating_bottom_nav.dart';
 import '../widgets/menu_grid_modal.dart';
@@ -34,7 +34,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   List<Widget> _buildScreens(bool isPartner) {
     return [
-      const CommunityScreen(),   // 0 Chat
+      const ChatScreen(),        // 0 Mensagens (Comunidade/Grupos/Particular)
       const RankingScreen(),     // 1 Eventos
       isPartner ? const PartnerHomeScreen() : const HomeScreen(), // 2: Lojista = dashboard; Motociclista = mapa
       const MomentosScreen(),    // 3 Momentos
@@ -100,6 +100,12 @@ class _MainNavigationState extends State<MainNavigation> {
   void _onNavTap(int index) {
     if (index == 2) {
       _openMenuModal();
+      return;
+    }
+    if (index == 0) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ChatScreen()),
+      );
       return;
     }
     setState(() => _currentIndex = index);

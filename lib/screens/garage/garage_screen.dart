@@ -918,7 +918,7 @@ class _GarageScreenState extends State<GarageScreen> {
   }) {
     return Container(
       constraints: maxWidth != null ? BoxConstraints(maxWidth: maxWidth) : null,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: color.withOpacity(0.18),
         borderRadius: BorderRadius.circular(999),
@@ -927,17 +927,19 @@ class _GarageScreenState extends State<GarageScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.white),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
+          Icon(icon, size: 13, color: Colors.white),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 11.5,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

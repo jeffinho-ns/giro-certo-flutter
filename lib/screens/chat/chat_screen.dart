@@ -8,6 +8,7 @@ import '../../models/chat_message.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/chat_service.dart';
 import '../../services/realtime_service.dart';
+import '../community/community_screen.dart';
 import 'package:intl/intl.dart';
 
 /// Tipo de conversa (abas).
@@ -71,10 +72,7 @@ class _ChatScreenState extends State<ChatScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _ChatListFromService(
-            type: ChatListType.community,
-            emptyMessage: 'Nenhuma conversa da comunidade.',
-          ),
+          const CommunityScreen(embeddedInTabs: true),
           _ChatListFromService(
             type: ChatListType.groups,
             emptyMessage: 'Nenhum grupo ainda.',
