@@ -201,6 +201,33 @@ class _GarageScreenState extends State<GarageScreen> {
           appState.setDeliveryModerationStatus(s);
           await OnboardingService.saveDeliveryStatus(s);
         }
+
+        // Fallback robusto: se a bike não veio de /me/bikes, usa dados do cadastro delivery.
+        if (appState.bike == null) {
+          final regVt =
+              (reg['vehicleType'] as String? ?? 'MOTORCYCLE').toUpperCase();
+          final plateRaw =
+              reg['plateLicense'] as String? ?? reg['plate_license'] as String? ?? '';
+          final plate = plateRaw.trim().isEmpty ? 'S/N' : plateRaw.trim();
+          final currentKm =
+              ((reg['currentKilometers'] as num?) ?? (reg['current_kilometers'] as num?) ?? 0)
+                  .toInt();
+          appState.setBike(
+            Bike(
+              id: 'delivery-registration-fallback',
+              model: 'Delivery',
+              brand: regVt == 'BICYCLE' ? 'Bicicleta' : 'Moto',
+              plate: plate,
+              currentKm: currentKm,
+              oilType: regVt == 'BICYCLE' ? '—' : '10W-40',
+              frontTirePressure: regVt == 'BICYCLE' ? 0 : 2.5,
+              rearTirePressure: regVt == 'BICYCLE' ? 0 : 2.8,
+              vehicleType: regVt == 'BICYCLE'
+                  ? AppVehicleType.bicycle
+                  : AppVehicleType.motorcycle,
+            ),
+          );
+        }
       }
     } catch (_) {}
   }
