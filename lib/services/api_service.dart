@@ -232,16 +232,18 @@ class ApiService {
     return User.fromJson(data['user']);
   }
 
-  /// Atualizar perfil (photoUrl, coverUrl)
+  /// Atualizar perfil (photoUrl, coverUrl, pilotProfile para enum Postgres)
   static Future<User> updateUserProfile({
     String? name,
     String? photoUrl,
     String? coverUrl,
+    String? pilotProfile,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (photoUrl != null) body['photoUrl'] = photoUrl;
     if (coverUrl != null) body['coverUrl'] = coverUrl;
+    if (pilotProfile != null) body['pilotProfile'] = pilotProfile;
 
     final response = await http.patch(
       Uri.parse('$baseUrl/users/me/profile'),

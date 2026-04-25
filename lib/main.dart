@@ -553,7 +553,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
     } catch (_) {
       appState.setBike(bike);
     }
-    appState.setPilotProfileType(resolvedProfile);
+    try {
+      final persistedUser = await ApiService.updateUserProfile(
+        pilotProfile: resolvedProfile.postgresPilotProfileValue,
+      );
+      appState.setUser(persistedUser);
+    } catch (e) {
+      debugPrint('Falha ao persistir pilotProfile no servidor: $e');
+    }
     appState.setDeliveryModerationStatus(deliveryStatus);
     appState.completeLogin();
     appState.completeSetup();

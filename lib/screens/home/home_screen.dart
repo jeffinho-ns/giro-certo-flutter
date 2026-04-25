@@ -335,7 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
     while (mounted) {
       try {
         await _syncDeliveryModerationStatus();
-        final isDeliveryProfile = appState.user?.userType == UserType.delivery;
+        final isDeliveryProfile = appState.isDeliveryPilot;
         final isDeliveryApproved =
             appState.deliveryModerationStatus == DeliveryModerationStatus.approved;
 
@@ -366,8 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _syncDeliveryModerationStatus() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
-    final user = appState.user;
-    if (user?.userType != UserType.delivery) return;
+    if (!appState.isDeliveryPilot) return;
 
     try {
       final reg = await ApiService.getDeliveryRegistrationStatus();
@@ -382,17 +381,27 @@ class _HomeScreenState extends State<HomeScreen> {
         reg?['status'] as String?,
       );
 
-      if (rawStatus == 'APPROVED' &&
+      final justApproved = rawStatus == 'APPROVED' &&
           previous != 'APPROVED' &&
           (previous == 'PENDING' ||
               previous == 'UNDER_REVIEW' ||
-              previous.isEmpty)) {
+              previous.isEmpty);
+
+      if (justApproved) {
         await showLocalNotification(
           id: 91001,
           title: 'Cadastro aprovado',
           body: 'Pode aceitar corridas de delivery. Boa jornada!',
           payload: 'notification',
         );
+        try {
+          final fresh = await ApiService.getCurrentUser();
+          if (mounted) {
+            appState.setUser(fresh);
+          }
+        } catch (e) {
+          debugPrint('Falha ao atualizar utilizador após aprovação: $e');
+        }
       }
 
       await OnboardingService.saveDeliveryStatus(nextStatus);
@@ -935,7 +944,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final appState = Provider.of<AppStateProvider>(context);
     final user = appState.user;
     final isRider = user?.isRider ?? true;
-    final isDeliveryProfile = user?.userType == UserType.delivery;
+    final isDeliveryProfile = appState.isDeliveryPilot;
     final showDeliveryPendingBanner = isDeliveryProfile &&
         appState.deliveryModerationStatus.isAwaitingModeration;
 

@@ -33,10 +33,21 @@ class AppStateProvider extends ChangeNotifier {
   /// Destino após login por tipo de usuário:
   /// - Lojista/Delivery → MainNavigation
   /// - Casual/Diário/Racing → SocialHomeScreen
+  bool get isDeliveryPilot {
+    final u = _user;
+    if (u == null) return false;
+    if (u.userType == UserType.delivery) return true;
+    if (parseUserType(u.pilotProfile) == UserType.delivery) return true;
+    if (_pilotProfileType == PilotProfileType.delivery) return true;
+    return false;
+  }
+
   bool get shouldShowSocialHome {
     final u = _user;
     if (u == null) return false;
     if (u.partnerId != null) return false;
+    if (isDeliveryPilot) return false;
+    if (u.userType == UserType.lojista) return false;
     switch (u.userType) {
       case UserType.casual:
       case UserType.diario:
@@ -51,6 +62,10 @@ class AppStateProvider extends ChangeNotifier {
 
   void setUser(User user) {
     _user = user;
+    final mapped = _mapPilotProfileType(user.pilotProfile);
+    if (mapped != null) {
+      _pilotProfileType = mapped;
+    }
     notifyListeners();
   }
 
@@ -124,7 +139,9 @@ class AppStateProvider extends ChangeNotifier {
       }
       // Delivery: se o admin já aprovou uma vez, fica persistido (como "e-mail verificado")
       // e não voltamos a mostrar "em análise" até o primeiro fetch por hasVerifiedDocuments.
-      if (sessionUser.userType == UserType.delivery) {
+      final sessionIsDelivery = sessionUser.userType == UserType.delivery ||
+          parseUserType(sessionUser.pilotProfile) == UserType.delivery;
+      if (sessionIsDelivery) {
         final cached = await OnboardingService.getDeliveryStatus();
         if (cached == DeliveryModerationStatus.approved) {
           _deliveryModerationStatus = DeliveryModerationStatus.approved;

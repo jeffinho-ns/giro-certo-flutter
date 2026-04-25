@@ -32,6 +32,20 @@ extension PilotProfileTypeExtension on PilotProfileType {
     }
   }
 
+  /// Valores do enum `PilotProfile` na base Postgres (giro-certo-api).
+  String get postgresPilotProfileValue {
+    switch (this) {
+      case PilotProfileType.casual:
+        return 'FIM_DE_SEMANA';
+      case PilotProfileType.diario:
+        return 'URBANO';
+      case PilotProfileType.racing:
+        return 'PISTA';
+      case PilotProfileType.delivery:
+        return 'TRABALHO';
+    }
+  }
+
   String get heroTag => 'pilot_profile_${name}';
 
   bool get isDelivery => this == PilotProfileType.delivery;

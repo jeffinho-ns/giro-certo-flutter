@@ -14,7 +14,6 @@ import '../providers/navigation_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../models/bike.dart';
 import '../models/vehicle_type.dart';
-import '../models/user.dart';
 import '../models/pilot_profile.dart';
 import '../services/api_service.dart';
 import '../services/onboarding_service.dart';
@@ -58,7 +57,7 @@ class _MainNavigationState extends State<MainNavigation> {
   /// Carrega dados da moto e status de aprovação do registro de delivery quando o usuário é entregador.
   Future<void> _loadBikeIfDelivery() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
-    if (appState.user?.userType != UserType.delivery) return;
+    if (!appState.isDeliveryPilot) return;
     try {
       final reg = await ApiService.getDeliveryRegistrationStatus();
       if (reg == null || !mounted) return;
