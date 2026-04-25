@@ -107,6 +107,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _openMenuModal() {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -116,6 +117,8 @@ class _MainNavigationState extends State<MainNavigation> {
       isDismissible: true,
       builder: (context) => MenuGridModal(
         onClose: () {},
+        isDeliveryPilot: appState.isDeliveryPilot,
+        isPartner: appState.user?.isPartner ?? false,
         onNavigateToIndex: (index) {
           final navProvider = Provider.of<NavigationProvider>(context, listen: false);
           setState(() => _currentIndex = index);
