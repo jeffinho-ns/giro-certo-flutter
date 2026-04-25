@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import '../../services/api_service.dart';
@@ -285,11 +286,12 @@ class _GarageScreenState extends State<GarageScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
+    final themeProv = Provider.of<ThemeProvider>(context);
     final bike = appState.bike;
     final theme = Theme.of(context);
     final pilotType = appState.pilotProfileType;
     final pilotLabel = _pilotTypeLabel(pilotType);
-    final profileTheme = _profileTheme(pilotType);
+    final profileTheme = _resolvedGarageTheme(pilotType, theme, themeProv);
     final pilotAccent = profileTheme.accent;
 
     // Se não houver bike, mostrar mensagem
@@ -944,49 +946,67 @@ class _GarageScreenState extends State<GarageScreen> {
     }
   }
 
-  _GarageVisualTheme _profileTheme(PilotProfileType? type) {
+  /// Cor de “identidade” do perfil (misturada com a cor primária das definições).
+  (Color accent, Color accentStrong) _pilotAccentBase(PilotProfileType? type) {
     switch (type) {
       case PilotProfileType.casual:
-        return const _GarageVisualTheme(
-          accent: Color(0xFF3B82F6),
-          accentStrong: Color(0xFF2563EB),
-          surface: Color(0xFFEEF5FF),
-          background: Color(0xFFF7FAFF),
-          mood: 'Ride leve',
-        );
+        return (const Color(0xFF3B82F6), const Color(0xFF2563EB));
       case PilotProfileType.diario:
-        return const _GarageVisualTheme(
-          accent: Color(0xFFF97316),
-          accentStrong: Color(0xFFEA580C),
-          surface: Color(0xFFFFF4E8),
-          background: Color(0xFFFFFAF5),
-          mood: 'Rotina urbana',
-        );
+        return (const Color(0xFFF97316), const Color(0xFFEA580C));
       case PilotProfileType.racing:
-        return const _GarageVisualTheme(
-          accent: Color(0xFFEF4444),
-          accentStrong: Color(0xFFDC2626),
-          surface: Color(0xFFFFEDEE),
-          background: Color(0xFFFFF8F8),
-          mood: 'Alta performance',
-        );
+        return (const Color(0xFFEF4444), const Color(0xFFDC2626));
       case PilotProfileType.delivery:
-        return const _GarageVisualTheme(
-          accent: Color(0xFF10B981),
-          accentStrong: Color(0xFF059669),
-          surface: Color(0xFFEFFCF6),
-          background: Color(0xFFF7FFFB),
-          mood: 'Operação ativa',
-        );
+        return (const Color(0xFF10B981), const Color(0xFF059669));
       case null:
-        return const _GarageVisualTheme(
-          accent: Color(0xFFF97316),
-          accentStrong: Color(0xFFEA580C),
-          surface: Color(0xFFFFF4E8),
-          background: Color(0xFFFFFAF5),
-          mood: 'Piloto',
-        );
+        return (const Color(0xFFF97316), const Color(0xFFEA580C));
     }
+  }
+
+  String _pilotMood(PilotProfileType? type) {
+    switch (type) {
+      case PilotProfileType.casual:
+        return 'Ride leve';
+      case PilotProfileType.diario:
+        return 'Rotina urbana';
+      case PilotProfileType.racing:
+        return 'Alta performance';
+      case PilotProfileType.delivery:
+        return 'Operação ativa';
+      case null:
+        return 'Piloto';
+    }
+  }
+
+  /// Fundos alinhados ao tema claro/escuro e à cor escolhida em Definições.
+  _GarageVisualTheme _resolvedGarageTheme(
+    PilotProfileType? type,
+    ThemeData theme,
+    ThemeProvider themeProv,
+  ) {
+    final (baseAccent, baseStrong) = _pilotAccentBase(type);
+    final primary = themeProv.primaryColor;
+    final accent = Color.lerp(baseAccent, primary, 0.36)!;
+    final accentStrong = Color.lerp(baseStrong, primary, 0.42)!;
+    final baseSurface = theme.colorScheme.surface;
+    final baseBg = theme.scaffoldBackgroundColor;
+    final isDark = theme.brightness == Brightness.dark;
+    final surfaceTint = isDark ? 0.14 : 0.09;
+    final bgTint = isDark ? 0.11 : 0.065;
+    final surface = Color.alphaBlend(
+      accent.withOpacity(surfaceTint),
+      baseSurface,
+    );
+    final background = Color.alphaBlend(
+      accent.withOpacity(bgTint),
+      baseBg,
+    );
+    return _GarageVisualTheme(
+      accent: accent,
+      accentStrong: accentStrong,
+      surface: surface,
+      background: background,
+      mood: _pilotMood(type),
+    );
   }
 
   (int, String) _bikeHealthScore(Bike bike) {
@@ -1539,7 +1559,7 @@ class _GarageVisualTheme {
   final Color background;
   final String mood;
 
-  const _GarageVisualTheme({
+  _GarageVisualTheme({
     required this.accent,
     required this.accentStrong,
     required this.surface,
