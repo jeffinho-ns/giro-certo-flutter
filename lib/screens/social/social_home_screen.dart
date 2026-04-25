@@ -12,7 +12,6 @@ import '../../services/social_service.dart';
 import '../../models/post.dart';
 import '../../models/reaction_type.dart';
 import '../../services/api_service.dart';
-import '../../utils/colors.dart';
 import '../../widgets/social/social_search_bar.dart';
 import '../../widgets/social/story_tile.dart';
 import '../../widgets/social/post_card.dart';
@@ -361,67 +360,6 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _FeedTabChip(
-                      label: 'Para Você',
-                      isSelected: feed.feedTab == FeedTab.forYou,
-                      onTap: () => feed.setFeedTab(FeedTab.forYou),
-                    ),
-                    const SizedBox(width: 8),
-                    _FeedTabChip(
-                      label: 'Seguindo',
-                      isSelected: feed.feedTab == FeedTab.following,
-                      onTap: () => feed.setFeedTab(FeedTab.following),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _FeedTabChip(
-                        label: 'Todos',
-                        isSelected: feed.pilotFilter == FeedPilotFilter.all,
-                        onTap: () {
-                          feed.setPilotFilter(FeedPilotFilter.all);
-                          _loadData();
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      _FeedTabChip(
-                        label: 'Só delivery',
-                        isSelected: feed.pilotFilter == FeedPilotFilter.delivery,
-                        onTap: () {
-                          feed.setPilotFilter(FeedPilotFilter.delivery);
-                          _loadData();
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      _FeedTabChip(
-                        label: 'Só lazer',
-                        isSelected: feed.pilotFilter == FeedPilotFilter.lazer,
-                        onTap: () {
-                          feed.setPilotFilter(FeedPilotFilter.lazer);
-                          _loadData();
-                        },
-                      ),
-                      if (feed.hashtagFilter.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        Chip(
-                          label: Text('#${feed.hashtagFilter}'),
-                          deleteIcon: const Icon(LucideIcons.x, size: 16),
-                          onDeleted: () {
-                            feed.setHashtagFilter('');
-                            _loadData();
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 150,
@@ -514,45 +452,6 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
       bottomNavigationBar: FloatingBottomNav(
         currentIndex: _currentNavIndex,
         onTap: _onNavTap,
-      ),
-    );
-  }
-}
-
-class _FeedTabChip extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _FeedTabChip({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.racingOrange.withOpacity(0.2)
-              : theme.cardColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppColors.racingOrange : theme.dividerColor,
-          ),
-        ),
-        child: Text(
-          label,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: isSelected ? AppColors.racingOrange : theme.textTheme.bodyMedium?.color,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
       ),
     );
   }

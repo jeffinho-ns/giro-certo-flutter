@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:geolocator/geolocator.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/drawer_provider.dart';
 import 'api_image.dart';
@@ -33,6 +34,10 @@ class ModernHeader extends StatefulWidget {
 class _ModernHeaderState extends State<ModernHeader> {
   late Timer _clockTimer;
   String _timeStr = '';
+  StreamSubscription<Position>? _positionSubscription;
+  Position? _lastPosition;
+  DateTime? _lastPositionTimestamp;
+  double? _currentSpeedKmh;
 
   @override
   void initState() {
@@ -40,6 +45,9 @@ class _ModernHeaderState extends State<ModernHeader> {
     _updateTime();
     _clockTimer =
         Timer.periodic(const Duration(seconds: 1), (_) => _updateTime());
+    if (!widget.hideClockAndKm) {
+      _startSpeedTracking();
+    }
   }
 
   void _updateTime() {
@@ -54,7 +62,72 @@ class _ModernHeaderState extends State<ModernHeader> {
   @override
   void dispose() {
     _clockTimer.cancel();
+    _positionSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _startSpeedTracking() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      _positionSubscription = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 1,
+        ),
+      ).listen(_onPositionUpdate);
+    } catch (_) {
+      // Mantem fallback visual (-- km/h) se GPS falhar.
+    }
+  }
+
+  void _onPositionUpdate(Position pos) {
+    final now = DateTime.now();
+    var speedMps = pos.speed >= 0 ? pos.speed : 0.0;
+
+    if (speedMps <= 0 &&
+        _lastPosition != null &&
+        _lastPositionTimestamp != null) {
+      final dt = now.difference(_lastPositionTimestamp!).inMilliseconds / 1000.0;
+      if (dt > 0.5) {
+        final meters = Geolocator.distanceBetween(
+          _lastPosition!.latitude,
+          _lastPosition!.longitude,
+          pos.latitude,
+          pos.longitude,
+        );
+        speedMps = meters / dt;
+      }
+    }
+
+    // Ignora picos irreais de GPS para evitar leituras absurdas.
+    final nextKmh = speedMps * 3.6;
+    if (nextKmh.isNaN || nextKmh.isInfinite || nextKmh > 180) {
+      _lastPosition = pos;
+      _lastPositionTimestamp = now;
+      return;
+    }
+
+    final smoothed = _currentSpeedKmh == null
+        ? nextKmh
+        : (_currentSpeedKmh! * 0.65) + (nextKmh * 0.35);
+
+    if (mounted) {
+      setState(() => _currentSpeedKmh = smoothed);
+    }
+
+    _lastPosition = pos;
+    _lastPositionTimestamp = now;
   }
 
   @override
@@ -62,12 +135,11 @@ class _ModernHeaderState extends State<ModernHeader> {
     final appState = Provider.of<AppStateProvider>(context);
     final drawerProvider = Provider.of<DrawerProvider>(context, listen: false);
     final user = appState.user;
-    final bike = appState.bike;
     final theme = Theme.of(context);
 
-    final kmStr = bike != null
-        ? '${bike.currentKm.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')} km'
-        : '-- km';
+    final speedStr = _currentSpeedKmh == null
+        ? '-- km/h'
+        : '${_currentSpeedKmh!.toStringAsFixed(1).replaceAll('.', ',')} km/h';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -166,7 +238,7 @@ class _ModernHeaderState extends State<ModernHeader> {
                   ),
                 ),
                 const Spacer(),
-                // Display [Hora] | [KM da Moto] (direita) – fundo escuro, bordas arredondadas, opacidade
+                // Display [Hora] | [Velocidade em tempo real] (direita)
                 if (!widget.hideClockAndKm)
                   Container(
                     padding:
@@ -215,7 +287,7 @@ class _ModernHeaderState extends State<ModernHeader> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          kmStr,
+                          speedStr,
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 13,

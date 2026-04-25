@@ -165,7 +165,7 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
         ),
         if (_filterMenuOpen) ...[
           const SizedBox(height: 8),
-          _filterChips(theme),
+          _filterChips(context, theme),
         ],
         const SizedBox(height: 12),
         _fab(
@@ -233,68 +233,80 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
     );
   }
 
-  Widget _filterChips(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.brightness == Brightness.dark
-            ? Colors.black.withOpacity(0.6)
-            : Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+  Widget _filterChips(BuildContext context, ThemeData theme) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxPanelWidth = (screenWidth - 96).clamp(190.0, 300.0);
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: maxPanelWidth,
+        maxHeight: MediaQuery.of(context).size.height * 0.5,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Visualização',
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              _chip('Mecânicos', MapFilterOption.mechanics, theme),
-              _chip('Auto Peças', MapFilterOption.autoParts, theme),
-              _chip('Mais Corridas', MapFilterOption.hotOrders, theme),
-              _chip('Melhor Pagamento', MapFilterOption.highPay, theme),
-              _chip('Mais Parceiros', MapFilterOption.partnerDensity, theme),
-              _chip('Eventos', MapFilterOption.events, theme),
+      child: SingleChildScrollView(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.6)
+                : Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            'Horário',
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _timeChip('Agora', MapTimeWindowOption.now),
-              _timeChip('Pico almoço', MapTimeWindowOption.lunchPeak),
-              _timeChip('Pico noite', MapTimeWindowOption.eveningPeak),
+              Text(
+                'Visualização',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  _chip('Mecânicos', MapFilterOption.mechanics, theme),
+                  _chip('Auto Peças', MapFilterOption.autoParts, theme),
+                  _chip('Mais Corridas', MapFilterOption.hotOrders, theme),
+                  _chip('Melhor Pagamento', MapFilterOption.highPay, theme),
+                  _chip(
+                      'Mais Parceiros', MapFilterOption.partnerDensity, theme),
+                  _chip('Eventos', MapFilterOption.events, theme),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Horário',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  _timeChip('Agora', MapTimeWindowOption.now),
+                  _timeChip('Pico almoço', MapTimeWindowOption.lunchPeak),
+                  _timeChip('Pico noite', MapTimeWindowOption.eveningPeak),
+                ],
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: _toggleFilterMenu,
+                child: const Text('Fechar'),
+              ),
             ],
           ),
-          const SizedBox(height: 4),
-          TextButton(
-            onPressed: _toggleFilterMenu,
-            child: const Text('Fechar'),
-          ),
-        ],
+        ),
       ),
     );
   }
