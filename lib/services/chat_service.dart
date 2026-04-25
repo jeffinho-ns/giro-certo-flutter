@@ -34,7 +34,8 @@ class ChatService {
     }
   }
 
-  static ChatConversation _convFromMap(Map<String, dynamic> j) => ChatConversation(
+  static ChatConversation _convFromMap(Map<String, dynamic> j) =>
+      ChatConversation(
         id: j['id'] as String,
         title: (j['title'] as String?) ?? '',
         lastMessagePreview: (j['lastMessagePreview'] as String?) ?? '',
@@ -191,6 +192,24 @@ class ChatService {
         lastMessageAt: null,
         isGroup: false,
         imageUrlOrUserId: recipientId,
+      );
+    }
+  }
+
+  /// Obtém ou inicia conversa com suporte técnico (programadores/moderação).
+  static Future<ChatConversation> startSupportChat({
+    required String currentUserId,
+  }) async {
+    try {
+      final j = await ApiService.startSupportChat();
+      return _convFromMap(j);
+    } catch (_) {
+      return ChatConversation(
+        id: 'support_$currentUserId',
+        title: 'Suporte técnico',
+        lastMessagePreview: '',
+        lastMessageAt: null,
+        isGroup: false,
       );
     }
   }

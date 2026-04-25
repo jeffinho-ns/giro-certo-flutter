@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
+import '../../providers/app_state_provider.dart';
+import '../../services/chat_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
+import '../chat/chat_screen.dart';
 
 /// Tela de Ajuda / Central de suporte.
 class HelpScreen extends StatelessWidget {
@@ -56,13 +60,15 @@ class HelpScreen extends StatelessWidget {
                       theme: theme,
                       icon: LucideIcons.messageCircle,
                       title: 'Chat',
-                      subtitle: 'Disponível em horário comercial',
+                      subtitle: 'Falar com programadores e suporte',
+                      onTap: () async => _openSupportChat(context),
                     ),
                     const SizedBox(height: 24),
                     Text(
                       'Versão da aplicação',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -88,66 +94,85 @@ class HelpScreen extends StatelessWidget {
     required IconData icon,
     required String title,
     required String subtitle,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.dividerColor.withOpacity(0.5),
-          width: 1,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: theme.dividerColor.withOpacity(0.5),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.racingOrange.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.racingOrange.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                icon,
+                color: AppColors.racingOrange,
+                size: 24,
+              ),
             ),
-            child: Icon(
-              icon,
-              color: AppColors.racingOrange,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color:
+                          theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Icon(
-            LucideIcons.chevronRight,
-            color: theme.iconTheme.color?.withOpacity(0.5),
-            size: 20,
-          ),
-        ],
+            Icon(
+              LucideIcons.chevronRight,
+              color: theme.iconTheme.color?.withOpacity(0.5),
+              size: 20,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Future<void> _openSupportChat(BuildContext context) async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final userId = appState.user?.id;
+    if (userId == null) return;
+
+    final conv = await ChatService.startSupportChat(currentUserId: userId);
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ChatScreen(initialConversation: conv)),
     );
   }
 }

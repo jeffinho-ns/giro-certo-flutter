@@ -22,11 +22,14 @@ class RealtimeService {
   int _lastRiderLocationEmitMs = 0;
   static const int _riderLocationEmitMinMs = 8000;
 
-  final _chatMessageController = StreamController<ChatMessagePayload>.broadcast();
-  final _notificationController = StreamController<Map<String, dynamic>>.broadcast();
+  final _chatMessageController =
+      StreamController<ChatMessagePayload>.broadcast();
+  final _notificationController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<ChatMessagePayload> get onChatMessage => _chatMessageController.stream;
-  Stream<Map<String, dynamic>> get onNotification => _notificationController.stream;
+  Stream<Map<String, dynamic>> get onNotification =>
+      _notificationController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -71,9 +74,8 @@ class RealtimeService {
             (messageMap['content'] as String?) ??
             (messageMap['body'] as String?) ??
             '';
-        final body = preview.isNotEmpty
-            ? preview
-            : 'Você recebeu uma nova mensagem.';
+        final body =
+            preview.isNotEmpty ? preview : 'Você recebeu uma nova mensagem.';
 
         showLocalNotification(
           id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -101,6 +103,24 @@ class RealtimeService {
           payload: 'notification',
         );
       }
+    });
+
+    _socket!.on('delivery:race:lost', (data) {
+      final map =
+          data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+      final title = 'Corrida indisponível';
+      final body = (map['message'] as String?) ??
+          'Essa corrida já foi aceita por outro entregador.';
+      _notificationController.add({
+        'type': 'delivery_race_lost',
+        ...map,
+      });
+      showLocalNotification(
+        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title: title,
+        body: body,
+        payload: 'delivery_race_lost',
+      );
     });
 
     _socket!.onDisconnect((_) {});

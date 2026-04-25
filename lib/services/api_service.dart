@@ -687,6 +687,13 @@ class ApiService {
       }),
     );
 
+    if (response.statusCode == 409) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final message = (data['error'] as String?) ??
+          'Esta corrida já foi aceita por outro entregador.';
+      throw Exception(message);
+    }
+
     _handleError(response);
 
     final data = json.decode(response.body);
@@ -1818,6 +1825,17 @@ class ApiService {
       Uri.parse('$baseUrl/chats/private'),
       headers: await _getHeaders(),
       body: json.encode({'recipientId': recipientId}),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return data['conversation'] as Map<String, dynamic>;
+  }
+
+  /// Obter ou iniciar chat com suporte técnico.
+  static Future<Map<String, dynamic>> startSupportChat() async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chats/support/start'),
+      headers: await _getHeaders(),
     );
     _handleError(response);
     final data = json.decode(response.body) as Map<String, dynamic>;
