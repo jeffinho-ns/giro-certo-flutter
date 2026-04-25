@@ -8,8 +8,11 @@ import '../../providers/navigation_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import '../../services/api_service.dart';
+import '../../services/onboarding_service.dart';
 import '../../models/pilot_profile.dart';
 import '../../models/bike.dart';
+import '../../models/vehicle_type.dart';
+import '../../models/user.dart';
 
 class GarageScreen extends StatefulWidget {
   const GarageScreen({super.key});
@@ -167,12 +170,14 @@ class _GarageScreenState extends State<GarageScreen> {
       frontTirePressure: bike.frontTirePressure,
       rearTirePressure: bike.rearTirePressure,
       photoUrl: bike.photoUrl,
+      vehiclePhotoUrl: bike.vehiclePhotoUrl,
       nickname: bike.nickname,
       ridingStyle: bike.ridingStyle,
       accessories: bike.accessories,
       nextUpgrade: bike.nextUpgrade,
       preferredColor: bike.preferredColor,
       galleryUrls: bike.additionalPhotos,
+      vehicleType: bike.vehicleType,
     );
     if (!mounted) return created;
     Provider.of<AppStateProvider>(context, listen: false).setBike(created);
@@ -182,10 +187,20 @@ class _GarageScreenState extends State<GarageScreen> {
   Future<void> _loadDeliveryRegistrationIfNeeded() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final user = appState.user;
-    if (user == null || user.pilotProfile.toUpperCase() != 'TRABALHO') return;
+    if (user == null || parseUserType(user.pilotProfile) != UserType.delivery) return;
     try {
       final reg = await ApiService.getDeliveryRegistrationStatus();
-      if (mounted) setState(() => _deliveryRegistration = reg);
+      if (!mounted) return;
+      setState(() => _deliveryRegistration = reg);
+      if (reg != null) {
+        final s = DeliveryModerationStatusExtension.fromRegistrationApiStatus(
+          reg['status'] as String?,
+        );
+        if (appState.deliveryModerationStatus != s) {
+          appState.setDeliveryModerationStatus(s);
+          await OnboardingService.saveDeliveryStatus(s);
+        }
+      }
     } catch (_) {}
   }
 
@@ -304,12 +319,12 @@ class _GarageScreenState extends State<GarageScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Nenhuma moto cadastrada ainda',
+                        'Nenhum veículo cadastrado ainda',
                         style: theme.textTheme.bodyLarge,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Cadastre sua moto para liberar a experiência premium da sua garagem.',
+                        'Cadastre sua moto ou bike para liberar a experiência premium da sua garagem.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
                         ),
@@ -325,10 +340,16 @@ class _GarageScreenState extends State<GarageScreen> {
       );
     }
 
+    final primary =
+        bike.vehiclePhotoUrl ?? bike.photoUrl;
     final gallery = <String>{
-      if (bike.photoUrl != null && bike.photoUrl!.isNotEmpty) bike.photoUrl!,
+      if (primary != null && primary.isNotEmpty) primary,
       ...bike.additionalPhotos.where((p) => p.trim().isNotEmpty),
     }.toList();
+    final user = appState.user;
+    final showAnalysisChip = user != null &&
+        parseUserType(user.pilotProfile) == UserType.delivery &&
+        appState.deliveryModerationStatus.isAwaitingModeration;
     final health = _bikeHealthScore(bike);
     _syncFormFromBike(bike);
     _ensureTimelineLoaded(bike);
@@ -398,6 +419,8 @@ class _GarageScreenState extends State<GarageScreen> {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(26),
                               child: _buildBikeImage(
+                                isBicycle: bike.vehicleType ==
+                                    AppVehicleType.bicycle,
                                 imagePath: gallery.isNotEmpty
                                     ? gallery.first
                                     : 'assets/images/moto-black.png',
@@ -425,8 +448,9 @@ class _GarageScreenState extends State<GarageScreen> {
                             left: 14,
                             child: _buildPill(
                               icon: _pilotTypeIcon(pilotType),
-                              text: 'Perfil: $pilotLabel • ${profileTheme.mood}',
+                              text: 'Perfil: $pilotLabel',
                               color: profileTheme.accentStrong,
+                              maxWidth: 150,
                             ),
                           ),
                           Positioned(
@@ -434,10 +458,29 @@ class _GarageScreenState extends State<GarageScreen> {
                             right: 14,
                             child: _buildPill(
                               icon: LucideIcons.hash,
-                              text: bike.plate,
+                              text: bike.plate.isEmpty
+                                  ? '--'
+                                  : (bike.vehicleType == AppVehicleType.bicycle
+                                      ? 'Nº ${bike.plate}'
+                                      : bike.plate),
                               color: profileTheme.accentStrong,
+                              maxWidth: 110,
                             ),
                           ),
+                          if (showAnalysisChip)
+                            Positioned(
+                              top: 60,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: _buildPill(
+                                  icon: LucideIcons.clock,
+                                  text: 'Cadastro em análise',
+                                  color: AppColors.statusWarning,
+                                  maxWidth: 220,
+                                ),
+                              ),
+                            ),
                           Positioned(
                             left: 20,
                             right: 20,
@@ -461,6 +504,17 @@ class _GarageScreenState extends State<GarageScreen> {
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: Colors.white.withOpacity(0.92),
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  profileTheme.mood,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.white.withOpacity(0.85),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
@@ -471,7 +525,12 @@ class _GarageScreenState extends State<GarageScreen> {
 
                     const SizedBox(height: 24),
 
-                    _buildSectionTitle(context, 'Visão rápida da moto'),
+                    _buildSectionTitle(
+                      context,
+                      bike.vehicleType == AppVehicleType.bicycle
+                          ? 'Visão rápida da bike'
+                          : 'Visão rápida da moto',
+                    ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -671,7 +730,11 @@ class _GarageScreenState extends State<GarageScreen> {
                                   ),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
-                                child: _buildBikeImage(imagePath: p),
+                                child: _buildBikeImage(
+                                  isBicycle: bike.vehicleType ==
+                                      AppVehicleType.bicycle,
+                                  imagePath: p,
+                                ),
                               ),
                             );
                           },
@@ -779,13 +842,19 @@ class _GarageScreenState extends State<GarageScreen> {
     );
   }
 
-  Widget _buildBikeImage({required String imagePath}) {
+  Widget _buildBikeImage({
+    required String imagePath,
+    bool isBicycle = false,
+  }) {
+    final fallback = isBicycle
+        ? 'assets/images/moto-black.png'
+        : 'assets/images/moto-black.png';
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return Image.network(
         imagePath,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Image.asset(
-          'assets/images/moto-black.png',
+          fallback,
           fit: BoxFit.cover,
         ),
       );
@@ -794,7 +863,7 @@ class _GarageScreenState extends State<GarageScreen> {
       imagePath,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => Image.asset(
-        'assets/images/moto-black.png',
+        fallback,
         fit: BoxFit.cover,
       ),
     );
@@ -816,8 +885,10 @@ class _GarageScreenState extends State<GarageScreen> {
     required IconData icon,
     required String text,
     required Color color,
+    double? maxWidth,
   }) {
     return Container(
+      constraints: maxWidth != null ? BoxConstraints(maxWidth: maxWidth) : null,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: color.withOpacity(0.18),
@@ -836,6 +907,8 @@ class _GarageScreenState extends State<GarageScreen> {
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -1149,65 +1222,54 @@ class _GarageScreenState extends State<GarageScreen> {
             icon: LucideIcons.wrench,
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _quickCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Categoria',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(LucideIcons.filter),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'OLEO', child: Text('Óleo')),
-                    DropdownMenuItem(value: 'PNEUS', child: Text('Pneus')),
-                    DropdownMenuItem(value: 'TRAVOES', child: Text('Freios')),
-                    DropdownMenuItem(value: 'FILTROS', child: Text('Filtros')),
-                    DropdownMenuItem(value: 'TRANSMISSAO', child: Text('Transmissão')),
-                  ],
-                  onChanged: (v) => setState(() => _quickCategory = v ?? 'OLEO'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _quickStatus,
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(LucideIcons.activity),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'OK', child: Text('OK')),
-                    DropdownMenuItem(value: 'ATENCAO', child: Text('Atenção')),
-                    DropdownMenuItem(value: 'CRITICO', child: Text('Crítico')),
-                  ],
-                  onChanged: (v) => setState(() => _quickStatus = v ?? 'OK'),
-                ),
-              ),
+          DropdownButtonFormField<String>(
+            initialValue: _quickCategory,
+            decoration: const InputDecoration(
+              labelText: 'Categoria',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(LucideIcons.filter),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'OLEO', child: Text('Óleo')),
+              DropdownMenuItem(value: 'PNEUS', child: Text('Pneus')),
+              DropdownMenuItem(value: 'TRAVOES', child: Text('Freios')),
+              DropdownMenuItem(value: 'FILTROS', child: Text('Filtros')),
+              DropdownMenuItem(value: 'TRANSMISSAO', child: Text('Transmissão')),
             ],
+            onChanged: (v) => setState(() => _quickCategory = v ?? 'OLEO'),
           ),
           const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: _quickStatus,
+            decoration: const InputDecoration(
+              labelText: 'Status',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(LucideIcons.activity),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'OK', child: Text('OK')),
+              DropdownMenuItem(value: 'ATENCAO', child: Text('Atenção')),
+              DropdownMenuItem(value: 'CRITICO', child: Text('Crítico')),
+            ],
+            onChanged: (v) => setState(() => _quickStatus = v ?? 'OK'),
+          ),
+          const SizedBox(height: 10),
+          _buildInputField(
+            controller: _quickIntervalController,
+            label: 'Próxima revisão em (km)',
+            icon: LucideIcons.gauge,
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(
-                child: _buildInputField(
-                  controller: _quickIntervalController,
-                  label: 'Próxima revisão em (km)',
-                  icon: LucideIcons.gauge,
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildInfoCard(
-                  context: context,
-                  theme: theme,
-                  icon: LucideIcons.mapPin,
-                  label: 'KM atual base',
-                  value: '${bike.currentKm} km',
-                  color: visualTheme.accent,
+              Icon(LucideIcons.mapPin, size: 14, color: visualTheme.accent),
+              const SizedBox(width: 6),
+              Text(
+                'KM atual base: ${bike.currentKm} km',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.72),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -1301,6 +1363,7 @@ class _GarageScreenState extends State<GarageScreen> {
 
   Widget _buildDeliveryExtraSection(BuildContext context, ThemeData theme) {
     final reg = _deliveryRegistration!;
+    final equipments = reg['equipments'] as List<dynamic>?;
     final lastOil = reg['lastOilChangeDate'] != null || reg['lastOilChangeKm'] != null;
     final lastOilDate = reg['lastOilChangeDate'] as String?;
     final lastOilKm = reg['lastOilChangeKm'] as int?;
@@ -1334,6 +1397,21 @@ class _GarageScreenState extends State<GarageScreen> {
           color: AppColors.statusOk,
         ),
       );
+    }
+    if (equipments != null && equipments.isNotEmpty) {
+      final eq = equipments.whereType<String>().join(', ');
+      if (eq.isNotEmpty) {
+        parts.add(
+          _buildInfoCard(
+            context: context,
+            theme: theme,
+            icon: LucideIcons.backpack,
+            label: 'Equipamentos (cadastro)',
+            value: eq,
+            color: AppColors.racingOrange,
+          ),
+        );
+      }
     }
     if (parts.isEmpty) return const SizedBox.shrink();
     return Column(
@@ -1392,6 +1470,8 @@ class _GarageScreenState extends State<GarageScreen> {
                     fontSize: 13,
                     color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -1400,6 +1480,8 @@ class _GarageScreenState extends State<GarageScreen> {
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

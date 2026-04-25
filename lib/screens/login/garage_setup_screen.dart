@@ -1,22 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../utils/colors.dart';
 import '../../models/motorcycle_model.dart';
+import '../../models/garage_setup_result.dart';
+import '../../models/vehicle_type.dart';
 import '../../services/motorcycle_data_service.dart';
 
 class GarageSetupScreen extends StatefulWidget {
-  final Function({
-    required MotorcycleModel motorcycle,
-    String? resolvedImagePath,
-    required String brand,
-    required String model,
-    required String plate,
-    required int currentKm,
-    required String oilType,
-    required double frontTirePressure,
-    required double rearTirePressure,
-  }) onComplete;
+  final void Function(GarageSetupResult result) onComplete;
 
   const GarageSetupScreen({
     super.key,
@@ -29,6 +22,12 @@ class GarageSetupScreen extends StatefulWidget {
 
 class _GarageSetupScreenState extends State<GarageSetupScreen> {
   final _searchController = TextEditingController();
+  final _bicycleBrandController = TextEditingController();
+  final _bicycleAroController = TextEditingController();
+  final _bicycleCorController = TextEditingController();
+  final _bicycleObsController = TextEditingController();
+
+  AppVehicleType _vehicleType = AppVehicleType.motorcycle;
   MotorcycleModel? _selectedMotorcycle;
   String? _selectedBrand;
   String? _expandedBrand; // Acordeão: qual marca está expandida
@@ -49,6 +48,10 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _bicycleBrandController.dispose();
+    _bicycleAroController.dispose();
+    _bicycleCorController.dispose();
+    _bicycleObsController.dispose();
     super.dispose();
   }
 
@@ -162,9 +165,11 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
     });
   }
 
-  void _handleContinue() {
-    if (_selectedMotorcycle != null) {
-      widget.onComplete(
+  void _handleContinueMotorcycle() {
+    if (_selectedMotorcycle == null) return;
+    widget.onComplete(
+      GarageSetupResult(
+        mode: AppVehicleType.motorcycle,
         motorcycle: _selectedMotorcycle!,
         resolvedImagePath: _resolvedModelImagePath,
         brand: _selectedMotorcycle!.brand,
@@ -174,8 +179,54 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
         oilType: '10W-40 Sintético',
         frontTirePressure: 2.5,
         rearTirePressure: 2.8,
+      ),
+    );
+  }
+
+  void _setVehicleType(AppVehicleType t) {
+    if (t == _vehicleType) return;
+    setState(() {
+      _vehicleType = t;
+      _searchController.clear();
+      _isSearching = false;
+      _selectedMotorcycle = null;
+      _resolvedModelImagePath = null;
+      _selectedBrand = null;
+      _brandModels = [];
+      _expandedBrand = null;
+    });
+  }
+
+  void _handleContinueBicycle() {
+    final brand = _bicycleBrandController.text.trim();
+    final aro = _bicycleAroController.text.trim();
+    final cor = _bicycleCorController.text.trim();
+    final obs = _bicycleObsController.text.trim();
+    if (brand.isEmpty || aro.isEmpty || cor.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Preencha marca, aro e cor para continuar.'),
+        ),
       );
+      return;
     }
+    widget.onComplete(
+      GarageSetupResult(
+        mode: AppVehicleType.bicycle,
+        motorcycle: null,
+        resolvedImagePath: null,
+        brand: brand,
+        model: 'Aro $aro',
+        plate: '',
+        currentKm: 0,
+        oilType: '—',
+        frontTirePressure: 0,
+        rearTirePressure: 0,
+        bicycleAro: aro,
+        bicycleCor: cor,
+        bicycleObservacao: obs.isEmpty ? null : obs,
+      ),
+    );
   }
 
   @override
@@ -205,43 +256,66 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                 ),
               ),
 
-              // Campo de busca
               Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: TextField(
-                  controller: _searchController,
-                  style: const TextStyle(color: Colors.black),
-                  decoration: InputDecoration(
-                    hintText: 'Buscar por modelo ou marca',
-                    hintStyle: const TextStyle(color: Colors.black54),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.black26),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.black26),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: AppColors.racingOrange,
-                        width: 2,
-                      ),
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      color: Colors.black54,
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                child: _buildModeToggle(),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _vehicleType == AppVehicleType.motorcycle
+                        ? 'Escolha sua marca'
+                        : 'Sua bicicleta',
+                    style: GoogleFonts.lato(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black87,
+                      letterSpacing: -0.5,
                     ),
                   ),
                 ),
               ),
+              if (_vehicleType == AppVehicleType.motorcycle)
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.black),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar por modelo ou marca',
+                      hintStyle: const TextStyle(color: Colors.black54),
+                      filled: true,
+                      fillColor: const Color(0xFFF4F4F4),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Colors.transparent),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE8E8E8)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                          color: AppColors.racingOrange,
+                          width: 2,
+                        ),
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+                ),
 
               // Conteúdo principal
               Expanded(
-                child: SingleChildScrollView(
+                child: _vehicleType == AppVehicleType.bicycle
+                    ? _buildBicycleForm()
+                    : SingleChildScrollView(
                   child: Column(
                     children: [
                       // Grid de logos das marcas (quando não há busca)
@@ -252,18 +326,6 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 8, bottom: 16),
-                                child: Text(
-                                  'Escolha sua marca',
-                                  style: GoogleFonts.lato(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
                               GridView.builder(
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
@@ -624,14 +686,15 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
               ),
 
               // Botão CONTINUAR
-              if (_selectedMotorcycle != null)
+              if (_vehicleType == AppVehicleType.motorcycle &&
+                  _selectedMotorcycle != null)
                 Padding(
                   padding: const EdgeInsets.all(24),
                   child: SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _handleContinue,
+                      onPressed: _handleContinueMotorcycle,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.racingOrange,
                         foregroundColor: Colors.white,
@@ -648,9 +711,180 @@ class _GarageSetupScreenState extends State<GarageSetupScreen> {
                     ),
                   ),
                 ),
+              if (_vehicleType == AppVehicleType.bicycle)
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: _handleContinueBicycle,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.racingOrange,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      child: const Text('CONTINUAR'),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildModeToggle() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F0F0),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _modeSegment(
+              label: 'Moto',
+              icon: LucideIcons.rocket,
+              selected: _vehicleType == AppVehicleType.motorcycle,
+              onTap: () => _setVehicleType(AppVehicleType.motorcycle),
+            ),
+          ),
+          Expanded(
+            child: _modeSegment(
+              label: 'Bicicleta',
+              icon: LucideIcons.bike,
+              selected: _vehicleType == AppVehicleType.bicycle,
+              onTap: () => _setVehicleType(AppVehicleType.bicycle),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeSegment({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.racingOrange : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: AppColors.racingOrange.withOpacity(0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: selected ? Colors.white : Colors.black54,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: GoogleFonts.lato(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: selected ? Colors.white : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBicycleForm() {
+    InputDecoration deco(String hint) {
+      return InputDecoration(
+        hintText: hint,
+        filled: true,
+        fillColor: const Color(0xFFF8F8F8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.racingOrange, width: 2),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Informe os dados básicos. Eles entram na sua garagem após a aprovação do cadastro de entregador.',
+            style: GoogleFonts.lato(
+              fontSize: 14,
+              color: Colors.black54,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _bicycleBrandController,
+            decoration: deco('Marca (ex.: Caloi, Oggi)'),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _bicycleAroController,
+            decoration: deco('Aro (ex.: 26, 29, 700C)'),
+            textCapitalization: TextCapitalization.characters,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _bicycleCorController,
+            decoration: deco('Cor'),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _bicycleObsController,
+            minLines: 2,
+            maxLines: 4,
+            decoration: deco('Observação (opcional)'),
+          ),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }

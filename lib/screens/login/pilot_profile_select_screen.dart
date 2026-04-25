@@ -6,11 +6,14 @@ import '../../utils/colors.dart';
 
 class PilotProfileSelectScreen extends StatefulWidget {
   final PilotProfileType? initialSelection;
+  /// Se true (piloto de bicicleta), só o cartão Delivery fica ativo.
+  final bool onlyDeliveryForBicycle;
   final ValueChanged<PilotProfileType> onContinue;
 
   const PilotProfileSelectScreen({
     super.key,
     this.initialSelection,
+    this.onlyDeliveryForBicycle = false,
     required this.onContinue,
   });
 
@@ -25,7 +28,11 @@ class _PilotProfileSelectScreenState extends State<PilotProfileSelectScreen> {
   @override
   void initState() {
     super.initState();
-    _selected = widget.initialSelection;
+    if (widget.onlyDeliveryForBicycle) {
+      _selected = PilotProfileType.delivery;
+    } else {
+      _selected = widget.initialSelection;
+    }
   }
 
   @override
@@ -49,7 +56,9 @@ class _PilotProfileSelectScreenState extends State<PilotProfileSelectScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Escolha como voce usa sua moto no dia a dia.',
+                widget.onlyDeliveryForBicycle
+                    ? 'Entregadores de bicicleta atuam no perfil Delivery. Conclua o cadastro a seguir.'
+                    : 'Escolha como voce usa sua moto no dia a dia.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
                 ),
@@ -67,10 +76,23 @@ class _PilotProfileSelectScreenState extends State<PilotProfileSelectScreen> {
                   itemBuilder: (context, index) {
                     final option = options[index];
                     final isSelected = _selected == option.type;
+                    final isLocked = widget.onlyDeliveryForBicycle &&
+                        option.type != PilotProfileType.delivery;
                     return _ProfileCard(
                       option: option,
                       isSelected: isSelected,
+                      isDimmed: isLocked,
                       onTap: () {
+                        if (isLocked) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Piloto de bicicleta cadastra somente o perfil Delivery.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
                         setState(() => _selected = option.type);
                       },
                     );
@@ -98,11 +120,13 @@ class _PilotProfileSelectScreenState extends State<PilotProfileSelectScreen> {
 class _ProfileCard extends StatelessWidget {
   final _PilotProfileOption option;
   final bool isSelected;
+  final bool isDimmed;
   final VoidCallback onTap;
 
   const _ProfileCard({
     required this.option,
     required this.isSelected,
+    this.isDimmed = false,
     required this.onTap,
   });
 
@@ -114,7 +138,10 @@ class _ProfileCard extends StatelessWidget {
     return AnimatedScale(
       scale: isSelected ? 1.02 : 1.0,
       duration: const Duration(milliseconds: 240),
-      child: AnimatedContainer(
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 200),
+        opacity: isDimmed ? 0.4 : 1.0,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 240),
         curve: Curves.easeOut,
         decoration: BoxDecoration(
@@ -209,6 +236,7 @@ class _ProfileCard extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

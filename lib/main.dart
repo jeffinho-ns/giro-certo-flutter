@@ -21,6 +21,8 @@ import 'models/user.dart';
 import 'models/bike.dart';
 import 'models/motorcycle_model.dart';
 import 'models/pilot_profile.dart';
+import 'models/garage_setup_result.dart';
+import 'models/vehicle_type.dart';
 import 'services/app_preload_service.dart';
 import 'services/onboarding_service.dart';
 import 'services/motorcycle_data_service.dart';
@@ -102,6 +104,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
   String _bikeModel = '';
   String _pilotProfile = 'Diario';
   PilotProfileType? _pilotProfileType;
+  bool _isBicycle = false;
+  String _bicycleCor = '';
+  String _bicycleObs = '';
   MotorcycleModel? _selectedMotorcycle;
   String? _selectedMotorcycleImagePath;
   String _plate = 'ABC-1234';
@@ -244,9 +249,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
         : _stepGarageIntro;
 
     final savedMotorcycleId = await OnboardingService.getSelectedMotorcycleId();
-    if (savedMotorcycleId != null) {
+    if (savedMotorcycleId == OnboardingService.bicycleCatalogId) {
+      _isBicycle = true;
+      _selectedMotorcycle = null;
+      _selectedMotorcycleImagePath = null;
+      final bi = await OnboardingService.getBicycleGarageInfo();
+      if (bi != null) {
+        _bikeBrand = bi.brand;
+        _bicycleCor = bi.cor;
+        _bicycleObs = bi.obs;
+        if (bi.aro.isNotEmpty) {
+          _bikeModel = 'Aro ${bi.aro}';
+        }
+      }
+    } else if (savedMotorcycleId != null) {
+      _isBicycle = false;
       _selectedMotorcycle =
-          MotorcycleDataService.findMotorcycleById(savedMotorcycleId);
+          MotorcycleDataService.tryGetMotorcycleById(savedMotorcycleId) ??
+              MotorcycleDataService.findMotorcycleById(savedMotorcycleId);
       _selectedMotorcycleImagePath =
           await OnboardingService.getSelectedMotorcycleImagePath();
       _bikeBrand = _selectedMotorcycle?.brand ?? _bikeBrand;
@@ -334,32 +354,55 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
-  void _handleGarageSetup({
-    required MotorcycleModel motorcycle,
-    String? resolvedImagePath,
-    required String brand,
-    required String model,
-    required String plate,
-    required int currentKm,
-    required String oilType,
-    required double frontTirePressure,
-    required double rearTirePressure,
-  }) {
-    setState(() {
-      _bikeBrand = brand;
-      _bikeModel = model;
-      _plate = plate;
-      _currentKm = currentKm;
-      _oilType = oilType;
-      _frontTirePressure = frontTirePressure;
-      _rearTirePressure = rearTirePressure;
-      _selectedMotorcycle = motorcycle;
-      _selectedMotorcycleImagePath = resolvedImagePath;
-    });
-    OnboardingService.saveMotorcycleSelection(
-      motorcycleId: motorcycle.id,
-      imagePath: resolvedImagePath,
-    );
+  void _handleGarageSetup(GarageSetupResult r) {
+    if (r.mode == AppVehicleType.bicycle) {
+      setState(() {
+        _isBicycle = true;
+        _selectedMotorcycle = null;
+        _selectedMotorcycleImagePath = r.resolvedImagePath;
+        _bikeBrand = r.brand;
+        _bikeModel = r.model;
+        _plate = r.plate;
+        _currentKm = r.currentKm;
+        _oilType = r.oilType;
+        _frontTirePressure = r.frontTirePressure;
+        _rearTirePressure = r.rearTirePressure;
+        _bicycleCor = r.bicycleCor ?? '';
+        _bicycleObs = r.bicycleObservacao ?? '';
+      });
+      OnboardingService.saveBicycleGarageInfo(
+        brand: r.brand,
+        aro: r.bicycleAro ?? '',
+        cor: r.bicycleCor ?? '',
+        observacao: r.bicycleObservacao ?? '',
+      );
+      OnboardingService.saveMotorcycleSelection(
+        motorcycleId: OnboardingService.bicycleCatalogId,
+        imagePath: r.resolvedImagePath,
+      );
+    } else {
+      final m = r.motorcycle;
+      if (m == null) return;
+      setState(() {
+        _isBicycle = false;
+        _bicycleCor = '';
+        _bicycleObs = '';
+        _bikeBrand = r.brand;
+        _bikeModel = r.model;
+        _plate = r.plate;
+        _currentKm = r.currentKm;
+        _oilType = r.oilType;
+        _frontTirePressure = r.frontTirePressure;
+        _rearTirePressure = r.rearTirePressure;
+        _selectedMotorcycle = m;
+        _selectedMotorcycleImagePath = r.resolvedImagePath;
+      });
+      OnboardingService.clearBicycleGarageInfo();
+      OnboardingService.saveMotorcycleSelection(
+        motorcycleId: m.id,
+        imagePath: r.resolvedImagePath,
+      );
+    }
     _setStep(_stepPilotProfile);
   }
 
@@ -425,14 +468,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
             userType: parseUserType(resolvedProfile.apiValue),
           );
 
+    final isBike = _isBicycle;
     final brand = _bikeBrand.isNotEmpty
         ? _bikeBrand
         : _selectedMotorcycle?.brand ?? 'Desconhecida';
     final model = _bikeModel.isNotEmpty
         ? _bikeModel
         : _selectedMotorcycle?.model ?? 'Modelo';
-    final plate = deliveryDetails?.plateLicense ?? _plate;
+    final rawPlate = (deliveryDetails?.plateLicense ?? _plate).trim();
+    final plate = rawPlate.isEmpty
+        ? (isBike ? 'S/N' : 'ABC-1234')
+        : rawPlate;
     final currentKm = deliveryDetails?.currentKilometers ?? _currentKm;
+    final vPhoto = deliveryDetails?.vehiclePhotoUrl;
+    final mainPhoto = vPhoto ??
+        _selectedMotorcycleImagePath ??
+        _selectedMotorcycle?.modelImagePath;
+    final vType = isBike ? AppVehicleType.bicycle : AppVehicleType.motorcycle;
+    final accessories =
+        isBike && (deliveryDetails?.equipments.isNotEmpty == true)
+            ? deliveryDetails!.equipments
+            : (garageDetails?.accessories ?? const []);
 
     final bike = Bike(
       id: '1',
@@ -440,21 +496,37 @@ class _AuthWrapperState extends State<AuthWrapper> {
       brand: brand,
       plate: plate,
       currentKm: currentKm,
-      oilType: _oilType,
-      frontTirePressure: _frontTirePressure,
-      rearTirePressure: _rearTirePressure,
-      photoUrl: _selectedMotorcycleImagePath ?? _selectedMotorcycle?.modelImagePath,
+      oilType: isBike ? '—' : _oilType,
+      frontTirePressure: isBike ? 0 : _frontTirePressure,
+      rearTirePressure: isBike ? 0 : _rearTirePressure,
+      photoUrl: mainPhoto,
+      vehiclePhotoUrl: vPhoto ?? (isBike ? mainPhoto : null),
       nickname: garageDetails?.nickname ?? model,
       ridingStyle: garageDetails?.ridingStyle,
-      accessories: garageDetails?.accessories ?? const [],
-      nextUpgrade: garageDetails?.nextUpgrade,
-      preferredColor: garageDetails?.colorLabel,
-      additionalPhotos: [
-        if (_selectedMotorcycleImagePath != null) _selectedMotorcycleImagePath!,
-        if (_selectedMotorcycle?.modelImagePath != null &&
-            _selectedMotorcycle!.modelImagePath != _selectedMotorcycleImagePath)
-          _selectedMotorcycle!.modelImagePath,
-      ],
+      accessories: accessories,
+      nextUpgrade: isBike
+          ? (_bicycleObs.isNotEmpty ? _bicycleObs : null)
+          : garageDetails?.nextUpgrade,
+      preferredColor: isBike
+          ? (_bicycleCor.isNotEmpty ? _bicycleCor : null)
+          : garageDetails?.colorLabel,
+      additionalPhotos: () {
+        final s = <String>{};
+        void add(String? u) {
+          if (u != null && u.trim().isNotEmpty) s.add(u);
+        }
+        add(vPhoto);
+        add(mainPhoto);
+        if (!isBike) {
+          add(_selectedMotorcycleImagePath);
+          if (_selectedMotorcycle?.modelImagePath != null &&
+              _selectedMotorcycle!.modelImagePath != _selectedMotorcycleImagePath) {
+            add(_selectedMotorcycle!.modelImagePath);
+          }
+        }
+        return s.toList();
+      }(),
+      vehicleType: vType,
     );
 
     appState.setUser(user);
@@ -468,12 +540,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
         frontTirePressure: bike.frontTirePressure,
         rearTirePressure: bike.rearTirePressure,
         photoUrl: bike.photoUrl,
+        vehiclePhotoUrl: bike.vehiclePhotoUrl,
         nickname: bike.nickname,
         ridingStyle: bike.ridingStyle,
         accessories: bike.accessories,
         nextUpgrade: bike.nextUpgrade,
         preferredColor: bike.preferredColor,
         galleryUrls: bike.additionalPhotos,
+        vehicleType: bike.vehicleType,
       );
       appState.setBike(persistedBike);
     } catch (_) {
@@ -483,6 +557,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
     appState.setDeliveryModerationStatus(deliveryStatus);
     appState.completeLogin();
     appState.completeSetup();
+    if (deliveryDetails != null) {
+      await OnboardingService.setLastKnownDeliveryRegStatus('PENDING');
+    }
     await OnboardingService.completeOnboarding();
     await OnboardingService.saveDeliveryStatus(deliveryStatus);
     await ApiService.updateOnboardingStatus(
@@ -551,11 +628,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
       case _stepPilotProfile:
         stepScreen = PilotProfileSelectScreen(
           initialSelection: _pilotProfileType ?? appState.pilotProfileType,
+          onlyDeliveryForBicycle: _isBicycle,
           onContinue: _handlePilotProfileContinue,
         );
         break;
       case _stepGarageDetail:
-        if (_selectedMotorcycle == null) {
+        if (_isBicycle) {
+          stepScreen = DeliveryRegistrationScreen(
+            pilotType: _pilotProfileType ?? PilotProfileType.delivery,
+            isBicycleCourier: true,
+            onSubmit: _handleDeliveryRegistrationComplete,
+            onBack: () => _setStep(_stepPilotProfile),
+          );
+        } else if (_selectedMotorcycle == null) {
           stepScreen = GarageSetupScreen(onComplete: _handleGarageSetup);
         } else {
           stepScreen = GarageSetupDetailScreen(
@@ -570,6 +655,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       case _stepDeliveryRegistration:
         stepScreen = DeliveryRegistrationScreen(
           pilotType: _pilotProfileType ?? PilotProfileType.delivery,
+          isBicycleCourier: _isBicycle,
           onSubmit: _handleDeliveryRegistrationComplete,
           onBack: () => _setStep(_stepPilotProfile),
         );

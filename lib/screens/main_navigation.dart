@@ -13,6 +13,7 @@ import '../providers/drawer_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../models/bike.dart';
+import '../models/vehicle_type.dart';
 import '../models/user.dart';
 import '../models/pilot_profile.dart';
 import '../services/api_service.dart';
@@ -63,14 +64,8 @@ class _MainNavigationState extends State<MainNavigation> {
       if (reg == null || !mounted) return;
       final status = reg['status'] as String?;
       final moderationStatus =
-          status != null && status.toUpperCase() == 'APPROVED'
-              ? DeliveryModerationStatus.approved
-              : DeliveryModerationStatus.pending;
-      if (moderationStatus == DeliveryModerationStatus.approved) {
-        await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.approved);
-      } else if (status != null && status.toUpperCase() == 'REJECTED') {
-        await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.pending);
-      }
+          DeliveryModerationStatusExtension.fromRegistrationApiStatus(status);
+      await OnboardingService.saveDeliveryStatus(moderationStatus);
       if (appState.deliveryModerationStatus != moderationStatus) {
         appState.setDeliveryModerationStatus(moderationStatus);
       }
@@ -78,6 +73,7 @@ class _MainNavigationState extends State<MainNavigation> {
         final plate = reg['plateLicense'] as String? ?? reg['plate_license'] as String? ?? '';
         final currentKm = reg['currentKilometers'] as int? ?? reg['current_kilometers'] as int? ?? 0;
         if (plate.isNotEmpty && mounted) {
+          final regVt = reg['vehicleType'] as String? ?? 'MOTORCYCLE';
           final bike = Bike(
             id: '1',
             brand: 'Moto',
@@ -87,6 +83,9 @@ class _MainNavigationState extends State<MainNavigation> {
             oilType: '10W-40',
             frontTirePressure: 2.5,
             rearTirePressure: 2.8,
+            vehicleType: regVt.toUpperCase() == 'BICYCLE'
+                ? AppVehicleType.bicycle
+                : AppVehicleType.motorcycle,
           );
           appState.setBike(bike);
         }

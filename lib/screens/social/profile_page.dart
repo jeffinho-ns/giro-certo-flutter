@@ -11,6 +11,7 @@ import '../../providers/social_feed_provider.dart';
 import '../../models/story.dart';
 import '../../models/post.dart';
 import '../../models/bike.dart';
+import '../../models/vehicle_type.dart';
 import '../../utils/colors.dart';
 import 'story_view_screen.dart';
 import '../settings/settings_screen.dart';
@@ -323,6 +324,7 @@ class _ProfilePageState extends State<ProfilePage>
     final brand = b['brand'] as String? ?? '';
     final plate = b['plate'] as String? ?? '';
     if (id.isEmpty && model.isEmpty && brand.isEmpty) return null;
+    final vt = AppVehicleTypeApi.fromApi(b['vehicleType'] as String?);
     return Bike(
       id: id.isNotEmpty ? id : '1',
       model: model.isNotEmpty ? model : 'Moto',
@@ -332,6 +334,8 @@ class _ProfilePageState extends State<ProfilePage>
       oilType: '',
       frontTirePressure: 2.5,
       rearTirePressure: 2.8,
+      vehiclePhotoUrl: b['vehiclePhotoUrl'] as String?,
+      vehicleType: vt ?? AppVehicleType.motorcycle,
     );
   }
 
@@ -1144,8 +1148,21 @@ class _BikeCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    if (bike.isBicycle)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          'Bicicleta · entregas',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: AppColors.statusWarning,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     Text(
-                      bike.plate,
+                      bike.isBicycle
+                          ? 'Nº ${bike.plate.isEmpty ? '—' : bike.plate}'
+                          : bike.plate,
                       style: theme.textTheme.bodySmall,
                     ),
                   ],

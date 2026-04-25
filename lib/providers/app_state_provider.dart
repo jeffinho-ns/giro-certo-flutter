@@ -98,7 +98,6 @@ class AppStateProvider extends ChangeNotifier {
 
   Future<void> loadSession() async {
     _isSessionLoading = true;
-    notifyListeners();
 
     try {
       await ApiService.warmupAuthToken();
@@ -129,10 +128,12 @@ class AppStateProvider extends ChangeNotifier {
         final cached = await OnboardingService.getDeliveryStatus();
         if (cached == DeliveryModerationStatus.approved) {
           _deliveryModerationStatus = DeliveryModerationStatus.approved;
+        } else if (sessionUser.hasVerifiedDocuments) {
+          _deliveryModerationStatus = DeliveryModerationStatus.approved;
+        } else if (cached != null) {
+          _deliveryModerationStatus = cached;
         } else {
-          _deliveryModerationStatus = sessionUser.hasVerifiedDocuments
-              ? DeliveryModerationStatus.approved
-              : DeliveryModerationStatus.pending;
+          _deliveryModerationStatus = DeliveryModerationStatus.pending;
         }
       } else {
         _deliveryModerationStatus = sessionUser.hasVerifiedDocuments
@@ -160,7 +161,11 @@ class AppStateProvider extends ChangeNotifier {
     } finally {
       _isSessionLoading = false;
       _hasHydratedSession = true;
-      notifyListeners();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (hasListeners) {
+          notifyListeners();
+        }
+      });
     }
   }
 

@@ -7,6 +7,7 @@ import '../models/user.dart';
 import '../models/delivery_order.dart';
 import '../models/partner.dart';
 import '../models/bike.dart';
+import '../models/vehicle_type.dart';
 import '../utils/geo_coordinates_brazil.dart';
 
 class ApiService {
@@ -971,6 +972,8 @@ class ApiService {
       ...gallery,
     ].toSet().toList();
 
+    final vt = AppVehicleTypeApi.fromApi(json['vehicleType'] as String?) ??
+        AppVehicleType.motorcycle;
     return Bike(
       id: (json['id'] as String?) ?? 'bike-1',
       model: (json['model'] as String?) ?? 'Moto',
@@ -981,6 +984,7 @@ class ApiService {
       frontTirePressure: (json['frontTirePressure'] as num?)?.toDouble() ?? 2.5,
       rearTirePressure: (json['rearTirePressure'] as num?)?.toDouble() ?? 2.8,
       photoUrl: json['photoUrl'] as String?,
+      vehiclePhotoUrl: json['vehiclePhotoUrl'] as String?,
       nickname: json['nickname'] as String?,
       ridingStyle: json['ridingStyle'] as String?,
       accessories: (json['accessories'] as List<dynamic>?)
@@ -990,6 +994,7 @@ class ApiService {
       nextUpgrade: json['nextUpgrade'] as String?,
       preferredColor: json['preferredColor'] as String?,
       additionalPhotos: extras,
+      vehicleType: vt,
     );
   }
 
@@ -1016,12 +1021,14 @@ class ApiService {
     required double frontTirePressure,
     required double rearTirePressure,
     String? photoUrl,
+    String? vehiclePhotoUrl,
     String? nickname,
     String? ridingStyle,
     List<String>? accessories,
     String? nextUpgrade,
     String? preferredColor,
     List<String>? galleryUrls,
+    AppVehicleType vehicleType = AppVehicleType.motorcycle,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/bikes'),
@@ -1029,12 +1036,14 @@ class ApiService {
       body: json.encode({
         'model': model,
         'brand': brand,
+        'vehicleType': vehicleType.apiValue,
         'plate': plate,
         'currentKm': currentKm,
         'oilType': oilType,
         'frontTirePressure': frontTirePressure,
         'rearTirePressure': rearTirePressure,
         if (photoUrl != null) 'photoUrl': photoUrl,
+        if (vehiclePhotoUrl != null) 'vehiclePhotoUrl': vehiclePhotoUrl,
         if (nickname != null) 'nickname': nickname,
         if (ridingStyle != null) 'ridingStyle': ridingStyle,
         if (accessories != null) 'accessories': accessories,
@@ -1056,6 +1065,7 @@ class ApiService {
     double? frontTirePressure,
     double? rearTirePressure,
     String? photoUrl,
+    String? vehiclePhotoUrl,
     String? nickname,
     String? ridingStyle,
     List<String>? accessories,
@@ -1069,6 +1079,7 @@ class ApiService {
     if (frontTirePressure != null) body['frontTirePressure'] = frontTirePressure;
     if (rearTirePressure != null) body['rearTirePressure'] = rearTirePressure;
     if (photoUrl != null) body['photoUrl'] = photoUrl;
+    if (vehiclePhotoUrl != null) body['vehiclePhotoUrl'] = vehiclePhotoUrl;
     if (nickname != null) body['nickname'] = nickname;
     if (ridingStyle != null) body['ridingStyle'] = ridingStyle;
     if (accessories != null) body['accessories'] = accessories;
@@ -1231,6 +1242,8 @@ class ApiService {
     required String documentId,
     required String plateLicense,
     required int currentKilometers,
+    AppVehicleType registrationVehicleType = AppVehicleType.motorcycle,
+    List<String> equipments = const [],
     DateTime? lastOilChangeDate,
     int? lastOilChangeKm,
     String? emergencyPhone,
@@ -1241,6 +1254,7 @@ class ApiService {
     String? platePlateCloseupPath,
     String? cnhPhotoPath,
     String? crlvPhotoPath,
+    String? bikeOptionalReceiptPath,
   }) async {
     final uri = Uri.parse('$baseUrl/delivery-registration');
     final token = await _getToken();
@@ -1263,20 +1277,23 @@ class ApiService {
 
     try {
       // Converter todos os arquivos para base64
-      final [selfieBase64, motoBase64, plateBase64, cnhBase64, crlvBase64] =
+      final [selfieBase64, motoBase64, plateBase64, cnhBase64, crlvBase64, receiptB64] =
           await Future.wait([
         fileToBase64(selfieWithDocPath),
         fileToBase64(motoWithPlatePath),
         fileToBase64(platePlateCloseupPath),
         fileToBase64(cnhPhotoPath),
         fileToBase64(crlvPhotoPath),
+        fileToBase64(bikeOptionalReceiptPath),
       ]);
 
       final body = {
         'documentId': documentId,
+        'vehicleType': registrationVehicleType.apiValue,
         'plateLicense': plateLicense,
         'currentKilometers': currentKilometers,
         'consentImages': consentImages,
+        if (equipments.isNotEmpty) 'equipments': equipments,
         if (lastOilChangeDate != null)
           'lastOilChangeDate': lastOilChangeDate.toIso8601String(),
         if (lastOilChangeKm != null) 'lastOilChangeKm': lastOilChangeKm,
@@ -1288,6 +1305,7 @@ class ApiService {
         if (plateBase64 != null) 'platePlateCloseupBase64': plateBase64,
         if (cnhBase64 != null) 'cnhPhotoBase64': cnhBase64,
         if (crlvBase64 != null) 'crlvPhotoBase64': crlvBase64,
+        if (receiptB64 != null) 'bikeOptionalReceiptBase64': receiptB64,
       };
 
       final response = await http.post(

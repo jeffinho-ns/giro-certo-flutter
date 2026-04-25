@@ -11,6 +11,7 @@ import '../../services/api_service.dart';
 import '../../services/map_service.dart';
 import '../../services/realtime_service.dart';
 import '../../services/onboarding_service.dart';
+import '../../services/notification_service.dart';
 import '../../models/delivery_order.dart';
 import '../../models/user.dart';
 import '../../models/pilot_profile.dart';
@@ -371,20 +372,38 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final reg = await ApiService.getDeliveryRegistrationStatus();
       if (!mounted) return;
-      final rawStatus = (reg?['status'] as String?)?.toUpperCase();
-      final nextStatus = rawStatus == 'APPROVED'
-          ? DeliveryModerationStatus.approved
-          : DeliveryModerationStatus.pending;
+      final rawStatus = (reg?['status'] as String?)?.toUpperCase() ?? '';
+      final previous =
+          (await OnboardingService.getLastKnownDeliveryRegStatus())?.toUpperCase() ??
+              '';
 
-      if (nextStatus == DeliveryModerationStatus.approved) {
-        await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.approved);
-      } else if (rawStatus == 'REJECTED') {
-        await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.pending);
+      final nextStatus =
+          DeliveryModerationStatusExtension.fromRegistrationApiStatus(
+        reg?['status'] as String?,
+      );
+
+      if (rawStatus == 'APPROVED' &&
+          previous != 'APPROVED' &&
+          (previous == 'PENDING' ||
+              previous == 'UNDER_REVIEW' ||
+              previous.isEmpty)) {
+        await showLocalNotification(
+          id: 91001,
+          title: 'Cadastro aprovado',
+          body: 'Pode aceitar corridas de delivery. Boa jornada!',
+          payload: 'notification',
+        );
       }
+
+      await OnboardingService.saveDeliveryStatus(nextStatus);
 
       if (appState.deliveryModerationStatus != nextStatus) {
         appState.setDeliveryModerationStatus(nextStatus);
       }
+
+      await OnboardingService.setLastKnownDeliveryRegStatus(
+        rawStatus.isEmpty ? null : rawStatus,
+      );
     } catch (e) {
       debugPrint('Falha ao sincronizar aprovacao de delivery: $e');
     }
@@ -917,9 +936,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = appState.user;
     final isRider = user?.isRider ?? true;
     final isDeliveryProfile = user?.userType == UserType.delivery;
-    final showDeliveryPendingBanner =
-        appState.deliveryModerationStatus == DeliveryModerationStatus.pending &&
-            isDeliveryProfile;
+    final showDeliveryPendingBanner = isDeliveryProfile &&
+        appState.deliveryModerationStatus.isAwaitingModeration;
 
     final initialPosition = _currentPosition ?? _defaultCenter;
 

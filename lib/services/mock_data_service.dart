@@ -36,7 +36,7 @@ class MockDataService {
   }
 
   static Bike getMockBike() {
-    return Bike(
+    _cachedBike = Bike(
       id: '1',
       model: 'CB 650F',
       brand: 'Honda',
@@ -46,6 +46,7 @@ class MockDataService {
       frontTirePressure: 2.5,
       rearTirePressure: 2.8,
       photoUrl: 'assets/images/moto-black.png',
+      vehiclePhotoUrl: null,
       nickname: 'Fera do Asfalto',
       ridingStyle: 'Urbano',
       accessories: const ['Suporte celular', 'Bau', 'Iluminacao LED'],

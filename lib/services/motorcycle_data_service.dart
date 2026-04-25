@@ -596,6 +596,14 @@ class MotorcycleDataService {
     );
   }
 
+  static MotorcycleModel? tryGetMotorcycleById(String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final m in getAllMotorcycles()) {
+      if (m.id == id) return m;
+    }
+    return null;
+  }
+
   static Set<String> getAllBrands() {
     return getAllMotorcycles().map((moto) => moto.brand).toSet();
   }

@@ -39,7 +39,9 @@ extension PilotProfileTypeExtension on PilotProfileType {
 
 enum DeliveryModerationStatus {
   pending,
+  underReview,
   approved,
+  rejected,
 }
 
 extension DeliveryModerationStatusExtension on DeliveryModerationStatus {
@@ -47,18 +49,40 @@ extension DeliveryModerationStatusExtension on DeliveryModerationStatus {
     switch (this) {
       case DeliveryModerationStatus.pending:
         return 'PENDING';
+      case DeliveryModerationStatus.underReview:
+        return 'UNDER_REVIEW';
       case DeliveryModerationStatus.approved:
         return 'APPROVED';
+      case DeliveryModerationStatus.rejected:
+        return 'REJECTED';
     }
   }
 
+  /// PENDING ou UNDER_REVIEW — cadastro ainda não aprovado para aceitar corridas.
+  bool get isAwaitingModeration =>
+      this == DeliveryModerationStatus.pending ||
+      this == DeliveryModerationStatus.underReview;
+
   static DeliveryModerationStatus fromString(String value) {
-    switch (value.toUpperCase()) {
+    final u = value.toUpperCase().trim();
+    switch (u) {
       case 'PENDING':
         return DeliveryModerationStatus.pending;
+      case 'UNDER_REVIEW':
+        return DeliveryModerationStatus.underReview;
       case 'APPROVED':
-      default:
         return DeliveryModerationStatus.approved;
+      case 'REJECTED':
+        return DeliveryModerationStatus.rejected;
+      default:
+        return DeliveryModerationStatus.pending;
     }
+  }
+
+  /// Campo `status` do registro em `/delivery-registration` (ou string vazia).
+  static DeliveryModerationStatus fromRegistrationApiStatus(String? raw) {
+    final u = (raw ?? '').toUpperCase().trim();
+    if (u.isEmpty) return DeliveryModerationStatus.pending;
+    return fromString(u);
   }
 }

@@ -54,6 +54,20 @@ class DocumentValidators {
     return nums[9] == d1 && nums[10] == d2;
   }
 
+  static String? validateCpf(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Informe o CPF';
+    }
+    final digits = normalizeDigits(value);
+    if (digits.length != 11) {
+      return 'CPF deve ter 11 digitos';
+    }
+    if (isValidCpf(digits)) {
+      return null;
+    }
+    return 'CPF invalido';
+  }
+
   static String? validateCpfOrCnh(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'Informe CPF ou CNH';

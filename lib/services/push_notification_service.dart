@@ -40,7 +40,9 @@ Future<bool> initializeFirebase() async {
     return true;
   } catch (e) {
     // ignore: avoid_print
-    print('❌ Falha ao inicializar Firebase: $e');
+    print('⚠️ Firebase indisponível neste ambiente. A app seguirá sem push FCM.');
+    // ignore: avoid_print
+    print('ℹ️ Detalhe técnico: $e');
     return false;
   }
 }

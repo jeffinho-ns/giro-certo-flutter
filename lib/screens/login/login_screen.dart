@@ -146,8 +146,12 @@ class _LoginScreenState extends State<LoginScreen> {
           : DeliveryModerationStatus.pending;
       if (user.userType == UserType.delivery) {
         final cached = await OnboardingService.getDeliveryStatus();
-        if (cached == DeliveryModerationStatus.approved) {
+        if (user.hasVerifiedDocuments) {
           deliveryMod = DeliveryModerationStatus.approved;
+        } else if (cached == DeliveryModerationStatus.approved) {
+          deliveryMod = DeliveryModerationStatus.approved;
+        } else if (cached != null) {
+          deliveryMod = cached;
         }
       }
       appState.setDeliveryModerationStatus(deliveryMod);
@@ -278,8 +282,12 @@ class _LoginScreenState extends State<LoginScreen> {
           : DeliveryModerationStatus.pending;
       if (user.userType == UserType.delivery) {
         final cached = await OnboardingService.getDeliveryStatus();
-        if (cached == DeliveryModerationStatus.approved) {
+        if (user.hasVerifiedDocuments) {
           deliveryModBio = DeliveryModerationStatus.approved;
+        } else if (cached == DeliveryModerationStatus.approved) {
+          deliveryModBio = DeliveryModerationStatus.approved;
+        } else if (cached != null) {
+          deliveryModBio = cached;
         }
       }
       appState.setDeliveryModerationStatus(deliveryModBio);

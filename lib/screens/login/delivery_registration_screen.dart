@@ -1,11 +1,14 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 import '../../models/pilot_profile.dart';
+import '../../models/vehicle_type.dart';
+import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/colors.dart';
+import '../../utils/delivery_constants.dart';
 import '../../utils/validators.dart';
 import '../../widgets/onboarding_form_widgets.dart';
 
@@ -18,6 +21,8 @@ class DeliveryRegistrationDetails {
   final int? lastOilChangeKm;
   final String? emergencyPhone;
   final bool consentImages;
+  final String? vehiclePhotoUrl;
+  final bool isBicycle;
 
   const DeliveryRegistrationDetails({
     required this.documentId,
@@ -28,17 +33,21 @@ class DeliveryRegistrationDetails {
     this.lastOilChangeKm,
     this.emergencyPhone,
     required this.consentImages,
+    this.vehiclePhotoUrl,
+    this.isBicycle = false,
   });
 }
 
 class DeliveryRegistrationScreen extends StatefulWidget {
   final PilotProfileType pilotType;
+  final bool isBicycleCourier;
   final ValueChanged<DeliveryRegistrationDetails> onSubmit;
   final VoidCallback? onBack;
 
   const DeliveryRegistrationScreen({
     super.key,
     required this.pilotType,
+    this.isBicycleCourier = false,
     required this.onSubmit,
     this.onBack,
   });
@@ -72,11 +81,19 @@ class _DeliveryRegistrationScreenState
   // Moto fotos
   XFile? _motoWithPlateFile;
   XFile? _platePlateCloseupFile;
+  /// Nota fiscal / canhoto (só bike, opcional)
+  XFile? _optionalBikeReceiptFile;
 
-  static const List<String> _equipmentOptions = [
+  static const List<String> _equipmentMoto = [
     'Bau',
     'Mochila',
     'Bau termico',
+    'Suporte celular',
+    'Capa de chuva',
+  ];
+  static const List<String> _equipmentBike = [
+    'Mochila',
+    'Mochila termica',
     'Suporte celular',
     'Capa de chuva',
   ];
@@ -91,14 +108,29 @@ class _DeliveryRegistrationScreenState
     super.dispose();
   }
 
+  bool get _isBike => widget.isBicycleCourier;
+
   bool _validateRequiredUploads() {
     final missingDocs = <String>[];
-    if (_cnhFile == null) missingDocs.add('CNH');
-    if (_crlvFile == null) missingDocs.add('CRLV');
-    if (_selfieWithDocFile == null) missingDocs.add('Selfie com documento');
-    if (_motoWithPlateFile == null) missingDocs.add('Foto da moto com placa');
-    if (_platePlateCloseupFile == null)
-      missingDocs.add('Foto da placa (close-up)');
+    if (_isBike) {
+      if (_selfieWithDocFile == null) {
+        missingDocs.add('Selfie com documento (ou doc. da bike)');
+      }
+      if (_motoWithPlateFile == null) missingDocs.add('Foto da bicicleta');
+      if (_platePlateCloseupFile == null) {
+        missingDocs.add('Selfie com a bicicleta');
+      }
+      if (_cnhFile == null) missingDocs.add('Foto do CPF');
+      if (_crlvFile == null) missingDocs.add('Selfie com o CPF');
+    } else {
+      if (_cnhFile == null) missingDocs.add('CNH');
+      if (_crlvFile == null) missingDocs.add('CRLV');
+      if (_selfieWithDocFile == null) missingDocs.add('Selfie com documento');
+      if (_motoWithPlateFile == null) missingDocs.add('Foto da moto com placa');
+      if (_platePlateCloseupFile == null) {
+        missingDocs.add('Foto da placa (close-up)');
+      }
+    }
 
     if (missingDocs.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -131,12 +163,19 @@ class _DeliveryRegistrationScreenState
     setState(() => _isSubmitting = true);
 
     try {
-      // Chamar novo endpoint que aceita múltiplas imagens em um multipart request
+      final kmText = _kilometersController.text.trim();
+      final km = _isBike
+          ? (kmText.isEmpty ? 0 : int.parse(kmText))
+          : int.parse(kmText);
+
       await ApiService.createDeliveryRegistration(
         documentId:
             DocumentValidators.normalizeDigits(_documentController.text),
         plateLicense: _plateController.text.trim().toUpperCase(),
-        currentKilometers: int.parse(_kilometersController.text.trim()),
+        currentKilometers: km,
+        registrationVehicleType:
+            _isBike ? AppVehicleType.bicycle : AppVehicleType.motorcycle,
+        equipments: _selectedEquipments.toList(),
         lastOilChangeDate: _lastOilChangeDate,
         lastOilChangeKm: _lastOilChangeKmController.text.isNotEmpty
             ? int.parse(_lastOilChangeKmController.text.trim())
@@ -150,7 +189,17 @@ class _DeliveryRegistrationScreenState
         platePlateCloseupPath: _platePlateCloseupFile?.path,
         cnhPhotoPath: _cnhFile?.path,
         crlvPhotoPath: _crlvFile?.path,
+        bikeOptionalReceiptPath: _optionalBikeReceiptFile?.path,
       );
+
+      String? vehiclePhotoUrl;
+      final uid = Provider.of<AppStateProvider>(context, listen: false).user?.id;
+      if (uid != null && _motoWithPlateFile != null) {
+        vehiclePhotoUrl = await ApiService.uploadUserScopedImage(
+          uid,
+          _motoWithPlateFile!.path,
+        );
+      }
 
       await _showPendingFeedback();
       if (!mounted) return;
@@ -161,7 +210,7 @@ class _DeliveryRegistrationScreenState
               DocumentValidators.normalizeDigits(_documentController.text),
           equipments: _selectedEquipments.toList(),
           plateLicense: _plateController.text.trim().toUpperCase(),
-          currentKilometers: int.parse(_kilometersController.text.trim()),
+          currentKilometers: km,
           lastOilChangeDate: _lastOilChangeDate,
           lastOilChangeKm: _lastOilChangeKmController.text.trim().isEmpty
               ? null
@@ -170,6 +219,8 @@ class _DeliveryRegistrationScreenState
               ? null
               : _emergencyPhoneController.text.trim(),
           consentImages: _consentImages,
+          vehiclePhotoUrl: vehiclePhotoUrl,
+          isBicycle: _isBike,
         ),
       );
     } catch (e) {
@@ -378,11 +429,13 @@ class _DeliveryRegistrationScreenState
                   // Documento do piloto
                   OnboardingSectionCard(
                     title: 'Documento do piloto',
-                    subtitle: 'Informe CPF ou CNH para validacao.',
+                    subtitle: _isBike
+                        ? 'Informe seu CPF (11 digitos).'
+                        : 'Informe CPF ou CNH para validacao.',
                     icon: LucideIcons.fileBadge,
                     accentColor: accent,
                     child: OnboardingTextField(
-                      label: 'CPF/CNH',
+                      label: _isBike ? 'CPF' : 'CPF/CNH',
                       hint: '000.000.000-00',
                       icon: LucideIcons.fileText,
                       controller: _documentController,
@@ -391,7 +444,9 @@ class _DeliveryRegistrationScreenState
                         FilteringTextInputFormatter.digitsOnly,
                         CpfCnhInputFormatter(),
                       ],
-                      validator: DocumentValidators.validateCpfOrCnh,
+                      validator: _isBike
+                          ? DocumentValidators.validateCpf
+                          : DocumentValidators.validateCpfOrCnh,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -405,7 +460,9 @@ class _DeliveryRegistrationScreenState
                       children: [
                         _DocumentUploadCard(
                           label: 'Selfie com documento',
-                          subtitle: 'Voce segurando seu documento',
+                          subtitle: _isBike
+                              ? 'Voce com o documento (ou doc. da bike, se tiver)'
+                              : 'Voce segurando seu documento',
                           icon: LucideIcons.user,
                           file: _selfieWithDocFile,
                           onTap: () => _showSourcePicker(
@@ -420,8 +477,12 @@ class _DeliveryRegistrationScreenState
                         ),
                         const SizedBox(height: 12),
                         _DocumentUploadCard(
-                          label: 'Foto da moto com placa',
-                          subtitle: 'Voce ao lado da moto, mostrando a placa',
+                          label: _isBike
+                              ? 'Foto da bicicleta'
+                              : 'Foto da moto com placa',
+                          subtitle: _isBike
+                              ? 'Bike inteira, bem visivel'
+                              : 'Voce ao lado da moto, mostrando a placa',
                           icon: LucideIcons.bike,
                           file: _motoWithPlateFile,
                           onTap: () => _showSourcePicker(
@@ -436,9 +497,13 @@ class _DeliveryRegistrationScreenState
                         ),
                         const SizedBox(height: 12),
                         _DocumentUploadCard(
-                          label: 'Foto da placa (close-up)',
-                          subtitle: 'Placa legivel para validacao',
-                          icon: LucideIcons.fileImage,
+                          label: _isBike
+                              ? 'Selfie com a bicicleta'
+                              : 'Foto da placa (close-up)',
+                          subtitle: _isBike
+                              ? 'Voce e a bike juntos'
+                              : 'Placa legivel para validacao',
+                          icon: LucideIcons.image,
                           file: _platePlateCloseupFile,
                           onTap: () => _showSourcePicker(
                             onSourceSelected: (source) {
@@ -457,62 +522,93 @@ class _DeliveryRegistrationScreenState
                   // Documentos oficiais
                   OnboardingSectionCard(
                     title: 'Documentos oficiais',
-                    subtitle: 'Envie CNH e CRLV para validacao.',
+                    subtitle: _isBike
+                        ? 'CPF: foto legivel e selfie com o CPF em mao.'
+                        : 'Envie CNH e CRLV para validacao.',
                     icon: LucideIcons.fileText,
                     accentColor: accent,
                     child: Column(
                       children: [
                         _DocumentUploadCard(
-                          label: 'Foto da CNH',
-                          subtitle: 'Documento de habilitacao',
+                          label: _isBike ? 'Foto do CPF' : 'Foto da CNH',
+                          subtitle: _isBike
+                              ? 'Frente do CPF, legivel'
+                              : 'Documento de habilitacao',
                           icon: LucideIcons.fileBadge,
                           file: _cnhFile,
                           onTap: () => _showSourcePickerForDoc(isCnh: true),
                         ),
-                        const SizedBox(height: 12),
-                        _DocumentUploadCard(
-                          label: 'Foto do CRLV',
-                          subtitle: 'Documento do veiculo',
-                          icon: LucideIcons.fileText,
-                          file: _crlvFile,
-                          onTap: () => _showSourcePickerForDoc(isCnh: false),
-                        ),
+                        if (!_isBike) const SizedBox(height: 12),
+                        if (!_isBike)
+                          _DocumentUploadCard(
+                            label: 'Foto do CRLV',
+                            subtitle: 'Documento do veiculo',
+                            icon: LucideIcons.fileText,
+                            file: _crlvFile,
+                            onTap: () => _showSourcePickerForDoc(isCnh: false),
+                          ),
+                        if (_isBike) const SizedBox(height: 12),
+                        if (_isBike)
+                          _DocumentUploadCard(
+                            label: 'Selfie com o CPF',
+                            subtitle: 'Segurando o CPF aberto (frente e verso se necessario)',
+                            icon: LucideIcons.user,
+                            file: _crlvFile,
+                            onTap: () => _showSourcePickerForDoc(isCnh: false),
+                          ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Informacoes da moto
+                  // Informacoes do veiculo
                   OnboardingSectionCard(
-                    title: 'Informacoes da moto',
-                    subtitle: 'Dados essenciais do seu veiculo.',
+                    title: _isBike
+                        ? 'Informacoes da bike'
+                        : 'Informacoes da moto',
+                    subtitle: _isBike
+                        ? 'Numero de serie e km se souber (opcional o km).'
+                        : 'Dados essenciais do seu veiculo.',
                     icon: LucideIcons.bike,
                     accentColor: accent,
                     child: Column(
                       children: [
                         OnboardingTextField(
-                          label: 'Placa',
-                          hint: 'ABC-1234',
+                          label: _isBike
+                              ? 'Numero de serie (quadro/motor elétrico)'
+                              : 'Placa',
+                          hint: _isBike
+                              ? 'ex.: chassi ou serie do fabricante'
+                              : 'ABC-1234',
                           icon: LucideIcons.fileText,
                           controller: _plateController,
                           inputFormatters: [
                             FilteringTextInputFormatter.allow(
-                              RegExp(r'[A-Za-z0-9-]'),
+                              RegExp(r'[A-Za-z0-9.\s-]'),
                             ),
                           ],
                           validator: (value) {
                             if (value?.isEmpty ?? true) {
-                              return 'Informe a placa';
+                              return _isBike
+                                  ? 'Informe o número de serie'
+                                  : 'Informe a placa';
                             }
-                            if (value!.length < 7) {
+                            if (!_isBike && value!.length < 7) {
                               return 'Placa invalida';
+                            }
+                            if (_isBike && (value?.trim().length ?? 0) < 3) {
+                              return 'Dados muito curtos';
                             }
                             return null;
                           },
                         ),
                         const SizedBox(height: 12),
                         OnboardingTextField(
-                          label: 'Quilometragem atual',
-                          hint: 'Ex: 12500',
+                          label: _isBike
+                              ? 'Quilometragem (se tiver)'
+                              : 'Quilometragem atual',
+                          hint: _isBike
+                              ? 'Pode deixar em branco (0 se nao souber)'
+                              : 'Ex: 12500',
                           icon: LucideIcons.gauge,
                           controller: _kilometersController,
                           keyboardType: TextInputType.number,
@@ -520,11 +616,17 @@ class _DeliveryRegistrationScreenState
                             FilteringTextInputFormatter.digitsOnly,
                           ],
                           validator: (value) {
-                            if (value?.isEmpty ?? true) {
+                            if (_isBike) {
+                              if (value == null || value.isEmpty) {
+                                return null;
+                              }
+                            } else if (value?.isEmpty ?? true) {
                               return 'Informe a quilometragem';
                             }
-                            if (int.tryParse(value!) == null ||
-                                int.parse(value) < 0) {
+                            if (value != null &&
+                                value.isNotEmpty &&
+                                (int.tryParse(value) == null ||
+                                    int.parse(value) < 0)) {
                               return 'Quilometragem invalida';
                             }
                             return null;
@@ -534,16 +636,24 @@ class _DeliveryRegistrationScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Manutencao da moto
+                  // Manutencao
                   OnboardingSectionCard(
-                    title: 'Manutencao da moto',
-                    subtitle: 'Informacoes sobre a ultima troca de oleo.',
+                    title: _isBike
+                        ? 'Manutencao da bike'
+                        : 'Manutencao da moto',
+                    subtitle: _isBike
+                        ? 'Ultima manutencao (corrente, freio, pressao, etc.)'
+                        : 'Informacoes sobre a ultima troca de oleo.',
                     icon: LucideIcons.wrench,
                     accentColor: accent,
                     child: Column(
                       children: [
                         ListTile(
-                          title: const Text('Data da ultima troca de oleo'),
+                          title: Text(
+                            _isBike
+                                ? 'Data da ultima manutencao'
+                                : 'Data da ultima troca de oleo',
+                          ),
                           trailing: (_lastOilChangeDate == null
                               ? const Text('Selecionar')
                               : Text(
@@ -564,7 +674,9 @@ class _DeliveryRegistrationScreenState
                         ),
                         const SizedBox(height: 12),
                         OnboardingTextField(
-                          label: 'Quilometragem da ultima troca',
+                          label: _isBike
+                              ? 'Km (se tiver) na manutencao acima'
+                              : 'Quilometragem da ultima troca',
                           hint: 'Ex: 10000',
                           icon: LucideIcons.gauge,
                           controller: _lastOilChangeKmController,
@@ -586,7 +698,8 @@ class _DeliveryRegistrationScreenState
                     child: Wrap(
                       spacing: 10,
                       runSpacing: 8,
-                      children: _equipmentOptions.map((item) {
+                      children: (_isBike ? _equipmentBike : _equipmentMoto)
+                          .map((item) {
                         final selected = _selectedEquipments.contains(item);
                         return FilterChip(
                           label: Text(item),
@@ -623,11 +736,98 @@ class _DeliveryRegistrationScreenState
                       ],
                     ),
                   ),
+                  if (_isBike) ...[
+                    const SizedBox(height: 16),
+                    OnboardingSectionCard(
+                      title: 'Comprovante da bike (opcional)',
+                      subtitle:
+                          'Nota fiscal, canhoto da loja ou outro documento que comprove a posse.',
+                      icon: LucideIcons.fileText,
+                      accentColor: accent,
+                      child: _DocumentUploadCard(
+                        label: 'Anexar comprovante',
+                        subtitle: 'Foto legivel; pode pular se nao tiver',
+                        icon: LucideIcons.link2,
+                        file: _optionalBikeReceiptFile,
+                        onTap: () => _showSourcePicker(
+                          onSourceSelected: (source) {
+                            _pickImage(
+                              onFilePicked: (file) => setState(
+                                () => _optionalBikeReceiptFile = file,
+                              ),
+                              source: source,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
-                  // Consentimento
                   OnboardingSectionCard(
-                    title: 'Consentimento',
-                    subtitle: 'Autorizo o uso de imagens para verificacao.',
+                    title: 'Checklist antes de sair',
+                    subtitle: _isBike
+                        ? 'Boa pratica para quem roda de bicicleta.'
+                        : 'Lembrete rapido para rodar com seguranca.',
+                    icon: LucideIcons.clipboardList,
+                    accentColor: accent,
+                    child: Builder(
+                      builder: (context) {
+                        final list = _isBike
+                            ? PreRideChecklistBike.items
+                            : PreRideChecklistMoto.items;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (var i = 0; i < list.length; i++) ...[
+                              if (i > 0) const SizedBox(height: 10),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    LucideIcons.checkCircle,
+                                    size: 18,
+                                    color: accent,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          list[i].title,
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          list[i].hint,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                            color: theme.textTheme.bodyMedium
+                                                ?.color
+                                                ?.withOpacity(0.7),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Consentimento / termos
+                  OnboardingSectionCard(
+                    title: 'Termos e consentimento',
+                    subtitle: _isBike
+                        ? 'Leitura e aceite para cadastro de entregador de bicicleta.'
+                        : 'Autorizo o uso de imagens para verificacao.',
                     icon: LucideIcons.shield,
                     accentColor: accent,
                     child: CheckboxListTile(
@@ -635,9 +835,11 @@ class _DeliveryRegistrationScreenState
                       onChanged: (value) {
                         setState(() => _consentImages = value ?? false);
                       },
-                      title: const Text(
-                        'Autorizo o uso de imagens para verificacao de identidade e validacao do cadastro',
-                        style: TextStyle(fontSize: 13),
+                      title: Text(
+                        _isBike
+                            ? 'Leio e concordo: autorizo o Giro Certo a usar minhas imagens, dados do veiculo (bike) e documentos enviados para analise de cadastro de entregador. Entendo que, em caso de rejeicao, posso reenviar documentos conforme orientacao da equipe. O uso de equipamentos (mochila, chuva, etc.) e de minha responsabilidade, seguindo as leis de transito. Para bike, a plataforma prioriza ofertas em ate ${DeliveryMatchRules.maxKmBicycle} km, conforme regras de matching.'
+                            : 'Autorizo o uso de imagens para verificacao de identidade e validacao do cadastro de entregador (moto), conforme politica de privacidade do Giro Certo.',
+                        style: const TextStyle(fontSize: 13),
                       ),
                       dense: true,
                     ),

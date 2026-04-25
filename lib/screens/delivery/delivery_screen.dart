@@ -10,6 +10,8 @@ import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
+import '../../utils/delivery_constants.dart';
+import '../../models/vehicle_type.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/rider_dashboard.dart';
 import 'delivery_order_card.dart';
@@ -440,12 +442,48 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
     );
   }
 
+  Widget _buildRiderRadiusBanner(
+    BuildContext context,
+    ThemeData theme,
+    Color primaryColor,
+  ) {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final isBike = appState.bike?.vehicleType == AppVehicleType.bicycle;
+    if (!_isRiderMode) return const SizedBox.shrink();
+    return Material(
+      color: primaryColor.withOpacity(0.1),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.info, size: 18, color: primaryColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                DeliveryMatchRules.radiusMessage(isBicycle: isBike),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapView(ThemeData theme, List<DeliveryOrder> orders, Color primaryColor) {
     final userLocation = LatLng(_userLatitude, _userLongitude);
     // TODO: Implementar hot zones via API quando disponível
     final hotZones = <Map<String, dynamic>>[];
     
-    return Stack(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildRiderRadiusBanner(context, theme, primaryColor),
+        Expanded(
+          child: Stack(
       children: [
         FlutterMap(
           mapController: _mapController,
@@ -634,29 +672,40 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
           ),
         ),
       ],
+    ),
+        ),
+      ],
     );
   }
 
   Widget _buildRiderOrdersList(ThemeData theme, List<DeliveryOrder> orders, Color primaryColor) {
     if (orders.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              LucideIcons.package,
-              size: 64,
-              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Nenhuma corrida disponível',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildRiderRadiusBanner(context, theme, primaryColor),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    LucideIcons.package,
+                    size: 64,
+                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Nenhuma corrida disponível',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
@@ -674,7 +723,12 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
       return (a.distance ?? 0).compareTo(b.distance ?? 0);
     });
 
-    return ListView.builder(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildRiderRadiusBanner(context, theme, primaryColor),
+        Expanded(
+          child: ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: sortedOrders.length,
       itemBuilder: (context, index) {
@@ -691,6 +745,9 @@ class _DeliveryScreenState extends State<DeliveryScreen> with TickerProviderStat
           ),
         );
       },
+    ),
+        ),
+      ],
     );
   }
 
