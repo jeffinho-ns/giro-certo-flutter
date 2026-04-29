@@ -93,6 +93,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
   }
 
   Widget _buildPartnerContent(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
     final appState = Provider.of<AppStateProvider>(context);
     final user = appState.user;
     final userLat = user?.currentLat ?? -23.5505;
@@ -127,6 +128,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
                 ],
               ),
               borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.22)),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.racingOrange.withOpacity(0.3),
@@ -173,6 +175,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
                 label: 'Total',
                 icon: LucideIcons.package,
                 color: AppColors.racingOrange,
+                isDark: isDark,
               ),
             ),
             const SizedBox(width: 12),
@@ -183,6 +186,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
                 label: 'Pendentes',
                 icon: LucideIcons.clock,
                 color: AppColors.statusWarning,
+                isDark: isDark,
               ),
             ),
             const SizedBox(width: 12),
@@ -193,6 +197,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
                 label: 'Concluídos',
                 icon: LucideIcons.checkCircle,
                 color: AppColors.statusOk,
+                isDark: isDark,
               ),
             ),
           ],
@@ -211,13 +216,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: AppColors.neonGreen.withOpacity(0.3), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.neonGreen.withOpacity(0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            boxShadow: AppColors.raisedPanelShadows(isDark),
           ),
           child: Column(
             children: [
@@ -327,6 +326,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     required String label,
     required IconData icon,
     required Color color,
+    required bool isDark,
   }) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -334,10 +334,14 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
+          colors: [
+            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+          ],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
       ),
       child: Column(
         children: [
@@ -373,6 +377,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     DeliveryOrder order, {
     required bool isActive,
   }) {
+    final isDark = theme.brightness == Brightness.dark;
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final user = appState.user;
     final userLat = user?.currentLat ?? -23.5505;
@@ -395,7 +400,14 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: theme.cardColor,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+              isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+            ],
+          ),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isActive
@@ -403,13 +415,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
                 : AppColors.statusWarning.withOpacity(0.3),
             width: 1.5,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: AppColors.raisedPanelShadows(isDark),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

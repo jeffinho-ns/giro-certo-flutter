@@ -56,8 +56,8 @@ class RiderDashboard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            primaryColor.withOpacity(0.2),
-            primaryColor.withOpacity(0.05),
+            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
           ],
         ),
         borderRadius: BorderRadius.circular(20),
@@ -65,6 +65,7 @@ class RiderDashboard extends StatelessWidget {
           color: primaryColor.withOpacity(0.3),
           width: 1.5,
         ),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -85,8 +86,9 @@ class RiderDashboard extends StatelessWidget {
                   Text(
                     'R\$ ${stats.todayEarnings.toStringAsFixed(2)}',
                     style: theme.textTheme.displayMedium?.copyWith(
-                      color: primaryColor,
+                      color: AppColors.neonGreen,
                       fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
                     ),
                   ),
                 ],
@@ -182,8 +184,14 @@ class RiderDashboard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
+                gradient: LinearGradient(
+                  colors: [
+                    primaryColor.withOpacity(0.18),
+                    primaryColor.withOpacity(0.08),
+                  ],
+                ),
                 borderRadius: BorderRadius.circular(12),
+                boxShadow: AppColors.insetPanelShadows(isDark),
               ),
               child: Row(
                 children: [
@@ -211,6 +219,7 @@ class RiderDashboard extends StatelessWidget {
   }
 
   Widget _buildEarningsSummary(ThemeData theme, Color primaryColor) {
+    final isDark = theme.brightness == Brightness.dark;
     return Row(
       children: [
         Expanded(
@@ -221,6 +230,7 @@ class RiderDashboard extends StatelessWidget {
             '${stats.weekDeliveries} corridas',
             LucideIcons.calendar,
             primaryColor,
+            isDark,
           ),
         ),
         const SizedBox(width: 12),
@@ -232,6 +242,7 @@ class RiderDashboard extends StatelessWidget {
             '${stats.monthDeliveries} corridas',
             LucideIcons.calendarDays,
             primaryColor,
+            isDark,
           ),
         ),
         const SizedBox(width: 12),
@@ -243,6 +254,7 @@ class RiderDashboard extends StatelessWidget {
             '${stats.totalDeliveries} corridas',
             LucideIcons.trophy,
             AppColors.neonGreen,
+            isDark,
           ),
         ),
       ],
@@ -256,16 +268,25 @@ class RiderDashboard extends StatelessWidget {
     String subtitle,
     IconData icon,
     Color color,
+    bool isDark,
   ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+          ],
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.dividerColor,
           width: 1,
         ),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,15 +321,24 @@ class RiderDashboard extends StatelessWidget {
   }
 
   Widget _buildStatsGrid(ThemeData theme, Color primaryColor) {
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+          ],
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.dividerColor,
           width: 1,
         ),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

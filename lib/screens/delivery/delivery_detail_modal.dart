@@ -3,9 +3,10 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/delivery_order.dart';
+import '../../services/api_service.dart';
 import '../../utils/colors.dart';
 
-class DeliveryDetailModal extends StatelessWidget {
+class DeliveryDetailModal extends StatefulWidget {
   final DeliveryOrder order;
   final double userLat;
   final double userLng;
@@ -13,6 +14,7 @@ class DeliveryDetailModal extends StatelessWidget {
   final VoidCallback? onComplete;
   final VoidCallback? onOrderUpdated;
   final bool isRider;
+  final bool showRouteHistory;
 
   const DeliveryDetailModal({
     super.key,
@@ -23,11 +25,51 @@ class DeliveryDetailModal extends StatelessWidget {
     this.onComplete,
     this.onOrderUpdated,
     this.isRider = true,
+    this.showRouteHistory = false,
   });
+
+  @override
+  State<DeliveryDetailModal> createState() => _DeliveryDetailModalState();
+}
+
+class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
+  List<LatLng> _routeHistory = const [];
+  bool _isLoadingHistory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRouteHistoryIfNeeded();
+  }
+
+  Future<void> _loadRouteHistoryIfNeeded() async {
+    if (!widget.showRouteHistory ||
+        widget.order.status != DeliveryStatus.completed) {
+      return;
+    }
+    setState(() => _isLoadingHistory = true);
+    try {
+      final points = await ApiService.getDeliveryRouteHistory(widget.order.id);
+      if (!mounted) return;
+      setState(() {
+        _routeHistory = points
+            .where((p) => p['lat'] is num && p['lng'] is num)
+            .map((p) => LatLng(
+                  (p['lat'] as num).toDouble(),
+                  (p['lng'] as num).toDouble(),
+                ))
+            .toList();
+      });
+    } finally {
+      if (mounted) setState(() => _isLoadingHistory = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final order = widget.order;
     final storePoint = LatLng(order.storeLatitude, order.storeLongitude);
     final deliveryPoint = LatLng(order.deliveryLatitude, order.deliveryLongitude);
     
@@ -38,8 +80,16 @@ class DeliveryDetailModal extends StatelessWidget {
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: theme.scaffoldBackgroundColor,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+              ],
+            ),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: AppColors.raisedPanelShadows(isDark),
           ),
           child: Column(
             children: [
@@ -65,12 +115,18 @@ class DeliveryDetailModal extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.racingOrange.withOpacity(0.2),
+                            gradient: LinearGradient(
+                              colors: [
+                                AppColors.racingOrangeLight.withOpacity(0.95),
+                                AppColors.racingOrangeDark.withOpacity(0.9),
+                              ],
+                            ),
                             borderRadius: BorderRadius.circular(12),
+                            boxShadow: AppColors.insetPanelShadows(isDark),
                           ),
                           child: Icon(
                             LucideIcons.package,
-                            color: AppColors.racingOrange,
+                            color: Colors.white,
                             size: 24,
                           ),
                         ),
@@ -97,8 +153,11 @@ class DeliveryDetailModal extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: AppColors.neonGreen.withOpacity(0.2),
+                            color: Colors.black.withOpacity(0.45),
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.neonGreen.withOpacity(0.35),
+                            ),
                           ),
                           child: Text(
                             'R\$ ${order.deliveryFee.toStringAsFixed(2)}',
@@ -118,6 +177,7 @@ class DeliveryDetailModal extends StatelessWidget {
                     Container(
                       height: 250,
                       decoration: BoxDecoration(
+                        boxShadow: AppColors.insetPanelShadows(isDark),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: theme.dividerColor,
@@ -221,10 +281,34 @@ class DeliveryDetailModal extends StatelessWidget {
                                 ),
                               ],
                             ),
+                            if (_routeHistory.length >= 2)
+                              PolylineLayer(
+                                polylines: [
+                                  Polyline(
+                                    points: _routeHistory,
+                                    color: AppColors.racingOrange,
+                                    strokeWidth: 5,
+                                  ),
+                                ],
+                              ),
                           ],
                         ),
                       ),
                     ),
+                    if (widget.showRouteHistory &&
+                        order.status == DeliveryStatus.completed) ...[
+                      const SizedBox(height: 8),
+                      if (_isLoadingHistory)
+                        const LinearProgressIndicator(minHeight: 2),
+                      if (!_isLoadingHistory && _routeHistory.isNotEmpty)
+                        Text(
+                          'Trajeto real da entrega: ${_routeHistory.length} pontos',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.racingOrange,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
                     
                     const SizedBox(height: 24),
                     
@@ -253,12 +337,20 @@ class DeliveryDetailModal extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: theme.cardColor,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                              isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                            ],
+                          ),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: theme.dividerColor,
                             width: 1,
                           ),
+                          boxShadow: AppColors.insetPanelShadows(isDark),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,12 +390,20 @@ class DeliveryDetailModal extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: theme.cardColor,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                          ],
+                        ),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: theme.dividerColor,
                           width: 1,
                         ),
+                        boxShadow: AppColors.insetPanelShadows(isDark),
                       ),
                       child: Column(
                         children: [
@@ -333,22 +433,24 @@ class DeliveryDetailModal extends StatelessWidget {
                       ),
                     ),
                     
-                    if (isRider && order.status == DeliveryStatus.pending && onAccept != null) ...[
+                    if (widget.isRider && order.status == DeliveryStatus.pending && widget.onAccept != null) ...[
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () {
-                            onAccept?.call();
-                            onOrderUpdated?.call();
+                            widget.onAccept?.call();
+                            widget.onOrderUpdated?.call();
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.racingOrange,
+                            backgroundColor: AppColors.racingOrangeDark,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.white.withOpacity(0.2)),
                             ),
+                            elevation: 0,
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -368,14 +470,14 @@ class DeliveryDetailModal extends StatelessWidget {
                       ),
                     ],
                     
-                    if (isRider && (order.status == DeliveryStatus.inTransit || order.status == DeliveryStatus.inProgress) && onComplete != null) ...[
+                    if (widget.isRider && (order.status == DeliveryStatus.inTransit || order.status == DeliveryStatus.inProgress) && widget.onComplete != null) ...[
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () {
-                            onComplete?.call();
-                            onOrderUpdated?.call();
+                            widget.onComplete?.call();
+                            widget.onOrderUpdated?.call();
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.neonGreen,
@@ -383,7 +485,9 @@ class DeliveryDetailModal extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.white.withOpacity(0.2)),
                             ),
+                            elevation: 0,
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -422,15 +526,24 @@ class DeliveryDetailModal extends StatelessWidget {
     String? recipientName,
     String? recipientPhone,
   }) {
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+          ],
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: theme.dividerColor,
           width: 1,
         ),
+        boxShadow: AppColors.insetPanelShadows(isDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -479,20 +479,23 @@ class _MenuGridModalState extends State<MenuGridModal> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final items = _sortedByUsage(_baseItems());
     final quickActions = _quickActions();
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+          ],
+        ),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 24,
-            offset: const Offset(0, -8),
-          ),
-        ],
+        border: Border.all(color: AppColors.racingOrange.withOpacity(0.16)),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
       ),
       child: SafeArea(
         top: false,
@@ -609,24 +612,39 @@ class _QuickActionsRow extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Material(
-                  color: a.highlight
-                      ? AppColors.racingOrange.withOpacity(0.14)
-                      : theme.cardColor.withOpacity(0.95),
+                  color: Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
                     onTap: () => onTap(a),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 10, horizontal: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: a.highlight
+                              ? [
+                                  AppColors.racingOrangeLight.withOpacity(0.92),
+                                  AppColors.racingOrangeDark.withOpacity(0.9),
+                                ]
+                              : [
+                                  theme.brightness == Brightness.dark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                                  theme.brightness == Brightness.dark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                                ],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.16),
+                        ),
+                        boxShadow: AppColors.insetPanelShadows(theme.brightness == Brightness.dark),
+                      ),
                       child: Column(
                         children: [
                           Icon(
                             a.icon,
                             size: 18,
-                            color: a.highlight
-                                ? AppColors.racingOrange.withOpacity(0.95)
-                                : theme.colorScheme.primary.withOpacity(0.8),
+                            color: a.highlight ? Colors.white : theme.colorScheme.primary.withOpacity(0.85),
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -634,9 +652,8 @@ class _QuickActionsRow extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              fontWeight: a.highlight
-                                  ? FontWeight.w700
-                                  : FontWeight.w600,
+                              color: a.highlight ? Colors.white : null,
+                              fontWeight: a.highlight ? FontWeight.w700 : FontWeight.w600,
                             ),
                           ),
                         ],
@@ -696,23 +713,27 @@ class _GridTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
           decoration: BoxDecoration(
-            color: isHighlight
-                ? AppColors.racingOrange.withOpacity(0.1)
-                : theme.cardColor.withOpacity(isEnabled ? 1 : 0.65),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isHighlight
+                  ? [
+                      AppColors.racingOrangeLight.withOpacity(0.9),
+                      AppColors.racingOrangeDark.withOpacity(0.88),
+                    ]
+                  : [
+                      theme.brightness == Brightness.dark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                      theme.brightness == Brightness.dark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                    ],
+            ),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: isHighlight
-                  ? AppColors.racingOrange.withOpacity(0.25)
+                  ? Colors.white.withOpacity(0.2)
                   : theme.dividerColor.withOpacity(isEnabled ? 0.6 : 0.35),
               width: 1,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            boxShadow: AppColors.raisedPanelShadows(theme.brightness == Brightness.dark),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -721,7 +742,7 @@ class _GridTile extends StatelessWidget {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: isHighlight
-                      ? AppColors.racingOrange.withOpacity(0.18)
+                      ? Colors.white.withOpacity(0.2)
                       : theme.colorScheme.primary.withOpacity(0.08),
                   shape: BoxShape.circle,
                 ),
@@ -729,7 +750,7 @@ class _GridTile extends StatelessWidget {
                   item.icon,
                   size: 20,
                   color: isHighlight
-                      ? AppColors.racingOrange.withOpacity(0.95)
+                      ? Colors.white
                       : theme.colorScheme.primary
                           .withOpacity(isEnabled ? 0.8 : 0.45),
                 ),
@@ -744,7 +765,7 @@ class _GridTile extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: isHighlight ? FontWeight.w600 : FontWeight.w500,
                   color: isHighlight
-                      ? AppColors.racingOrange.withOpacity(0.95)
+                      ? Colors.white
                       : theme.textTheme.bodySmall?.color?.withOpacity(
                           isEnabled ? 0.85 : 0.45,
                         ),

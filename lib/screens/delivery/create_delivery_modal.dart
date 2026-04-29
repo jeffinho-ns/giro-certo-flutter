@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -40,6 +40,12 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   double? _deliveryLongitude;
   double? _deliveryFee;
   bool _increaseFeeForUrgent = false;
+  final List<Map<String, dynamic>> _addressPredictions = [];
+  bool _isSearchingAddress = false;
+  bool _isLoadingQuote = false;
+  String? _selectedPlaceId;
+  String _sessionToken = '';
+  Timer? _addressDebounce;
 
   @override
   void dispose() {
@@ -48,34 +54,32 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
     _recipientPhoneController.dispose();
     _notesController.dispose();
     _valueController.dispose();
+    _addressDebounce?.cancel();
     super.dispose();
   }
 
-  void _calculateDeliveryFee() {
-    if (_selectedStore != null && _deliveryLatitude != null && _deliveryLongitude != null) {
-      // Simulação: R$ 5 base + R$ 2 por km
-      final distance = _calculateDistance(
-        _selectedStore!.latitude,
-        _selectedStore!.longitude,
-        _deliveryLatitude!,
-        _deliveryLongitude!,
+  Future<void> _fetchQuote() async {
+    if (_selectedStore == null || _deliveryLatitude == null || _deliveryLongitude == null) {
+      return;
+    }
+    setState(() => _isLoadingQuote = true);
+    try {
+      final quote = await ApiService.getDeliveryQuote(
+        storeLatitude: _selectedStore!.latitude,
+        storeLongitude: _selectedStore!.longitude,
+        deliveryLatitude: _deliveryLatitude!,
+        deliveryLongitude: _deliveryLongitude!,
+        priority: _priorityToString(_selectedPriority),
+        urgentBoost: _increaseFeeForUrgent,
       );
-      final baseFee = 5.0 + (distance * 2.0);
-      
-      // Se urgente e opção marcada, entregador recebe 50% a mais
-      // Ex: se baseFee = 6, entregador recebe 9 (6 + 50% de 6)
-      final calculatedFee = (_selectedPriority == DeliveryPriority.urgent && _increaseFeeForUrgent)
-          ? baseFee * 1.5 // Aumenta 50% para o entregador
-          : baseFee;
-      
+      if (!mounted) return;
       setState(() {
-        _deliveryFee = calculatedFee;
+        _deliveryFee = (quote['deliveryFee'] as num?)?.toDouble();
       });
-    } else if (_selectedStore != null) {
-      // Se tiver loja mas não tiver endereço de entrega, calcular taxa mínima
-      setState(() {
-        _deliveryFee = 5.0; // Taxa base mínima
-      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingQuote = false);
+      }
     }
   }
   
@@ -91,21 +95,6 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
         return Colors.grey;
     }
   }
-
-  double _calculateDistance(double lat1, double lng1, double lat2, double lng2) {
-    const double earthRadius = 6371.0; // km
-    final dLat = _toRadians(lat2 - lat1);
-    final dLng = _toRadians(lng2 - lng1);
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_toRadians(lat1)) *
-            math.cos(_toRadians(lat2)) *
-            math.sin(dLng / 2) *
-            math.sin(dLng / 2);
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    return earthRadius * c;
-  }
-
-  double _toRadians(double degrees) => degrees * (math.pi / 180.0);
 
   String _priorityToString(DeliveryPriority priority) {
     switch (priority) {
@@ -146,29 +135,20 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
       return;
     }
 
-    // Se não tiver coordenadas, usar coordenadas simuladas baseadas na loja
-    if (_deliveryLatitude == null || _deliveryLongitude == null) {
-      if (_selectedStore != null) {
-        // Simular coordenadas próximas à loja
-        setState(() {
-          _deliveryLatitude = _selectedStore!.latitude + 0.01;
-          _deliveryLongitude = _selectedStore!.longitude + 0.01;
-        });
-        _calculateDeliveryFee();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erro ao calcular localização. Tente novamente.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
+    // Sem placeId/coords oficiais não cria pedido
+    if (_selectedPlaceId == null || _deliveryLatitude == null || _deliveryLongitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecione um endereço válido da busca para continuar.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
     }
 
     // Garantir que a taxa foi calculada
     if (_deliveryFee == null) {
-      _calculateDeliveryFee();
+      await _fetchQuote();
       if (_deliveryFee == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -288,6 +268,7 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   @override
   void initState() {
     super.initState();
+    _sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
     _loadStores();
   }
 
@@ -316,12 +297,6 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
             _isLoadingStores = false;
           });
           
-          // Calcular taxa inicial (mesmo sem endereço, mostra taxa mínima)
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _calculateDeliveryFee();
-            }
-          });
         } catch (e) {
           print('Erro ao buscar loja do usuário: $e');
           
@@ -350,13 +325,6 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
               _stores = [tempPartner];
               _selectedStore = tempPartner;
               _isLoadingStores = false;
-            });
-            
-            // Calcular taxa inicial
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _calculateDeliveryFee();
-              }
             });
             
             // Mostrar aviso ao usuário
@@ -411,9 +379,65 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
     }
   }
 
+  void _startAddressSearch(String value) {
+    _addressDebounce?.cancel();
+    final term = value.trim();
+    if (term.length < 3) {
+      setState(() {
+        _addressPredictions.clear();
+        _isSearchingAddress = false;
+        _selectedPlaceId = null;
+        _deliveryLatitude = null;
+        _deliveryLongitude = null;
+        _deliveryFee = null;
+      });
+      return;
+    }
+    _addressDebounce = Timer(const Duration(milliseconds: 350), () async {
+      setState(() => _isSearchingAddress = true);
+      try {
+        final predictions = await ApiService.mapsAutocomplete(
+          input: term,
+          sessionToken: _sessionToken,
+        );
+        if (!mounted) return;
+        setState(() {
+          _addressPredictions
+            ..clear()
+            ..addAll(predictions);
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _addressPredictions.clear());
+      } finally {
+        if (mounted) setState(() => _isSearchingAddress = false);
+      }
+    });
+  }
+
+  Future<void> _selectPrediction(Map<String, dynamic> prediction) async {
+    final placeId = prediction['placeId'] as String?;
+    if (placeId == null || placeId.isEmpty) return;
+    final place = await ApiService.mapsPlaceDetails(
+      placeId: placeId,
+      sessionToken: _sessionToken,
+    );
+    if (!mounted) return;
+    setState(() {
+      _selectedPlaceId = placeId;
+      _deliveryAddressController.text =
+          (place['formattedAddress'] as String?) ?? _deliveryAddressController.text;
+      _deliveryLatitude = (place['latitude'] as num).toDouble();
+      _deliveryLongitude = (place['longitude'] as num).toDouble();
+      _addressPredictions.clear();
+    });
+    await _fetchQuote();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -422,8 +446,16 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: theme.scaffoldBackgroundColor,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+              ],
+            ),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: AppColors.raisedPanelShadows(isDark),
           ),
           child: Column(
             children: [
@@ -458,12 +490,24 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: AppColors.racingOrange.withOpacity(0.2),
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  AppColors.racingOrangeLight.withOpacity(0.95),
+                                  AppColors.racingOrangeDark.withOpacity(0.9),
+                                ],
+                              ),
                               borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.25),
+                                width: 1,
+                              ),
+                              boxShadow: AppColors.raisedPanelShadows(isDark),
                             ),
                             child: Icon(
                               LucideIcons.plus,
-                              color: AppColors.racingOrange,
+                              color: Colors.white,
                               size: 24,
                             ),
                           ),
@@ -495,11 +539,19 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                               ? Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: theme.cardColor,
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                                        isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                                      ],
+                                    ),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                       color: theme.dividerColor,
                                     ),
+                                    boxShadow: AppColors.insetPanelShadows(isDark),
                                   ),
                                   child: Text(
                                     'Carregando loja...',
@@ -511,11 +563,19 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                                   Container(
                                       padding: const EdgeInsets.all(16),
                                       decoration: BoxDecoration(
-                                        color: theme.cardColor,
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                                            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                                          ],
+                                        ),
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
                                           color: theme.dividerColor,
                                         ),
+                                        boxShadow: AppColors.insetPanelShadows(isDark),
                                       ),
                                       child: Row(
                                         children: [
@@ -568,10 +628,8 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                                       onChanged: (store) {
                                         setState(() {
                                           _selectedStore = store;
-                                          if (store != null) {
-                                            _calculateDeliveryFee();
-                                          }
                                         });
+                                        _fetchQuote();
                                       },
                                       validator: (value) {
                                         if (value == null) {
@@ -586,11 +644,19 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: theme.cardColor,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                                isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                              ],
+                            ),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: theme.dividerColor.withOpacity(0.3),
                             ),
+                            boxShadow: AppColors.insetPanelShadows(isDark),
                           ),
                           child: Row(
                             children: [
@@ -626,13 +692,15 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                           ),
                           if (_selectedStore != null)
                             TextButton.icon(
-                              onPressed: () {
+                              onPressed: () async {
                                 setState(() {
                                   _deliveryAddressController.text = _selectedStore!.address;
                                   _deliveryLatitude = _selectedStore!.latitude;
                                   _deliveryLongitude = _selectedStore!.longitude;
-                                  _calculateDeliveryFee();
+                                  _selectedPlaceId = 'store-address';
+                                  _addressPredictions.clear();
                                 });
+                                await _fetchQuote();
                               },
                               icon: Icon(LucideIcons.copy, size: 14),
                               label: Text(
@@ -659,25 +727,43 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                           return null;
                         },
                         onChanged: (value) {
-                          // Simular geocodificação - usar coordenadas da loja como base
-                          if (value.length > 10 && _selectedStore != null) {
-                            setState(() {
-                              // Simular coordenadas próximas à loja
-                              _deliveryLatitude = _selectedStore!.latitude + 0.01;
-                              _deliveryLongitude = _selectedStore!.longitude + 0.01;
-                            });
-                            // Calcular taxa após atualizar coordenadas
-                            _calculateDeliveryFee();
-                          } else if (value.isEmpty) {
-                            // Se limpar o endereço, limpar coordenadas mas manter taxa mínima
-                            setState(() {
-                              _deliveryLatitude = null;
-                              _deliveryLongitude = null;
-                            });
-                            _calculateDeliveryFee();
-                          }
+                          _selectedPlaceId = null;
+                          _startAddressSearch(value);
                         },
                       ),
+                      if (_isSearchingAddress)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (_addressPredictions.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                                isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: theme.dividerColor),
+                            boxShadow: AppColors.insetPanelShadows(isDark),
+                          ),
+                          child: Column(
+                            children: _addressPredictions.take(5).map((p) {
+                              return ListTile(
+                                dense: true,
+                                leading: const Icon(LucideIcons.mapPin, size: 16),
+                                title: Text((p['mainText'] as String?) ?? ''),
+                                subtitle: Text((p['secondaryText'] as String?) ?? ''),
+                                onTap: () => _selectPrediction(p),
+                              );
+                            }).toList(),
+                          ),
+                        ),
                       
                       const SizedBox(height: 16),
                       
@@ -811,8 +897,8 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                         onSelectionChanged: (Set<DeliveryPriority> newSelection) {
                           setState(() {
                             _selectedPriority = newSelection.first;
-                            _calculateDeliveryFee();
                           });
+                          _fetchQuote();
                         },
                       ),
                       
@@ -862,13 +948,8 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                                 onChanged: (value) {
                                   setState(() {
                                     _increaseFeeForUrgent = value;
-                                    // Recalcular taxa quando mudar o switch
-                                    if (_selectedStore != null && 
-                                        _deliveryLatitude != null && 
-                                        _deliveryLongitude != null) {
-                                      _calculateDeliveryFee();
-                                    }
                                   });
+                                  _fetchQuote();
                                 },
                                 activeColor: Colors.red,
                               ),
@@ -897,16 +978,29 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                       const SizedBox(height: 24),
                       
                       // Taxa de entrega calculada
+                      if (_isLoadingQuote)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 10),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
                       if (_deliveryFee != null)
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: AppColors.neonGreen.withOpacity(0.1),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                AppColors.neonGreen.withOpacity(0.18),
+                                AppColors.neonGreen.withOpacity(0.08),
+                              ],
+                            ),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: AppColors.neonGreen.withOpacity(0.3),
                               width: 1,
                             ),
+                            boxShadow: AppColors.insetPanelShadows(isDark),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -936,26 +1030,49 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                         child: ElevatedButton(
                           onPressed: _createOrder,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.racingOrange,
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 1,
+                            ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(LucideIcons.check),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Criar Pedido',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  AppColors.racingOrangeLight,
+                                  AppColors.racingOrangeDark,
+                                ],
                               ),
-                            ],
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: AppColors.raisedPanelShadows(isDark),
+                            ),
+                            child: Container(
+                              alignment: Alignment.center,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(LucideIcons.check),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Criar Pedido',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -973,4 +1090,3 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
     );
   }
 }
-

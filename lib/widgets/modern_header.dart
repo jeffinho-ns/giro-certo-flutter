@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:geolocator/geolocator.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/drawer_provider.dart';
+import '../utils/colors.dart';
 import 'api_image.dart';
 
 class ModernHeader extends StatefulWidget {
@@ -136,6 +137,7 @@ class _ModernHeaderState extends State<ModernHeader> {
     final drawerProvider = Provider.of<DrawerProvider>(context, listen: false);
     final user = appState.user;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     final speedStr = _currentSpeedKmh == null
         ? '-- km/h'
@@ -144,18 +146,19 @@ class _ModernHeaderState extends State<ModernHeader> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
-        color: widget.transparentOverMap
-            ? Colors.transparent
-            : theme.scaffoldBackgroundColor,
+        gradient: widget.transparentOverMap
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                  isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                ],
+              ),
         boxShadow: widget.transparentOverMap
             ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+            : AppColors.raisedPanelShadows(isDark),
       ),
       child: SafeArea(
         bottom: false,
@@ -244,13 +247,24 @@ class _ModernHeaderState extends State<ModernHeader> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.35),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.black.withOpacity(0.7),
+                          Colors.black.withOpacity(0.45),
+                        ],
+                      ),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.neonGreen.withOpacity(0.25),
+                        width: 1,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                          color: AppColors.neonGreen.withOpacity(0.12),
+                          blurRadius: 8,
+                          offset: const Offset(0, 0),
                         ),
                       ],
                     ),
@@ -266,9 +280,9 @@ class _ModernHeaderState extends State<ModernHeader> {
                         Text(
                           _timeStr,
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: AppColors.neonGreen,
                             fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 0.3,
                           ),
                         ),
@@ -289,9 +303,9 @@ class _ModernHeaderState extends State<ModernHeader> {
                         Text(
                           speedStr,
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: AppColors.neonGreen,
                             fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],

@@ -10,6 +10,8 @@ import '../../providers/notifications_count_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/map_service.dart';
 import '../../services/realtime_service.dart';
+import '../../services/flutter_delivery_navigation_service.dart';
+import '../../services/navigation_route_cache_service.dart';
 import '../../services/onboarding_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/delivery_order.dart';
@@ -17,6 +19,7 @@ import '../../models/partner.dart';
 import '../../models/pilot_profile.dart';
 import '../../utils/colors.dart';
 import '../../utils/navigation_rider_marker.dart';
+import '../../utils/delivery_status_utils.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/quick_messages_card.dart';
 import '../../widgets/home_map_fab_column.dart';
@@ -47,6 +50,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<DeliveryOrder> _marketPendingOrders = [];
   List<Partner> _marketPartners = [];
   bool _isUpdatingDeliveryRoute = false;
+  final FlutterDeliveryNavigationService _deliveryNavigationService =
+      FlutterDeliveryNavigationService();
+  List<LatLng> _activeRoutePoints = const [];
 
   /// Modo “navegação” (corrida ativa): polyline azul, câmera 3D e marcador com rotação.
   BitmapDescriptor? _riderNavIcon;
@@ -172,6 +178,65 @@ class _HomeScreenState extends State<HomeScreen> {
         if (_riderNavMarker != null) _riderNavMarker!,
       };
 
+  void _updateNavigationPolyline({
+    required List<LatLng> consumed,
+    required List<LatLng> remaining,
+    required String routeId,
+  }) {
+    setState(() {
+      _polylines = {
+        if (consumed.length >= 2)
+          Polyline(
+            polylineId: const PolylineId('route_consumed'),
+            points: consumed,
+            color: Colors.grey.withOpacity(0.65),
+            width: 9,
+            geodesic: true,
+          ),
+        if (remaining.length >= 2)
+          _navStylePolyline(
+            polylineId: PolylineId(routeId),
+            points: remaining,
+          ),
+      };
+      _rebuildRiderNavMarker();
+    });
+  }
+
+  Future<void> _onNavigationTick(Position pos) async {
+    if (!_deliveryNavigationActive ||
+        _activeRoutePoints.length < 2 ||
+        _currentPosition == null) {
+      return;
+    }
+    final progress = _deliveryNavigationService.updateProgress(
+      current: _currentPosition!,
+      routePoints: _activeRoutePoints,
+    );
+    final routeId = _activeDeliveryOrder?.status == DeliveryStatus.inTransit
+        ? 'route_to_client'
+        : 'route_to_store';
+    _updateNavigationPolyline(
+      consumed: progress.consumedPoints,
+      remaining: progress.remainingPoints,
+      routeId: routeId,
+    );
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final shouldReroute = _deliveryNavigationService.shouldTriggerReroute(
+      offRouteDistanceMeters: progress.offRouteDistanceMeters,
+      nowMs: nowMs,
+      thresholdMeters: 40,
+    );
+    if (shouldReroute) {
+      if (_activeDeliveryOrder?.status == DeliveryStatus.inTransit) {
+        await _drawRouteStoreToClient(_activeDeliveryOrder!);
+      } else {
+        await _drawRouteToStore(_activeDeliveryOrder!);
+      }
+    }
+    _followNavigationCameraThrottled();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -294,7 +359,7 @@ class _HomeScreenState extends State<HomeScreen> {
           activeOrder: _activeDeliveryOrder,
         );
         if (_deliveryNavigationActive) {
-          _followNavigationCameraThrottled();
+          unawaited(_onNavigationTick(pos));
         }
       });
     } catch (e) {
@@ -435,6 +500,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    RealtimeService.instance.setNavigationMode(false);
     _positionSubscription?.cancel();
     _mapController?.dispose();
     super.dispose();
@@ -465,7 +531,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _marketPendingOrders = (results[0] as List<DeliveryOrder>)
-            .where((o) => o.status == DeliveryStatus.pending)
+            .where((o) => DeliveryStatusUtils.isPending(o.status))
             .toList();
         _marketPartners = results[1] as List<Partner>;
       });
@@ -896,11 +962,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+    final latLngPoints = points.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
+    await NavigationRouteCacheService.saveRoute(orderId: order.id, points: points);
     setState(() {
+      _activeRoutePoints = latLngPoints;
       _polylines = {
         _navStylePolyline(
           polylineId: const PolylineId('route_to_store'),
-          points: points.map((p) => LatLng(p['lat']!, p['lng']!)).toList(),
+          points: latLngPoints,
         ),
       };
       _markers = {
@@ -960,11 +1029,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+    final latLngPoints = points.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
+    await NavigationRouteCacheService.saveRoute(orderId: order.id, points: points);
     setState(() {
+      _activeRoutePoints = latLngPoints;
       _polylines = {
         _navStylePolyline(
           polylineId: const PolylineId('route_to_client'),
-          points: points.map((p) => LatLng(p['lat']!, p['lng']!)).toList(),
+          points: latLngPoints,
         ),
       };
       _markers = {
@@ -1033,7 +1105,23 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _activeDeliveryOrder = accepted;
       });
-      await _drawRouteToStore(accepted);
+      RealtimeService.instance.setNavigationMode(true, orderId: accepted.id);
+      final cachedPoints = await NavigationRouteCacheService.loadRoute(accepted.id);
+      if (cachedPoints != null && cachedPoints.length >= 2) {
+        final latLngPoints =
+            cachedPoints.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
+        setState(() {
+          _activeRoutePoints = latLngPoints;
+          _polylines = {
+            _navStylePolyline(
+              polylineId: const PolylineId('route_to_store'),
+              points: latLngPoints,
+            ),
+          };
+        });
+      } else {
+        await _drawRouteToStore(accepted);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1111,6 +1199,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _activeDeliveryOrder = null;
+        _activeRoutePoints = const [];
         _polylines = {};
         _markers = {};
         _marketCircles = {};
@@ -1118,6 +1207,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _prevNavForBearing = null;
       });
       _refreshMarketIntelligenceOverlays();
+      RealtimeService.instance.setNavigationMode(false);
+      RealtimeService.instance.leaveOrderTracking(order.id);
+      await NavigationRouteCacheService.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Entrega finalizada.')),
       );
@@ -1312,22 +1404,26 @@ class _MapControlsOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: Container(
         decoration: BoxDecoration(
-          color: theme.brightness == Brightness.dark
-              ? Colors.black.withOpacity(0.35)
-              : Colors.white.withOpacity(0.5),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              isDark ? AppColors.panelDarkHigh.withOpacity(0.96) : AppColors.panelLightHigh.withOpacity(0.96),
+              isDark ? AppColors.panelDarkLow.withOpacity(0.9) : AppColors.panelLightLow.withOpacity(0.92),
+            ],
+          ),
           borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          border: Border.all(
+            color: AppColors.racingOrange.withOpacity(0.18),
+            width: 1,
+          ),
+          boxShadow: AppColors.raisedPanelShadows(isDark),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1381,27 +1477,26 @@ class _DeliveryPendingBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final accent = AppColors.statusWarning;
-    final bgColor = theme.brightness == Brightness.dark
-        ? AppColors.darkSurface.withOpacity(0.92)
-        : AppColors.lightSurface.withOpacity(0.95);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: bgColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            isDark ? AppColors.panelDarkHigh.withOpacity(0.95) : AppColors.panelLightHigh.withOpacity(0.98),
+            isDark ? AppColors.panelDarkLow.withOpacity(0.92) : AppColors.panelLightLow.withOpacity(0.95),
+          ],
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: accent.withOpacity(0.3),
           width: 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.12),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: AppColors.raisedPanelShadows(isDark),
       ),
       child: Row(
         children: [
@@ -1606,27 +1701,25 @@ class _DeliveryTripStageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isHeadingToStore = order.status == DeliveryStatus.accepted;
     final isWaitingPickup = order.status == DeliveryStatus.arrivedAtStore;
     final isInTransit = order.status == DeliveryStatus.inTransit ||
         order.status == DeliveryStatus.inProgress;
-    final cardColor = theme.brightness == Brightness.dark
-        ? AppColors.darkSurface.withOpacity(0.95)
-        : AppColors.lightSurface.withOpacity(0.96);
-
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: cardColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            isDark ? AppColors.panelDarkHigh.withOpacity(0.96) : AppColors.panelLightHigh.withOpacity(0.98),
+            isDark ? AppColors.panelDarkLow.withOpacity(0.93) : AppColors.panelLightLow.withOpacity(0.95),
+          ],
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.racingOrange.withOpacity(0.28)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.14),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: AppColors.raisedPanelShadows(isDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1673,8 +1766,13 @@ class _DeliveryTripStageCard extends StatelessWidget {
                     ? 'Atualizando rota...'
                     : 'Cheguei no estabelecimento'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.racingOrange,
+                  backgroundColor: AppColors.racingOrangeDark,
                   foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                  ),
                 ),
               ),
             ),
@@ -1698,8 +1796,13 @@ class _DeliveryTripStageCard extends StatelessWidget {
                 label: Text(
                     isLoading ? 'Atualizando...' : 'Coletar e iniciar entrega'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.statusOk,
+                  backgroundColor: AppColors.neonGreen,
                   foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                  ),
                 ),
               ),
             ),
@@ -1731,8 +1834,13 @@ class _DeliveryTripStageCard extends StatelessWidget {
                     : const Icon(LucideIcons.checkCircle, size: 18),
                 label: Text(isLoading ? 'Finalizando...' : 'Finalizar entrega'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.statusOk,
+                  backgroundColor: AppColors.neonGreen,
                   foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                  ),
                 ),
               ),
             ),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../utils/colors.dart';
 
-/// Card flutuante semi-transparente com blur (Glassmorphism) para últimas notificações/alertas.
+/// Card flutuante com visual skeumórfico para notificações/alertas.
 class QuickMessagesCard extends StatelessWidget {
   final List<QuickMessageItem> items;
   final VoidCallback? onSeeAll;
@@ -19,6 +19,7 @@ class QuickMessagesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final visible = items.take(maxVisible).toList();
 
     return ClipRRect(
@@ -29,17 +30,20 @@ class QuickMessagesCard extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 180), // Menor que metade da tela (típico ~400px)
           padding: const EdgeInsets.all(8), // Reduzido de 16 para 8 (50%)
           decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? Colors.white.withOpacity(0.06)
-                : Colors.white.withOpacity(0.2),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                isDark ? AppColors.panelDarkHigh.withOpacity(0.75) : AppColors.panelLightHigh.withOpacity(0.9),
+                isDark ? AppColors.panelDarkLow.withOpacity(0.72) : AppColors.panelLightLow.withOpacity(0.86),
+              ],
+            ),
             borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 8, // Reduzido de 16 para 8 (50%)
-                offset: const Offset(0, 2), // Reduzido de 4 para 2 (50%)
-              ),
-            ],
+            border: Border.all(
+              color: AppColors.racingOrange.withOpacity(0.16),
+              width: 1,
+            ),
+            boxShadow: AppColors.raisedPanelShadows(isDark),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -59,7 +63,8 @@ class QuickMessagesCard extends StatelessWidget {
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         letterSpacing: -0.3,
-                        fontSize: 11, // Reduzido proporcionalmente
+                        fontSize: 11,
+                        color: AppColors.neonGreen,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -99,9 +104,9 @@ class QuickMessagesCard extends StatelessWidget {
                   child: Text(
                     'Ver todas',
                     style: TextStyle(
-                      color: AppColors.racingOrange.withOpacity(0.9),
+                      color: AppColors.racingOrange.withOpacity(0.95),
                       fontSize: 10, // Reduzido de 12 para 10
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),

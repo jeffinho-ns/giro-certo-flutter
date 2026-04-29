@@ -101,6 +101,7 @@ class DeliveryOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final distance = order.distanceFromStore(userLat, userLng);
     final totalDistance = order.totalDistance;
 
@@ -109,19 +110,20 @@ class DeliveryOrderCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: theme.cardColor,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+              isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+            ],
+          ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: theme.dividerColor,
             width: 1,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: AppColors.raisedPanelShadows(isDark),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,12 +318,17 @@ class DeliveryOrderCard extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: onAccept,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.primary,
+                    backgroundColor: AppColors.racingOrangeDark,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1,
+                      ),
                     ),
+                    elevation: 0,
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,

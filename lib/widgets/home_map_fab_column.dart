@@ -190,6 +190,7 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
     bool isHighlight = false,
   }) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Material(
       color: Colors.transparent,
@@ -202,29 +203,33 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: isHighlight
-                  ? color.withOpacity(0.9)
-                  : (theme.brightness == Brightness.dark
-                      ? Colors.white.withOpacity(0.12)
-                      : Colors.black.withOpacity(0.06)),
+              gradient: isHighlight
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.racingOrangeLight.withOpacity(0.95),
+                        AppColors.racingOrangeDark.withOpacity(0.92),
+                      ],
+                    )
+                  : LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        isDark ? AppColors.panelDarkHigh.withOpacity(0.92) : AppColors.panelLightHigh.withOpacity(0.98),
+                        isDark ? AppColors.panelDarkLow.withOpacity(0.88) : AppColors.panelLightLow.withOpacity(0.94),
+                      ],
+                    ),
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-                if (isHighlight)
-                  BoxShadow(
-                    color: color.withOpacity(0.25),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-              ],
+              border: Border.all(
+                color: Colors.white.withOpacity(isHighlight ? 0.22 : 0.12),
+                width: 1,
+              ),
+              boxShadow: AppColors.raisedPanelShadows(isDark),
             ),
             child: Icon(
               icon,
-              color: isHighlight ? Colors.white : color,
+              color: isHighlight ? Colors.white : AppColors.neonGreen,
               size: 22,
             ),
           ),
@@ -246,17 +251,17 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.6)
-                : Colors.white.withOpacity(0.9),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                theme.brightness == Brightness.dark ? AppColors.panelDarkHigh.withOpacity(0.94) : AppColors.panelLightHigh.withOpacity(0.98),
+                theme.brightness == Brightness.dark ? AppColors.panelDarkLow.withOpacity(0.9) : AppColors.panelLightLow.withOpacity(0.94),
+              ],
+            ),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            border: Border.all(color: AppColors.racingOrange.withOpacity(0.18)),
+            boxShadow: AppColors.raisedPanelShadows(theme.brightness == Brightness.dark),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

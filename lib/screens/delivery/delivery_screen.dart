@@ -4,14 +4,17 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../models/delivery_order.dart';
 import '../../models/partner.dart';
 import '../../models/rider_stats.dart';
 import '../../services/api_service.dart';
+import '../../services/realtime_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
 import '../../utils/delivery_constants.dart';
+import '../../utils/delivery_status_utils.dart';
 import '../../models/vehicle_type.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/rider_dashboard.dart';
@@ -35,8 +38,11 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   TabController? _tabController;
   final MapController _mapController = MapController();
   Timer? _marketPulseTimer;
+  StreamSubscription<Position>? _positionSubscription;
+  StreamSubscription<Map<String, dynamic>>? _deliveryRealtimeSubscription;
+  Timer? _realtimeReloadDebounce;
 
-  // Localização do usuário (TODO: obter via GPS)
+  // Localização real do usuário (fallback inicial em São Paulo)
   double _userLatitude = -23.5505;
   double _userLongitude = -46.6333;
 
@@ -62,6 +68,8 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   void initState() {
     super.initState();
     _initializeTabController();
+    _requestLocationAndListen();
+    _subscribeDeliveryRealtime();
     _loadOrders();
     _marketPulseTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       _loadOrders();
@@ -83,9 +91,75 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   @override
   void dispose() {
     _marketPulseTimer?.cancel();
+    _positionSubscription?.cancel();
+    _deliveryRealtimeSubscription?.cancel();
+    _realtimeReloadDebounce?.cancel();
     _tabController?.dispose();
     _mapController.dispose();
     super.dispose();
+  }
+
+  Future<void> _requestLocationAndListen() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever ||
+          permission == LocationPermission.denied) {
+        return;
+      }
+      final initial = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _userLatitude = initial.latitude;
+        _userLongitude = initial.longitude;
+      });
+
+      _positionSubscription = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 3,
+        ),
+      ).listen((pos) async {
+        if (!mounted) return;
+        setState(() {
+          _userLatitude = pos.latitude;
+          _userLongitude = pos.longitude;
+        });
+        try {
+          await ApiService.updateUserLocation(
+            latitude: pos.latitude,
+            longitude: pos.longitude,
+          );
+          final activeOrder = _myOrders.isNotEmpty ? _myOrders.first : null;
+          RealtimeService.instance.emitRiderLocationThrottled(
+            lat: pos.latitude,
+            lng: pos.longitude,
+            orderId: activeOrder?.id,
+            orderStatus: activeOrder?.status.name,
+          );
+        } catch (_) {}
+      });
+    } catch (_) {}
+  }
+
+  void _subscribeDeliveryRealtime() {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final userId = appState.user?.id;
+    if (userId == null) return;
+    RealtimeService.instance.connect(userId);
+    _deliveryRealtimeSubscription =
+        RealtimeService.instance.onDeliveryStatusChanged.listen((_) {
+      _realtimeReloadDebounce?.cancel();
+      _realtimeReloadDebounce = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) _loadOrders();
+      });
+    });
   }
 
   Future<void> _loadOrders() async {
@@ -108,9 +182,9 @@ class _DeliveryScreenState extends State<DeliveryScreen>
 
       // Integrar com API real
       if (_isRiderMode) {
-        // Motociclista: buscar pedidos disponíveis e seus próprios pedidos
+        // Motociclista: pedidos pendentes + minhas corridas
         final results = await Future.wait([
-          ApiService.getDeliveryOrders(),
+          ApiService.getDeliveryOrders(status: 'pending', limit: 60),
           ApiService.getDeliveryOrders(riderId: user.id),
           ApiService.getPartners(),
         ]);
@@ -120,17 +194,13 @@ class _DeliveryScreenState extends State<DeliveryScreen>
 
         setState(() {
           _orders = allOrders
-              .where((o) => o.status == DeliveryStatus.pending)
+              .where((o) => DeliveryStatusUtils.isPending(o.status))
               .toList();
           _myOrders = myOrders
-              .where((o) =>
-                  o.status == DeliveryStatus.accepted ||
-                  o.status == DeliveryStatus.arrivedAtStore ||
-                  o.status == DeliveryStatus.inTransit ||
-                  o.status == DeliveryStatus.inProgress)
+              .where((o) => DeliveryStatusUtils.isActive(o.status))
               .toList();
           _completedOrders = myOrders
-              .where((o) => o.status == DeliveryStatus.completed)
+              .where((o) => DeliveryStatusUtils.isCompleted(o.status))
               .toList();
           _partners = partners;
           _riderStats = RiderStats.fromOrders(_completedOrders);
@@ -148,17 +218,13 @@ class _DeliveryScreenState extends State<DeliveryScreen>
 
           setState(() {
             _orders = myOrders
-                .where((o) => o.status == DeliveryStatus.pending)
+                .where((o) => DeliveryStatusUtils.isPending(o.status))
                 .toList();
             _myOrders = myOrders
-                .where((o) =>
-                    o.status == DeliveryStatus.accepted ||
-                    o.status == DeliveryStatus.arrivedAtStore ||
-                    o.status == DeliveryStatus.inTransit ||
-                    o.status == DeliveryStatus.inProgress)
+                .where((o) => DeliveryStatusUtils.isActive(o.status))
                 .toList();
             _completedOrders = myOrders
-                .where((o) => o.status == DeliveryStatus.completed)
+                .where((o) => DeliveryStatusUtils.isCompleted(o.status))
                 .toList();
             _partners = partners;
             _isLoading = false;
@@ -328,8 +394,9 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     final theme = Theme.of(context);
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     final primaryColor = themeProvider.primaryColor;
+    final isDark = theme.brightness == Brightness.dark;
     final pendingOrders =
-        _orders.where((o) => o.status == DeliveryStatus.pending).toList();
+        _orders.where((o) => DeliveryStatusUtils.isPending(o.status)).toList();
 
     return Scaffold(
       body: Column(
@@ -343,37 +410,47 @@ class _DeliveryScreenState extends State<DeliveryScreen>
           // Tabs - Verificar que TabController existe e tem o tamanho correto
           if (_tabController != null &&
               _tabController!.length == (_isRiderMode ? 3 : 2))
-            TabBar(
-              controller: _tabController!,
-              indicatorColor: primaryColor,
-              labelColor: primaryColor,
-              unselectedLabelColor:
-                  theme.textTheme.bodyMedium?.color?.withOpacity(0.5),
-              tabs: _isRiderMode
-                  ? [
-                      Tab(
-                        icon: Icon(LucideIcons.map),
-                        text: 'Mapa',
-                      ),
-                      Tab(
-                        icon: Icon(LucideIcons.list),
-                        text: 'Disponíveis',
-                      ),
-                      Tab(
-                        icon: Icon(LucideIcons.package),
-                        text: 'Minhas Corridas',
-                      ),
-                    ]
-                  : [
-                      Tab(
-                        icon: Icon(LucideIcons.map),
-                        text: 'Áreas Quentes',
-                      ),
-                      Tab(
-                        icon: Icon(LucideIcons.list),
-                        text: 'Meus Pedidos',
-                      ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+                    isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: primaryColor.withOpacity(0.2)),
+                boxShadow: AppColors.raisedPanelShadows(isDark),
+              ),
+              child: TabBar(
+                controller: _tabController!,
+                indicator: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.racingOrangeLight.withOpacity(0.9),
+                      AppColors.racingOrangeDark.withOpacity(0.9),
                     ],
+                  ),
+                ),
+                indicatorPadding: const EdgeInsets.all(4),
+                labelColor: Colors.white,
+                unselectedLabelColor:
+                    theme.textTheme.bodyMedium?.color?.withOpacity(0.65),
+                tabs: _isRiderMode
+                    ? const [
+                        Tab(icon: Icon(LucideIcons.map), text: 'Mapa'),
+                        Tab(icon: Icon(LucideIcons.list), text: 'Disponíveis'),
+                        Tab(icon: Icon(LucideIcons.package), text: 'Minhas Corridas'),
+                      ]
+                    : const [
+                        Tab(icon: Icon(LucideIcons.map), text: 'Áreas Quentes'),
+                        Tab(icon: Icon(LucideIcons.list), text: 'Meus Pedidos'),
+                      ],
+              ),
             )
           else
             SizedBox(
@@ -432,10 +509,23 @@ class _DeliveryScreenState extends State<DeliveryScreen>
                                         ),
                                       );
                                     },
-                                    backgroundColor: primaryColor,
-                                    icon: Icon(LucideIcons.plus),
-                                    label: Text('Novo Pedido'),
-                                    elevation: 8,
+                                    backgroundColor: AppColors.racingOrangeDark,
+                                    icon: const Icon(LucideIcons.plus, color: Colors.white),
+                                    label: const Text(
+                                      'Criar Pedido',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      side: BorderSide(
+                                        color: Colors.white.withOpacity(0.2),
+                                        width: 1,
+                                      ),
+                                    ),
                                   ),
                                 ),
                             ],
@@ -749,6 +839,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   }
 
   Widget _buildMapInsightsPanel(ThemeData theme, Color primaryColor) {
+    final isDark = theme.brightness == Brightness.dark;
     Widget modeChip(DeliveryMapInsightMode mode, String label) {
       final selected = _mapInsightMode == mode;
       return ChoiceChip(
@@ -764,9 +855,17 @@ class _DeliveryScreenState extends State<DeliveryScreen>
       width: 230,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: theme.cardColor.withOpacity(0.94),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            isDark ? AppColors.panelDarkHigh.withOpacity(0.95) : AppColors.panelLightHigh.withOpacity(0.98),
+            isDark ? AppColors.panelDarkLow.withOpacity(0.9) : AppColors.panelLightLow.withOpacity(0.94),
+          ],
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor),
+        border: Border.all(color: AppColors.racingOrange.withOpacity(0.2)),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1340,6 +1439,14 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         style: ElevatedButton.styleFrom(
           backgroundColor: backgroundColor,
           foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: Colors.white.withOpacity(0.18),
+              width: 1,
+            ),
+          ),
         ),
       ),
     );
@@ -1378,6 +1485,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
           _completeOrder(order);
         },
         isRider: _isRiderMode,
+        showRouteHistory: !_isRiderMode,
       ),
     );
   }

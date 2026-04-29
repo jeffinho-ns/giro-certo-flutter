@@ -38,4 +38,38 @@ class AppColors {
   static const Color lightGray = Color(0xFF2D2D2D);
   static const Color textPrimary = darkTextPrimary;
   static const Color textSecondary = darkTextSecondary;
+
+  // Skeumorfismo/Neumorfismo moderno (painel premium)
+  static const Color panelDarkHigh = Color(0xFF373737);
+  static const Color panelDarkLow = Color(0xFF1A1A1A);
+  static const Color panelLightHigh = Color(0xFFFFFFFF);
+  static const Color panelLightLow = Color(0xFFE9E6E0);
+
+  static List<BoxShadow> raisedPanelShadows(bool isDark) => [
+        BoxShadow(
+          color: isDark ? Colors.black.withOpacity(0.45) : Colors.black.withOpacity(0.08),
+          offset: const Offset(6, 6),
+          blurRadius: 14,
+        ),
+        BoxShadow(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.9),
+          offset: const Offset(-5, -5),
+          blurRadius: 12,
+        ),
+      ];
+
+  static List<BoxShadow> insetPanelShadows(bool isDark) => [
+        BoxShadow(
+          color: isDark ? Colors.black.withOpacity(0.35) : Colors.black.withOpacity(0.06),
+          offset: const Offset(3, 3),
+          blurRadius: 8,
+          spreadRadius: -2,
+        ),
+        BoxShadow(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.8),
+          offset: const Offset(-3, -3),
+          blurRadius: 8,
+          spreadRadius: -2,
+        ),
+      ];
 }

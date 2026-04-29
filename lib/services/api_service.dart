@@ -33,6 +33,10 @@ class ApiService {
     return token != null && token.isNotEmpty;
   }
 
+  static Future<String?> getStoredToken() async {
+    return _getToken();
+  }
+
   /// Inicializa cache de autenticação no startup.
   static Future<void> warmupAuthToken() async {
     await _getToken();
@@ -1228,6 +1232,88 @@ class ApiService {
     );
 
     _handleError(response);
+  }
+
+  static Future<List<Map<String, dynamic>>> mapsAutocomplete({
+    required String input,
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/maps/autocomplete').replace(
+      queryParameters: {
+        'input': input,
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          'sessionToken': sessionToken,
+      },
+    );
+    final response = await http.get(uri, headers: await _getHeaders());
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final predictions = data['predictions'] as List<dynamic>? ?? [];
+    return predictions
+        .whereType<Map<String, dynamic>>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  static Future<Map<String, dynamic>> mapsPlaceDetails({
+    required String placeId,
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/maps/place-details').replace(
+      queryParameters: {
+        'placeId': placeId,
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          'sessionToken': sessionToken,
+      },
+    );
+    final response = await http.get(uri, headers: await _getHeaders());
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final place = data['place'] as Map<String, dynamic>?;
+    if (place == null) throw Exception('Resposta sem place');
+    return place;
+  }
+
+  static Future<Map<String, dynamic>> getDeliveryQuote({
+    required double storeLatitude,
+    required double storeLongitude,
+    required double deliveryLatitude,
+    required double deliveryLongitude,
+    required String priority,
+    required bool urgentBoost,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/delivery/quote'),
+      headers: await _getHeaders(),
+      body: json.encode({
+        'storeLatitude': storeLatitude,
+        'storeLongitude': storeLongitude,
+        'deliveryLatitude': deliveryLatitude,
+        'deliveryLongitude': deliveryLongitude,
+        'priority': priority,
+        'urgentBoost': urgentBoost,
+      }),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final quote = data['quote'] as Map<String, dynamic>?;
+    if (quote == null) throw Exception('Resposta sem quote');
+    return quote;
+  }
+
+  static Future<List<Map<String, dynamic>>> getDeliveryRouteHistory(
+      String orderId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/delivery/$orderId/route-history'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final points = data['points'] as List<dynamic>? ?? [];
+    return points
+        .whereType<Map<String, dynamic>>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   // ============================================
