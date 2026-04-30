@@ -22,7 +22,6 @@ class ProfileSidebar extends StatefulWidget {
 }
 
 class _ProfileSidebarState extends State<ProfileSidebar> {
-  bool _isLoading = false;
   User? _currentUser;
 
   @override
@@ -32,25 +31,20 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
   }
 
   Future<void> _loadUserData() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    if (!mounted) return;
     try {
       final user = await ApiService.getCurrentUser();
+      if (!mounted) return;
       setState(() {
         _currentUser = user;
-        _isLoading = false;
       });
-      
+
       // Atualizar o AppStateProvider
+      if (!mounted) return;
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       appState.setUser(user);
     } catch (e) {
       print('Erro ao carregar dados do usuário: $e');
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
 
@@ -103,23 +97,24 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                           ),
                         ],
                       ),
-                      child: user?.photoUrl != null && user!.photoUrl!.isNotEmpty
-                          ? ClipOval(
-                              child: ApiImage(
-                                url: user.photoUrl!,
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                          : Center(
-                              child: Text(
-                                user?.name[0].toUpperCase() ?? 'U',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
+                      child:
+                          user?.photoUrl != null && user!.photoUrl!.isNotEmpty
+                              ? ClipOval(
+                                  child: ApiImage(
+                                    url: user.photoUrl!,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : Center(
+                                  child: Text(
+                                    user?.name[0].toUpperCase() ?? 'U',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -207,7 +202,8 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         theme: theme,
                         icon: LucideIcons.gauge,
                         label: 'Quilometragem',
-                        value: '${bike.currentKm.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')} km',
+                        value:
+                            '${bike.currentKm.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')} km',
                       ),
                       const SizedBox(height: 16),
                       _buildInfoRow(
@@ -284,7 +280,9 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         theme: theme,
                         icon: LucideIcons.shield,
                         label: 'Status',
-                        value: user?.verificationBadge == true ? 'Verificado' : 'Pendente',
+                        value: user?.verificationBadge == true
+                            ? 'Verificado'
+                            : 'Pendente',
                       ),
                     ],
                   ),
@@ -322,7 +320,9 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         subtitle: 'Gerenciar motos cadastradas',
                         onTap: () {
                           Navigator.pop(context);
-                          Provider.of<NavigationProvider>(context, listen: false).navigateTo(4);
+                          Provider.of<NavigationProvider>(context,
+                                  listen: false)
+                              .navigateTo(4);
                         },
                       ),
                     ],
@@ -372,8 +372,8 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                       color: AppColors.alertRed,
                       onTap: () async {
                         Navigator.pop(context);
-                        final appState =
-                            Provider.of<AppStateProvider>(context, listen: false);
+                        final appState = Provider.of<AppStateProvider>(context,
+                            listen: false);
                         Provider.of<NotificationsCountProvider>(context,
                                 listen: false)
                             .unsubscribe();
@@ -389,7 +389,8 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                             const Duration(seconds: 4),
                           );
                         } catch (e) {
-                          debugPrint('Falha ao finalizar sessao no servidor: $e');
+                          debugPrint(
+                              'Falha ao finalizar sessao no servidor: $e');
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -469,7 +470,7 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
     Color? color,
   }) {
     final itemColor = color ?? AppColors.racingOrange;
-    
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -514,7 +515,8 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                       style: theme.textTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
-                        color: itemColor == AppColors.alertRed ? itemColor : null,
+                        color:
+                            itemColor == AppColors.alertRed ? itemColor : null,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -522,7 +524,8 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                       subtitle,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontSize: 12,
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
                       ),
                     ),
                   ],

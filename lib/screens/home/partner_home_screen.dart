@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'dart:async';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/realtime_service.dart';
 import '../../models/delivery_order.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
+import '../../widgets/api_image.dart';
 import '../delivery/create_delivery_modal.dart';
 import '../delivery/delivery_detail_modal.dart';
 import '../delivery/delivery_screen.dart';
@@ -27,11 +30,34 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
   int _totalOrders = 0;
   int _completedOrders = 0;
   double _totalRevenue = 0.0;
+  StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
+  Timer? _realtimeReloadDebounce;
 
   @override
   void initState() {
     super.initState();
+    _subscribeRealtimeUpdates();
     _loadPartnerData();
+  }
+
+  @override
+  void dispose() {
+    _deliveryStatusSubscription?.cancel();
+    _realtimeReloadDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeRealtimeUpdates() {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final userId = appState.user?.id;
+    if (userId == null) return;
+    RealtimeService.instance.connect(userId);
+    _deliveryStatusSubscription =
+        RealtimeService.instance.onDeliveryStatusChanged.listen((_) {
+      _realtimeReloadDebounce?.cancel();
+      _realtimeReloadDebounce =
+          Timer(const Duration(milliseconds: 500), _loadPartnerData);
+    });
   }
 
   Future<void> _loadPartnerData() async {
@@ -468,18 +494,85 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
             ),
             if (isActive && order.riderName != null) ...[
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(LucideIcons.user, size: 14, color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Entregador: ${order.riderName}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontSize: 12,
-                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
-                    ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.cardColor.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.racingOrange.withOpacity(0.2),
                   ),
-                ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.racingOrange.withOpacity(0.5)),
+                          ),
+                          child: ClipOval(
+                            child: (order.riderPhotoUrl != null && order.riderPhotoUrl!.isNotEmpty)
+                                ? ApiImage(url: order.riderPhotoUrl!, fit: BoxFit.cover)
+                                : Center(
+                                    child: Text(
+                                      order.riderName![0].toUpperCase(),
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                order.riderName!,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (order.riderEmail != null && order.riderEmail!.isNotEmpty)
+                                Text(
+                                  order.riderEmail!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
+                                  ),
+                                ),
+                              if (order.riderPhone != null && order.riderPhone!.isNotEmpty)
+                                Text(
+                                  order.riderPhone!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (order.internalCode != null && order.internalCode!.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Icon(LucideIcons.hash, size: 14, color: AppColors.neonGreen),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Código interno: ${order.internalCode}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppColors.neonGreen,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ],

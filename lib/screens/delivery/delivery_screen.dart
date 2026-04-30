@@ -47,6 +47,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   double _userLongitude = -46.6333;
 
   bool _isLoading = false;
+  bool _hasLoadedOnce = false;
   String? _loadError;
   List<DeliveryOrder> _orders = [];
   List<DeliveryOrder> _myOrders = []; // Corridas aceitas pelo usuário
@@ -72,7 +73,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     _subscribeDeliveryRealtime();
     _loadOrders();
     _marketPulseTimer = Timer.periodic(const Duration(seconds: 45), (_) {
-      _loadOrders();
+      _loadOrders(silent: true);
     });
   }
 
@@ -157,16 +158,23 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         RealtimeService.instance.onDeliveryStatusChanged.listen((_) {
       _realtimeReloadDebounce?.cancel();
       _realtimeReloadDebounce = Timer(const Duration(milliseconds: 500), () {
-        if (mounted) _loadOrders();
+        if (mounted) _loadOrders(silent: true);
       });
     });
   }
 
-  Future<void> _loadOrders() async {
-    setState(() {
-      _isLoading = true;
-      _loadError = null;
-    });
+  Future<void> _loadOrders({bool silent = false}) async {
+    final shouldShowBlockingLoader = !silent || !_hasLoadedOnce;
+    if (shouldShowBlockingLoader) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
+    } else {
+      setState(() {
+        _loadError = null;
+      });
+    }
 
     try {
       final appState = Provider.of<AppStateProvider>(context, listen: false);
@@ -205,6 +213,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
           _partners = partners;
           _riderStats = RiderStats.fromOrders(_completedOrders);
           _isLoading = false;
+          _hasLoadedOnce = true;
         });
       } else {
         // Lojista: buscar apenas seus próprios pedidos
@@ -228,6 +237,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
                 .toList();
             _partners = partners;
             _isLoading = false;
+            _hasLoadedOnce = true;
           });
         } else {
           setState(() {
@@ -236,6 +246,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
             _completedOrders = [];
             _partners = [];
             _isLoading = false;
+            _hasLoadedOnce = true;
           });
         }
       }
@@ -254,9 +265,11 @@ class _DeliveryScreenState extends State<DeliveryScreen>
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        if (shouldShowBlockingLoader) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -354,7 +367,10 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         updatedOrder = await ApiService.markArrivedAtStore(order.id);
         successMessage = 'Chegada na loja confirmada.';
       } else if (order.status == DeliveryStatus.arrivedAtStore) {
-        updatedOrder = await ApiService.startTransit(order.id);
+        final pickupCode = await _promptPickupCode(order);
+        if (pickupCode == null || pickupCode.isEmpty) return;
+        updatedOrder =
+            await ApiService.startTransit(order.id, pickupCode: pickupCode);
         successMessage = 'Entrega iniciada. Siga para o cliente.';
       } else if (order.status == DeliveryStatus.inTransit ||
           order.status == DeliveryStatus.inProgress) {
@@ -387,6 +403,50 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         ),
       );
     }
+  }
+
+  Future<String?> _promptPickupCode(DeliveryOrder order) async {
+    final controller = TextEditingController();
+    final expected = (order.internalCode ?? '').trim();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar retirada'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (expected.isNotEmpty)
+              Text(
+                'Código da loja: $expected',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            const SizedBox(height: 8),
+            const Text('Digite o código interno informado pela loja.'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                hintText: 'GC-XXXXXXXX',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.of(context).pop(controller.text.trim().toUpperCase()),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -444,7 +504,9 @@ class _DeliveryScreenState extends State<DeliveryScreen>
                     ? const [
                         Tab(icon: Icon(LucideIcons.map), text: 'Mapa'),
                         Tab(icon: Icon(LucideIcons.list), text: 'Disponíveis'),
-                        Tab(icon: Icon(LucideIcons.package), text: 'Minhas Corridas'),
+                        Tab(
+                            icon: Icon(LucideIcons.package),
+                            text: 'Minhas Corridas'),
                       ]
                     : const [
                         Tab(icon: Icon(LucideIcons.map), text: 'Áreas Quentes'),
@@ -510,7 +572,8 @@ class _DeliveryScreenState extends State<DeliveryScreen>
                                       );
                                     },
                                     backgroundColor: AppColors.racingOrangeDark,
-                                    icon: const Icon(LucideIcons.plus, color: Colors.white),
+                                    icon: const Icon(LucideIcons.plus,
+                                        color: Colors.white),
                                     label: const Text(
                                       'Criar Pedido',
                                       style: TextStyle(
@@ -859,8 +922,12 @@ class _DeliveryScreenState extends State<DeliveryScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            isDark ? AppColors.panelDarkHigh.withOpacity(0.95) : AppColors.panelLightHigh.withOpacity(0.98),
-            isDark ? AppColors.panelDarkLow.withOpacity(0.9) : AppColors.panelLightLow.withOpacity(0.94),
+            isDark
+                ? AppColors.panelDarkHigh.withOpacity(0.95)
+                : AppColors.panelLightHigh.withOpacity(0.98),
+            isDark
+                ? AppColors.panelDarkLow.withOpacity(0.9)
+                : AppColors.panelLightLow.withOpacity(0.94),
           ],
         ),
         borderRadius: BorderRadius.circular(12),

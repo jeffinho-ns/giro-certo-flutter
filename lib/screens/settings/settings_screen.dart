@@ -5,6 +5,7 @@ import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import 'image_diagnostic_screen.dart';
+import 'offline_maps_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -159,6 +160,21 @@ class SettingsScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) => const ImageDiagnosticScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    ListTile(
+                      leading: Icon(LucideIcons.map, color: themeProvider.primaryColor),
+                      title: const Text('Mapas Offline'),
+                      subtitle: const Text('Baixar regiao para navegação com rede instável'),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const OfflineMapsScreen(),
                           ),
                         );
                       },

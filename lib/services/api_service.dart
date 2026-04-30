@@ -123,6 +123,38 @@ class ApiService {
     }
   }
 
+  static bool _isRetryableStatus(int statusCode) {
+    return statusCode == 408 ||
+        statusCode == 425 ||
+        statusCode == 429 ||
+        (statusCode >= 500 && statusCode <= 599);
+  }
+
+  static Future<http.Response> _requestWithRetry(
+    Future<http.Response> Function(Map<String, String> headers) requestBuilder, {
+    int maxAttempts = 3,
+    Map<String, String>? extraHeaders,
+  }) async {
+    Object? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final headers = await _getHeaders(extraHeaders: extraHeaders);
+        final response =
+            await requestBuilder(headers).timeout(_requestTimeout, onTimeout: () {
+          throw Exception('Tempo esgotado. Verifique sua conexão.');
+        });
+        if (!_isRetryableStatus(response.statusCode) || attempt == maxAttempts) {
+          return response;
+        }
+      } catch (e) {
+        lastError = e;
+        if (attempt == maxAttempts) rethrow;
+      }
+      await Future.delayed(Duration(milliseconds: 350 * attempt));
+    }
+    throw Exception(lastError?.toString() ?? 'Falha de rede em tentativa de retry');
+  }
+
   // ============================================
   // AUTENTICAÇÃO
   // ============================================
@@ -682,13 +714,18 @@ class ApiService {
     required String riderId,
     required String riderName,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/delivery/$orderId/accept'),
-      headers: await _getHeaders(),
-      body: json.encode({
-        'riderId': riderId,
-        'riderName': riderName,
-      }),
+    final idempotencyKey =
+        'accept:$orderId:$riderId:${DateTime.now().millisecondsSinceEpoch}';
+    final response = await _requestWithRetry(
+      (headers) => http.post(
+        Uri.parse('$baseUrl/delivery/$orderId/accept'),
+        headers: headers,
+        body: json.encode({
+          'riderId': riderId,
+          'riderName': riderName,
+        }),
+      ),
+      extraHeaders: {'x-idempotency-key': idempotencyKey},
     );
 
     if (response.statusCode == 409) {
@@ -709,10 +746,14 @@ class ApiService {
 
   /// Concluir corrida
   static Future<DeliveryOrder> completeOrder(String orderId) async {
-    final response = await http.patch(
-      Uri.parse('$baseUrl/delivery/$orderId/status'),
-      headers: await _getHeaders(),
-      body: json.encode({'status': 'completed'}),
+    final idempotencyKey = 'status:$orderId:completed:${DateTime.now().millisecondsSinceEpoch}';
+    final response = await _requestWithRetry(
+      (headers) => http.patch(
+        Uri.parse('$baseUrl/delivery/$orderId/status'),
+        headers: headers,
+        body: json.encode({'status': 'completed'}),
+      ),
+      extraHeaders: {'x-idempotency-key': idempotencyKey},
     );
 
     _handleError(response);
@@ -726,10 +767,15 @@ class ApiService {
 
   /// Confirmar chegada ao estabelecimento
   static Future<DeliveryOrder> markArrivedAtStore(String orderId) async {
-    final response = await http.patch(
-      Uri.parse('$baseUrl/delivery/$orderId/status'),
-      headers: await _getHeaders(),
-      body: json.encode({'status': 'arrivedAtStore'}),
+    final idempotencyKey =
+        'status:$orderId:arrivedAtStore:${DateTime.now().millisecondsSinceEpoch}';
+    final response = await _requestWithRetry(
+      (headers) => http.patch(
+        Uri.parse('$baseUrl/delivery/$orderId/status'),
+        headers: headers,
+        body: json.encode({'status': 'arrivedAtStore'}),
+      ),
+      extraHeaders: {'x-idempotency-key': idempotencyKey},
     );
 
     _handleError(response);
@@ -742,11 +788,19 @@ class ApiService {
   }
 
   /// Iniciar deslocamento para o cliente após coleta
-  static Future<DeliveryOrder> startTransit(String orderId) async {
-    final response = await http.patch(
-      Uri.parse('$baseUrl/delivery/$orderId/status'),
-      headers: await _getHeaders(),
-      body: json.encode({'status': 'inTransit'}),
+  static Future<DeliveryOrder> startTransit(
+    String orderId, {
+    required String pickupCode,
+  }) async {
+    final idempotencyKey =
+        'status:$orderId:inTransit:${DateTime.now().millisecondsSinceEpoch}';
+    final response = await _requestWithRetry(
+      (headers) => http.patch(
+        Uri.parse('$baseUrl/delivery/$orderId/status'),
+        headers: headers,
+        body: json.encode({'status': 'inTransit', 'pickupCode': pickupCode}),
+      ),
+      extraHeaders: {'x-idempotency-key': idempotencyKey},
     );
 
     _handleError(response);
@@ -808,6 +862,10 @@ class ApiService {
           : null,
       riderId: json['riderId'] as String?,
       riderName: json['riderName'] as String?,
+      riderEmail: json['riderEmail'] as String?,
+      riderPhone: json['riderPhone'] as String?,
+      riderPhotoUrl: json['riderPhotoUrl'] as String?,
+      internalCode: json['internalCode'] as String?,
       distance: json['distance'] != null
           ? (json['distance'] as num).toDouble()
           : null,
@@ -1272,6 +1330,20 @@ class ApiService {
     final place = data['place'] as Map<String, dynamic>?;
     if (place == null) throw Exception('Resposta sem place');
     return place;
+  }
+
+  static Future<List<Map<String, dynamic>>> getOfflineMapRegions() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/maps/offline-regions'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final regions = data['regions'] as List<dynamic>? ?? [];
+    return regions
+        .whereType<Map<String, dynamic>>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   static Future<Map<String, dynamic>> getDeliveryQuote({

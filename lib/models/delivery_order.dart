@@ -39,6 +39,10 @@ class DeliveryOrder {
   final DateTime? completedAt;
   final String? riderId; // ID do motociclista que aceitou
   final String? riderName; // Nome do motociclista
+  final String? riderEmail;
+  final String? riderPhone;
+  final String? riderPhotoUrl;
+  final String? internalCode;
   final double? distance; // Distância em km
   final int? estimatedTime; // Tempo estimado em minutos
 
@@ -64,6 +68,10 @@ class DeliveryOrder {
     this.completedAt,
     this.riderId,
     this.riderName,
+    this.riderEmail,
+    this.riderPhone,
+    this.riderPhotoUrl,
+    this.internalCode,
     this.distance,
     this.estimatedTime,
   });
@@ -118,6 +126,10 @@ class DeliveryOrder {
     DeliveryStatus? status,
     String? riderId,
     String? riderName,
+    String? riderEmail,
+    String? riderPhone,
+    String? riderPhotoUrl,
+    String? internalCode,
     DateTime? acceptedAt,
     DateTime? completedAt,
   }) {
@@ -143,6 +155,10 @@ class DeliveryOrder {
       completedAt: completedAt ?? this.completedAt,
       riderId: riderId ?? this.riderId,
       riderName: riderName ?? this.riderName,
+      riderEmail: riderEmail ?? this.riderEmail,
+      riderPhone: riderPhone ?? this.riderPhone,
+      riderPhotoUrl: riderPhotoUrl ?? this.riderPhotoUrl,
+      internalCode: internalCode ?? this.internalCode,
       distance: distance,
       estimatedTime: estimatedTime,
     );

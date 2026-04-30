@@ -40,7 +40,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<Circle> _marketCircles = {};
   LatLng? _currentPosition;
   bool _isLoading = false;
+  bool _hasLoadedPartnerOnce = false;
   StreamSubscription<Position>? _positionSubscription;
+  StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
+  Timer? _realtimePartnerReloadDebounce;
   bool _heatmapOn = false;
   Set<MapFilterOption> _filterOptions = {};
   MapTimeWindowOption _mapTimeWindow = MapTimeWindowOption.now;
@@ -251,6 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _requestLocationAndListen();
     _loadPartnerData();
     _loadMarketIntelligenceData();
+    _subscribePartnerRealtimeUpdates();
     _syncDeliveryModerationStatus();
     _pollPendingDeliveriesForRider();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -502,23 +506,50 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     RealtimeService.instance.setNavigationMode(false);
     _positionSubscription?.cancel();
+    _deliveryStatusSubscription?.cancel();
+    _realtimePartnerReloadDebounce?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPartnerData() async {
+  void _subscribePartnerRealtimeUpdates() {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final userId = appState.user?.id;
+    if (userId == null) return;
+    if (appState.user?.isPartner != true) return;
+    RealtimeService.instance.connect(userId);
+    _deliveryStatusSubscription =
+        RealtimeService.instance.onDeliveryStatusChanged.listen((_) {
+      _realtimePartnerReloadDebounce?.cancel();
+      _realtimePartnerReloadDebounce =
+          Timer(const Duration(milliseconds: 550), () {
+        if (!mounted) return;
+        _loadPartnerData(silent: true);
+      });
+    });
+  }
+
+  Future<void> _loadPartnerData({bool silent = false}) async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final user = appState.user;
     if (user == null || !user.isPartner) return;
 
-    setState(() => _isLoading = true);
+    final shouldShowBlockingLoader = !silent || !_hasLoadedPartnerOnce;
+    if (shouldShowBlockingLoader) {
+      setState(() => _isLoading = true);
+    }
     try {
       await ApiService.getDeliveryOrders(storeId: user.partnerId);
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (shouldShowBlockingLoader) {
+        setState(() => _isLoading = false);
+      }
+      _hasLoadedPartnerOnce = true;
     } catch (e) {
       debugPrint('Falha ao carregar dados do parceiro: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && shouldShowBlockingLoader) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -962,8 +993,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-    final latLngPoints = points.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
-    await NavigationRouteCacheService.saveRoute(orderId: order.id, points: points);
+    final latLngPoints =
+        points.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
+    await NavigationRouteCacheService.saveRoute(
+        orderId: order.id, points: points);
     setState(() {
       _activeRoutePoints = latLngPoints;
       _polylines = {
@@ -1029,8 +1062,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-    final latLngPoints = points.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
-    await NavigationRouteCacheService.saveRoute(orderId: order.id, points: points);
+    final latLngPoints =
+        points.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
+    await NavigationRouteCacheService.saveRoute(
+        orderId: order.id, points: points);
     setState(() {
       _activeRoutePoints = latLngPoints;
       _polylines = {
@@ -1106,7 +1141,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _activeDeliveryOrder = accepted;
       });
       RealtimeService.instance.setNavigationMode(true, orderId: accepted.id);
-      final cachedPoints = await NavigationRouteCacheService.loadRoute(accepted.id);
+      final cachedPoints =
+          await NavigationRouteCacheService.loadRoute(accepted.id);
       if (cachedPoints != null && cachedPoints.length >= 2) {
         final latLngPoints =
             cachedPoints.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
@@ -1163,10 +1199,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _collectAndStartDelivery() async {
     final order = _activeDeliveryOrder;
     if (order == null) return;
+    final pickupCode = await _promptPickupCode(order);
+    if (pickupCode == null || pickupCode.isEmpty) return;
 
     setState(() => _isUpdatingDeliveryRoute = true);
     try {
-      final inTransitOrder = await ApiService.startTransit(order.id);
+      final inTransitOrder =
+          await ApiService.startTransit(order.id, pickupCode: pickupCode);
       if (!mounted) return;
       setState(() {
         _activeDeliveryOrder = inTransitOrder;
@@ -1187,6 +1226,52 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() => _isUpdatingDeliveryRoute = false);
       }
     }
+  }
+
+  Future<String?> _promptPickupCode(DeliveryOrder order) async {
+    final controller = TextEditingController();
+    final expected = (order.internalCode ?? '').trim();
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirmar retirada'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (expected.isNotEmpty)
+                Text(
+                  'Código da loja: $expected',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              const SizedBox(height: 8),
+              const Text('Digite o código interno para iniciar a entrega.'),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  hintText: 'GC-XXXXXXXX',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context)
+                  .pop(controller.text.trim().toUpperCase()),
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _completeDelivery() async {
@@ -1414,8 +1499,12 @@ class _MapControlsOverlay extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              isDark ? AppColors.panelDarkHigh.withOpacity(0.96) : AppColors.panelLightHigh.withOpacity(0.96),
-              isDark ? AppColors.panelDarkLow.withOpacity(0.9) : AppColors.panelLightLow.withOpacity(0.92),
+              isDark
+                  ? AppColors.panelDarkHigh.withOpacity(0.96)
+                  : AppColors.panelLightHigh.withOpacity(0.96),
+              isDark
+                  ? AppColors.panelDarkLow.withOpacity(0.9)
+                  : AppColors.panelLightLow.withOpacity(0.92),
             ],
           ),
           borderRadius: BorderRadius.circular(10),
@@ -1487,8 +1576,12 @@ class _DeliveryPendingBanner extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            isDark ? AppColors.panelDarkHigh.withOpacity(0.95) : AppColors.panelLightHigh.withOpacity(0.98),
-            isDark ? AppColors.panelDarkLow.withOpacity(0.92) : AppColors.panelLightLow.withOpacity(0.95),
+            isDark
+                ? AppColors.panelDarkHigh.withOpacity(0.95)
+                : AppColors.panelLightHigh.withOpacity(0.98),
+            isDark
+                ? AppColors.panelDarkLow.withOpacity(0.92)
+                : AppColors.panelLightLow.withOpacity(0.95),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
@@ -1713,8 +1806,12 @@ class _DeliveryTripStageCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            isDark ? AppColors.panelDarkHigh.withOpacity(0.96) : AppColors.panelLightHigh.withOpacity(0.98),
-            isDark ? AppColors.panelDarkLow.withOpacity(0.93) : AppColors.panelLightLow.withOpacity(0.95),
+            isDark
+                ? AppColors.panelDarkHigh.withOpacity(0.96)
+                : AppColors.panelLightHigh.withOpacity(0.98),
+            isDark
+                ? AppColors.panelDarkLow.withOpacity(0.93)
+                : AppColors.panelLightLow.withOpacity(0.95),
           ],
         ),
         borderRadius: BorderRadius.circular(14),
