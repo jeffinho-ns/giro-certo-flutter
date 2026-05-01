@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_mbtiles/flutter_map_mbtiles.dart';
+import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/offline_map_service.dart';
 import '../../services/realtime_service.dart';
 import '../../models/delivery_order.dart';
 import '../../utils/colors.dart';
@@ -14,8 +18,7 @@ import '../delivery/create_delivery_modal.dart';
 import '../delivery/delivery_detail_modal.dart';
 import '../delivery/delivery_screen.dart';
 
-/// Home do lojista (parceiro): dashboard com Novo Pedido, resumo e listas de pedidos.
-/// Não usa o mapa; mantém o layout original.
+/// Home do lojista (parceiro): dashboard com mapa, Novo Pedido, resumo e listas de pedidos.
 class PartnerHomeScreen extends StatefulWidget {
   const PartnerHomeScreen({super.key});
 
@@ -24,7 +27,10 @@ class PartnerHomeScreen extends StatefulWidget {
 }
 
 class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
+  final MapController _mapController = MapController();
   bool _isLoading = false;
+  bool _hasLoadedOnce = false;
+  String? _offlineMbtilesPath;
   List<DeliveryOrder> _activeOrders = [];
   List<DeliveryOrder> _pendingOrders = [];
   int _totalOrders = 0;
@@ -55,17 +61,22 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     _deliveryStatusSubscription =
         RealtimeService.instance.onDeliveryStatusChanged.listen((_) {
       _realtimeReloadDebounce?.cancel();
-      _realtimeReloadDebounce =
-          Timer(const Duration(milliseconds: 500), _loadPartnerData);
+      _realtimeReloadDebounce = Timer(
+        const Duration(milliseconds: 500),
+        () => _loadPartnerData(silent: true),
+      );
     });
   }
 
-  Future<void> _loadPartnerData() async {
+  Future<void> _loadPartnerData({bool silent = false}) async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final user = appState.user;
     if (user == null || !user.isPartner) return;
 
-    setState(() => _isLoading = true);
+    final showBlockingLoader = !silent || !_hasLoadedOnce;
+    if (showBlockingLoader) {
+      setState(() => _isLoading = true);
+    }
     try {
       final allOrders = await ApiService.getDeliveryOrders(storeId: user.partnerId);
       final activeOrders = allOrders
@@ -92,11 +103,29 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
         _totalOrders = allOrders.length;
         _completedOrders = completedOrders.length;
         _totalRevenue = revenue;
-        _isLoading = false;
+        if (showBlockingLoader) {
+          _isLoading = false;
+        }
       });
+      _hasLoadedOnce = true;
+      await _resolveOfflineMapForUser(user.currentLat, user.currentLng);
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && showBlockingLoader) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  Future<void> _resolveOfflineMapForUser(double? lat, double? lng) async {
+    if (lat == null || lng == null) return;
+    try {
+      final local = await OfflineMapService.resolveBestLocalMapForPosition(
+        latitude: lat,
+        longitude: lng,
+      );
+      if (!mounted) return;
+      setState(() => _offlineMbtilesPath = local?.localPath);
+    } catch (_) {}
   }
 
   @override
@@ -124,10 +153,77 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     final user = appState.user;
     final userLat = user?.currentLat ?? -23.5505;
     final userLng = user?.currentLng ?? -46.6333;
+    final mapMarkers = <Marker>[
+      Marker(
+        width: 42,
+        height: 42,
+        point: LatLng(userLat, userLng),
+        child: const Icon(
+          LucideIcons.store,
+          color: AppColors.racingOrange,
+          size: 26,
+        ),
+      ),
+      ..._activeOrders
+          .where((o) => o.deliveryLatitude != 0 && o.deliveryLongitude != 0)
+          .take(20)
+          .map(
+            (o) => Marker(
+              width: 38,
+              height: 38,
+              point: LatLng(o.deliveryLatitude, o.deliveryLongitude),
+              child: Tooltip(
+                message:
+                    '${o.recipientName ?? 'Destino'} • ${o.internalCode ?? o.id.substring(0, 8)}',
+                child: const Icon(
+                  LucideIcons.mapPin,
+                  color: AppColors.neonGreen,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Container(
+          height: 220,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.racingOrange.withOpacity(0.2)),
+            boxShadow: AppColors.raisedPanelShadows(isDark),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: LatLng(userLat, userLng),
+              initialZoom: 14,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.pinchZoom |
+                    InteractiveFlag.drag |
+                    InteractiveFlag.doubleTapZoom,
+              ),
+            ),
+            children: [
+              if (_offlineMbtilesPath != null)
+                TileLayer(
+                  tileProvider: MbTilesTileProvider.fromPath(
+                    path: _offlineMbtilesPath!,
+                  ),
+                )
+              else
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.giro_certo',
+                ),
+              MarkerLayer(markers: mapMarkers),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         GestureDetector(
           onTap: () {
             showModalBottomSheet(

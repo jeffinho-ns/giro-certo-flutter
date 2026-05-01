@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart' as fm;
+import 'package:flutter_map_mbtiles/flutter_map_mbtiles.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -12,6 +15,7 @@ import '../../services/map_service.dart';
 import '../../services/realtime_service.dart';
 import '../../services/flutter_delivery_navigation_service.dart';
 import '../../services/navigation_route_cache_service.dart';
+import '../../services/offline_map_service.dart';
 import '../../services/onboarding_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/delivery_order.dart';
@@ -34,7 +38,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  GoogleMapController? _mapController;
+  final fm.MapController _osmMapController = fm.MapController();
   Set<Polyline> _polylines = {};
   Set<Marker> _markers = {};
   Set<Circle> _marketCircles = {};
@@ -56,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final FlutterDeliveryNavigationService _deliveryNavigationService =
       FlutterDeliveryNavigationService();
   List<LatLng> _activeRoutePoints = const [];
+  String? _offlineMbtilesPath;
 
   /// Modo “navegação” (corrida ativa): polyline azul, câmera 3D e marcador com rotação.
   BitmapDescriptor? _riderNavIcon;
@@ -150,24 +155,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _followNavigationCameraThrottled() {
-    if (!_deliveryNavigationActive ||
-        _mapController == null ||
-        _currentPosition == null) {
+    if (!_deliveryNavigationActive || _currentPosition == null) {
       return;
     }
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastNavCameraMs < 650) return;
     _lastNavCameraMs = now;
-    _mapController!.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: _currentPosition!,
-          zoom: 17,
-          tilt: 52,
-          bearing: _navBearing,
-        ),
-      ),
-      duration: const Duration(milliseconds: 600),
+    _osmMapController.move(
+      ll.LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+      17,
     );
   }
 
@@ -251,6 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     });
     _loadQuickMessages();
+    _resolveOfflineMapForCurrentPosition();
     _requestLocationAndListen();
     _loadPartnerData();
     _loadMarketIntelligenceData();
@@ -277,15 +274,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _updateMapStyle() async {
-    if (_mapController == null) return;
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final mapStyle = isDark ? _darkMapStyle : _lightMapStyle;
-    if (mapStyle != null) {
-      await _mapController!.setMapStyle(mapStyle);
-    } else {
-      await _mapController!.setMapStyle(null);
-    }
+    // Em flutter_map (OSM), o estilo visual vem dos tiles.
+    // Mantido para compatibilidade com o ciclo atual da tela.
   }
 
   Future<void> _loadQuickMessages() async {
@@ -338,6 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentPosition = LatLng(pos.latitude, pos.longitude);
         _rebuildRiderNavMarker();
       });
+      _resolveOfflineMapForCurrentPosition();
       _updateUserLocation(
         pos.latitude,
         pos.longitude,
@@ -357,6 +348,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _currentPosition = LatLng(pos.latitude, pos.longitude);
           _rebuildRiderNavMarker();
         });
+        _resolveOfflineMapForCurrentPosition();
         _updateUserLocation(
           pos.latitude,
           pos.longitude,
@@ -383,10 +375,27 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _currentPosition = LatLng(user!.currentLat!, user.currentLng!);
         });
+        _resolveOfflineMapForCurrentPosition();
       } else {
         setState(() => _currentPosition = _defaultCenter);
+        _resolveOfflineMapForCurrentPosition();
       }
     }
+  }
+
+  Future<void> _resolveOfflineMapForCurrentPosition() async {
+    final pos = _currentPosition;
+    if (pos == null) return;
+    try {
+      final local = await OfflineMapService.resolveBestLocalMapForPosition(
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+      );
+      if (!mounted) return;
+      setState(() {
+        _offlineMbtilesPath = local?.localPath;
+      });
+    } catch (_) {}
   }
 
   Future<void> _updateUserLocation(
@@ -508,7 +517,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _positionSubscription?.cancel();
     _deliveryStatusSubscription?.cancel();
     _realtimePartnerReloadDebounce?.cancel();
-    _mapController?.dispose();
     super.dispose();
   }
 
@@ -715,23 +723,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _onMapCreated(GoogleMapController controller) async {
-    _mapController = controller;
-    if (_currentPosition != null) {
-      controller.animateCamera(
-        CameraUpdate.newLatLngZoom(_currentPosition!, _currentZoom),
-        duration: _cameraAnimationDuration,
-      );
-    }
-
-    // Aplicar estilo do mapa baseado no tema atual
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final mapStyle = isDark ? _darkMapStyle : _lightMapStyle;
-    if (mapStyle != null) {
-      await controller.setMapStyle(mapStyle);
-    }
-  }
+  void _onMapCreated() {}
 
   // Estilo do mapa para modo claro
   static const String? _lightMapStyle =
@@ -928,33 +920,44 @@ class _HomeScreenState extends State<HomeScreen> {
 ''';
 
   void _recenterMap() {
-    if (_mapController == null || _currentPosition == null) return;
+    if (_currentPosition == null) return;
     if (_deliveryNavigationActive) {
       _snapNavigationCameraNow();
       return;
     }
-    _mapController!.animateCamera(
-      CameraUpdate.newLatLngZoom(_currentPosition!, _currentZoom),
-      duration: _cameraAnimationDuration,
+    _osmMapController.move(
+      ll.LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+      _currentZoom,
     );
   }
 
   void _zoomIn() {
-    if (_mapController == null) return;
     setState(() => _currentZoom = (_currentZoom + 1).clamp(3.0, 21.0));
-    _mapController!.animateCamera(
-      CameraUpdate.zoomIn(),
-      duration: const Duration(milliseconds: 300),
+    if (_currentPosition != null) {
+      _osmMapController.move(
+        ll.LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+        _currentZoom,
+      );
+    }
+  }
+
+  fm.LatLngBounds _toLlBounds(List<Map<String, double>> points) {
+    final lats = points.map((e) => e['lat']!).toList();
+    final lngs = points.map((e) => e['lng']!).toList();
+    return fm.LatLngBounds(
+      ll.LatLng(lats.reduce(math.min), lngs.reduce(math.min)),
+      ll.LatLng(lats.reduce(math.max), lngs.reduce(math.max)),
     );
   }
 
   void _zoomOut() {
-    if (_mapController == null) return;
     setState(() => _currentZoom = (_currentZoom - 1).clamp(3.0, 21.0));
-    _mapController!.animateCamera(
-      CameraUpdate.zoomOut(),
-      duration: const Duration(milliseconds: 300),
-    );
+    if (_currentPosition != null) {
+      _osmMapController.move(
+        ll.LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+        _currentZoom,
+      );
+    }
   }
 
   void _setMapType(MapType type) {
@@ -1017,18 +1020,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _rebuildRiderNavMarker();
     });
 
-    if (_deliveryNavigationActive &&
-        _mapController != null &&
-        _currentPosition != null) {
+    if (_deliveryNavigationActive && _currentPosition != null) {
       _snapNavigationCameraNow();
     } else {
-      final bounds = _computeBounds(points);
-      if (bounds != null && _mapController != null) {
-        _mapController!.animateCamera(
-          CameraUpdate.newLatLngBounds(bounds, 60),
-          duration: _cameraAnimationDuration,
-        );
-      }
+      final bounds = _toLlBounds(points);
+      _osmMapController.fitCamera(
+        fm.CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60)),
+      );
     }
   }
 
@@ -1092,37 +1090,14 @@ class _HomeScreenState extends State<HomeScreen> {
       _rebuildRiderNavMarker();
     });
 
-    if (_deliveryNavigationActive &&
-        _mapController != null &&
-        _currentPosition != null) {
+    if (_deliveryNavigationActive && _currentPosition != null) {
       _snapNavigationCameraNow();
     } else {
-      final bounds = _computeBounds(points);
-      if (bounds != null && _mapController != null) {
-        _mapController!.animateCamera(
-          CameraUpdate.newLatLngBounds(bounds, 60),
-          duration: _cameraAnimationDuration,
-        );
-      }
+      final bounds = _toLlBounds(points);
+      _osmMapController.fitCamera(
+        fm.CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60)),
+      );
     }
-  }
-
-  LatLngBounds? _computeBounds(List<Map<String, double>> points) {
-    if (points.isEmpty) return null;
-    double minLat = points.first['lat']!, maxLat = minLat;
-    double minLng = points.first['lng']!, maxLng = minLng;
-    for (final p in points) {
-      final lat = p['lat']!;
-      final lng = p['lng']!;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-      if (lng < minLng) minLng = lng;
-      if (lng > maxLng) maxLng = lng;
-    }
-    return LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
-    );
   }
 
   void _acceptPipcar(DeliveryOrder order) async {
@@ -1323,30 +1298,80 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Stack(
       children: [
-        // 1. Fundo: GoogleMap (dinâmico e animado)
+        // 1. Fundo: mapa (OSM/flutter_map, sem dependência de API key Android)
         Positioned.fill(
-          child: GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: initialPosition,
-              zoom: _currentZoom,
-              tilt: 0,
-              bearing: 0,
+          child: fm.FlutterMap(
+            mapController: _osmMapController,
+            options: fm.MapOptions(
+              initialCenter: ll.LatLng(initialPosition.latitude, initialPosition.longitude),
+              initialZoom: _currentZoom,
+              minZoom: 4,
+              maxZoom: 19,
+              onMapReady: _onMapCreated,
             ),
-            onMapCreated: _onMapCreated,
-            myLocationEnabled: !_deliveryNavigationActive,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            compassEnabled: true,
-            mapToolbarEnabled: false,
-            polylines: _polylines,
-            markers: _allMapMarkers,
-            circles: _marketCircles,
-            mapType: _mapType,
-            minMaxZoomPreference: const MinMaxZoomPreference(4, 19),
-            rotateGesturesEnabled: true,
-            scrollGesturesEnabled: true,
-            tiltGesturesEnabled: true,
-            zoomGesturesEnabled: true,
+            children: [
+              if (_offlineMbtilesPath != null)
+                fm.TileLayer(
+                  tileProvider: MbTilesTileProvider.fromPath(
+                    path: _offlineMbtilesPath!,
+                  ),
+                )
+              else
+                fm.TileLayer(
+                  urlTemplate: _mapType == MapType.satellite
+                      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.giro_certo',
+                ),
+              fm.PolylineLayer(
+                polylines: _polylines
+                    .map(
+                      (p) => fm.Polyline(
+                        points: p.points
+                            .map((pt) => ll.LatLng(pt.latitude, pt.longitude))
+                            .toList(),
+                        strokeWidth: p.width.toDouble(),
+                        color: p.color,
+                      ),
+                    )
+                    .toList(),
+              ),
+              fm.CircleLayer(
+                circles: _marketCircles
+                    .map(
+                      (c) => fm.CircleMarker(
+                        point: ll.LatLng(c.center.latitude, c.center.longitude),
+                        radius: (c.radius / 12).clamp(8, 60),
+                        color: c.fillColor,
+                        borderColor: c.strokeColor,
+                        borderStrokeWidth: c.strokeWidth.toDouble(),
+                      ),
+                    )
+                    .toList(),
+              ),
+              fm.MarkerLayer(
+                markers: _allMapMarkers
+                    .map(
+                      (m) => fm.Marker(
+                        point: ll.LatLng(m.position.latitude, m.position.longitude),
+                        width: 42,
+                        height: 42,
+                        child: Icon(
+                          m.markerId.value.contains('store')
+                              ? LucideIcons.store
+                              : m.markerId.value.contains('delivery')
+                                  ? LucideIcons.mapPin
+                                  : LucideIcons.navigation,
+                          color: m.markerId.value.contains('delivery')
+                              ? AppColors.neonGreen
+                              : AppColors.racingOrange,
+                          size: 24,
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
           ),
         ),
 

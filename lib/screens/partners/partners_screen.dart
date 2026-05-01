@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_mbtiles/flutter_map_mbtiles.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../models/partner.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/offline_map_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import 'partner_detail_modal.dart';
@@ -28,7 +31,8 @@ class _PartnersScreenState extends State<PartnersScreen>
     'Melhor Avaliação'
   ];
   late TabController _tabController;
-  GoogleMapController? _mapController;
+  final MapController _mapController = MapController();
+  String? _offlineMbtilesPath;
   bool _isLoading = false;
   String? _loadError;
   List<Partner> _partners = [];
@@ -44,7 +48,6 @@ class _PartnersScreenState extends State<PartnersScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    _mapController?.dispose();
     super.dispose();
   }
 
@@ -55,9 +58,14 @@ class _PartnersScreenState extends State<PartnersScreen>
     });
     try {
       final partners = await ApiService.getPartners();
+      final offline = await OfflineMapService.resolveBestLocalMapForPosition(
+        latitude: _userLatitude,
+        longitude: _userLongitude,
+      );
       if (!mounted) return;
       setState(() {
         _partners = partners;
+        _offlineMbtilesPath = offline?.localPath;
         _isLoading = false;
       });
     } catch (e) {
@@ -101,31 +109,32 @@ class _PartnersScreenState extends State<PartnersScreen>
     return list;
   }
 
-  Set<Marker> _buildMarkers(List<Partner> partners) {
-    final markers = <Marker>{
+  List<Marker> _buildMarkers(List<Partner> partners) {
+    final markers = <Marker>[
       Marker(
-        markerId: const MarkerId('me'),
-        position: LatLng(_userLatitude, _userLongitude),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        infoWindow: const InfoWindow(title: 'Você está aqui'),
+        point: LatLng(_userLatitude, _userLongitude),
+        width: 36,
+        height: 36,
+        child: const Icon(LucideIcons.navigation, color: Colors.blue, size: 22),
       )
-    };
+    ];
 
     for (final p in partners) {
       markers.add(
         Marker(
-          markerId: MarkerId('partner_${p.id}'),
-          position: LatLng(p.latitude, p.longitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            p.type == PartnerType.store
-                ? BitmapDescriptor.hueOrange
-                : BitmapDescriptor.hueGreen,
+          point: LatLng(p.latitude, p.longitude),
+          width: 36,
+          height: 36,
+          child: GestureDetector(
+            onTap: () => setState(() => _selectedPartner = p),
+            child: Icon(
+              p.type == PartnerType.store ? LucideIcons.store : LucideIcons.wrench,
+              color: p.type == PartnerType.store
+                  ? AppColors.racingOrange
+                  : AppColors.neonGreen,
+              size: 22,
+            ),
           ),
-          infoWindow: InfoWindow(
-            title: p.name,
-            snippet: p.address,
-          ),
-          onTap: () => setState(() => _selectedPartner = p),
         ),
       );
     }
@@ -133,30 +142,24 @@ class _PartnersScreenState extends State<PartnersScreen>
     return markers;
   }
 
-  Set<Polyline> _buildRouteLine() {
+  List<Polyline> _buildRouteLine() {
     final selected = _selectedPartner;
-    if (selected == null) return {};
-    return {
+    if (selected == null) return [];
+    return [
       Polyline(
-        polylineId: const PolylineId('route_preview'),
         points: [
           LatLng(_userLatitude, _userLongitude),
           LatLng(selected.latitude, selected.longitude),
         ],
         color: AppColors.racingOrange,
-        width: 4,
+        strokeWidth: 4,
       )
-    };
+    ];
   }
 
   void _focusPartnerOnMap(Partner partner) {
     setState(() => _selectedPartner = partner);
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(partner.latitude, partner.longitude),
-        14.8,
-      ),
-    );
+    _mapController.move(LatLng(partner.latitude, partner.longitude), 14.8);
   }
 
   @override
@@ -276,22 +279,30 @@ class _PartnersScreenState extends State<PartnersScreen>
   }
 
   Widget _buildMapView(List<Partner> partners, ThemeData theme) {
-    final initialPosition = CameraPosition(
-      target: LatLng(_userLatitude, _userLongitude),
-      zoom: 12.6,
-    );
-
     return Column(
       children: [
         Expanded(
-          child: GoogleMap(
-            initialCameraPosition: initialPosition,
-            onMapCreated: (c) => _mapController = c,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            zoomControlsEnabled: false,
-            markers: _buildMarkers(partners),
-            polylines: _buildRouteLine(),
+          child: FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: LatLng(_userLatitude, _userLongitude),
+              initialZoom: 12.6,
+            ),
+            children: [
+              if (_offlineMbtilesPath != null)
+                TileLayer(
+                  tileProvider: MbTilesTileProvider.fromPath(
+                    path: _offlineMbtilesPath!,
+                  ),
+                )
+              else
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.giro_certo',
+                ),
+              PolylineLayer(polylines: _buildRouteLine()),
+              MarkerLayer(markers: _buildMarkers(partners)),
+            ],
           ),
         ),
         Container(

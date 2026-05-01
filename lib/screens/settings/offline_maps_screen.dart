@@ -65,7 +65,10 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Falha no download: $e')),
+        SnackBar(
+          content: Text('Falha no download: $e'),
+          duration: const Duration(seconds: 6),
+        ),
       );
     } finally {
       if (mounted) {
@@ -120,11 +123,26 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                               ),
                               const SizedBox(height: 8),
                               Text('Versao ${region.version}'),
+                              if (region.downloadUrl != null &&
+                                  region.downloadUrl!.isNotEmpty)
+                                Text(
+                                  'Fonte: ${region.downloadUrl}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                               if (local != null) ...[
                                 const SizedBox(height: 6),
                                 Text(
                                   'Baixado em ${local.downloadedAt.day.toString().padLeft(2, '0')}/${local.downloadedAt.month.toString().padLeft(2, '0')}',
                                   style: const TextStyle(color: Colors.green),
+                                ),
+                                Text(
+                                  'Tamanho salvo: ${(local.bytesDownloaded / (1024 * 1024)).toStringAsFixed(2)} MB',
+                                  style: const TextStyle(
+                                    color: Colors.green,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ],
                               if (downloading) ...[
