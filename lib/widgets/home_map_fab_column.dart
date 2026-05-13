@@ -25,6 +25,7 @@ class HomeMapFabColumn extends StatefulWidget {
   final bool isHeatmapOn;
   final Set<MapFilterOption> selectedFilters;
   final MapTimeWindowOption selectedTimeWindow;
+  final bool navigationTripActive;
 
   const HomeMapFabColumn({
     super.key,
@@ -36,6 +37,7 @@ class HomeMapFabColumn extends StatefulWidget {
     this.isHeatmapOn = false,
     this.selectedFilters = const {},
     this.selectedTimeWindow = MapTimeWindowOption.now,
+    this.navigationTripActive = false,
   });
 
   @override
@@ -110,6 +112,19 @@ class _HomeMapFabColumnState extends State<HomeMapFabColumn> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    if (widget.navigationTripActive) {
+      return _fab(
+        context: context,
+        icon: LucideIcons.crosshair,
+        label: 'Re-center',
+        color: isDark
+            ? Colors.white.withOpacity(0.6)
+            : Colors.black.withOpacity(0.55),
+        onTap: widget.onRecenter,
+        isHighlight: true,
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,

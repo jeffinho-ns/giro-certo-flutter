@@ -1,3 +1,4 @@
-// Copie este ficheiro para MapboxKeys.xcconfig na mesma pasta ios/
-// (MapboxKeys.xcconfig esta no .gitignore). Use o token publico pk. do Mapbox.
-MAPBOX_ACCESS_TOKEN=pk.substitua_pelo_seu_token_publico
+// 1) Copie para MapboxKeys.xcconfig (na pasta ios/):  cp MapboxKeys.xcconfig.example MapboxKeys.xcconfig
+// 2) Substitua o valor por um token publico pk. de https://account.mapbox.com/access-tokens/
+// MapboxKeys.xcconfig esta no .gitignore e e incluido por Debug/Release/Profile.xcconfig.
+MAPBOX_ACCESS_TOKEN=pk.SUBSTITUA_PELO_SEU_TOKEN_PUBLICO_MAPBOX

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_mapbox_navigation/flutter_mapbox_navigation.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/notifications_count_provider.dart';
 import '../../services/api_service.dart';
@@ -23,7 +24,9 @@ import '../../widgets/modern_header.dart';
 import '../../widgets/quick_messages_card.dart';
 import '../../widgets/home_map_fab_column.dart';
 import '../../widgets/delivery_pipcar_modal.dart';
-import '../delivery/delivery_active_navigation_map.dart';
+import '../../widgets/home_embedded_mapbox_navigation.dart';
+import '../../features/trip_navigation/trip_navigation_experiment.dart';
+import '../../features/trip_navigation/trip_navigation_screen.dart';
 import '../maintenance/maintenance_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -34,6 +37,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  MapBoxNavigationViewController? _mapboxNavController;
+
   GoogleMapController? _googleMapController;
   Set<Polyline> _polylines = {};
   Set<Marker> _markers = {};
@@ -54,7 +59,17 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Partner> _marketPartners = [];
   bool _isUpdatingDeliveryRoute = false;
 
-  /// Modo “navegação” (corrida ativa): polyline azul e marcador com rotação no mapa Google (preview).
+  /// Atraso após aceitar/iniciar trânsito: evita montar Mapbox no mesmo instante em que o modal
+  /// fecha e o Google Map ainda compõe (reduz crash nativo, sobretudo no iOS).
+  DateTime? _deferMapboxOverlayUntil;
+
+  /// Câmera estilo navegação (tilt + bearing) no Google Map enquanto o Mapbox não assume.
+  bool _googleDriveModeActive = false;
+
+  /// Desliga o overlay Mapbox nesta sessão após falha nativa (mantém rota + drive no Google).
+  bool _mapboxTripDisabled = false;
+
+  /// Modo navegação no Google Map (ex.: aguardando retirada na loja): marcador com rotação.
   BitmapDescriptor? _riderNavIcon;
   Marker? _riderNavMarker;
   double _navBearing = 0;
@@ -66,22 +81,43 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const Color _googleNavBlue = Color(0xFF4285F4);
 
+  static const double _driveZoom = 17.5;
+  static const double _driveTilt = 55;
+
   bool get _deliveryNavigationActive => _activeDeliveryOrder != null;
 
-  Polyline _navStylePolyline({
-    required PolylineId polylineId,
-    required List<LatLng> points,
-  }) {
-    return Polyline(
-      polylineId: polylineId,
-      points: points,
-      color: _googleNavBlue,
-      width: 14,
-      geodesic: true,
-      jointType: JointType.round,
-      startCap: Cap.roundCap,
-      endCap: Cap.roundCap,
-    );
+  bool _isActiveTripNavigationStatus(DeliveryStatus status) {
+    return status == DeliveryStatus.accepted ||
+        status == DeliveryStatus.inTransit ||
+        status == DeliveryStatus.inProgress;
+  }
+
+  bool _shouldApplyGoogleDriveCamera({bool? mapboxOverlayVisible}) {
+    if (!_googleDriveModeActive || _currentPosition == null) return false;
+    final order = _activeDeliveryOrder;
+    if (order == null || !_isActiveTripNavigationStatus(order.status)) {
+      return false;
+    }
+    if (mapboxOverlayVisible ?? _embeddedMapboxLayerActive()) return false;
+    return true;
+  }
+
+  /// Mapbox em ecrã cheio na home durante etapas com navegação ativa (respeita [_deferMapboxOverlayUntil]).
+  bool _embeddedMapboxLayerActive() {
+    // Experimento Fase 1: overlay legado desligado; corrida na TripNavigationScreen.
+    if (TripNavigationExperiment.enabled) return false;
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final user = appState.user;
+    final isRider = user?.isRider ?? true;
+    final o = _activeDeliveryOrder;
+    if (!isRider || o == null || _currentPosition == null) return false;
+    if (_mapboxTripDisabled) return false;
+    final defer = _deferMapboxOverlayUntil;
+    if (defer != null && DateTime.now().isBefore(defer)) return false;
+    final s = o.status;
+    return s == DeliveryStatus.accepted ||
+        s == DeliveryStatus.inTransit ||
+        s == DeliveryStatus.inProgress;
   }
 
   double _distanceMeters(LatLng a, LatLng b) {
@@ -144,12 +180,82 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _applyGoogleDriveCamera({bool animated = true}) {
+    if (!_shouldApplyGoogleDriveCamera()) return;
+    final pos = _currentPosition;
+    final controller = _googleMapController;
+    if (pos == null || controller == null) return;
+    final update = CameraUpdate.newCameraPosition(
+      CameraPosition(
+        target: pos,
+        zoom: _driveZoom,
+        bearing: _navBearing,
+        tilt: _driveTilt,
+      ),
+    );
+    if (animated) {
+      controller.animateCamera(update);
+    } else {
+      controller.moveCamera(update);
+    }
+  }
+
+  Future<void> _resetGoogleMapToOverview({double? zoom}) async {
+    final pos = _currentPosition;
+    final controller = _googleMapController;
+    if (pos == null || controller == null) return;
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: pos,
+          zoom: zoom ?? _currentZoom,
+          bearing: 0,
+          tilt: 0,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _previewRouteBoundsThenDrive(
+    List<Map<String, double>> points,
+  ) async {
+    if (!_shouldApplyGoogleDriveCamera()) return;
+    if (points.length >= 2) {
+      final bounds = _toLlBounds(points);
+      await _googleMapController?.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 72),
+      );
+      if (!mounted || !_shouldApplyGoogleDriveCamera()) return;
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+    }
+    if (!mounted || !_shouldApplyGoogleDriveCamera()) return;
+    _applyGoogleDriveCamera();
+  }
+
+  void _onMapboxNavigationFailed() {
+    if (!mounted) return;
+    setState(() => _mapboxTripDisabled = true);
+    _applyGoogleDriveCamera();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Navegacao Mapbox indisponivel. Continuando com rota e modo conducao no mapa.',
+        ),
+        duration: Duration(seconds: 5),
+      ),
+    );
+  }
+
   void _snapNavigationCameraNow() {
+    if (_shouldApplyGoogleDriveCamera()) {
+      _applyGoogleDriveCamera();
+      return;
+    }
     if (!_deliveryNavigationActive || _currentPosition == null) return;
     _googleMapController?.animateCamera(
       CameraUpdate.newLatLngZoom(
         LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-        17,
+        _currentZoom,
       ),
     );
   }
@@ -278,7 +384,9 @@ class _HomeScreenState extends State<HomeScreen> {
           pos.longitude,
           activeOrder: _activeDeliveryOrder,
         );
-        if (_deliveryNavigationActive) {
+        if (_shouldApplyGoogleDriveCamera()) {
+          _applyGoogleDriveCamera(animated: false);
+        } else if (_deliveryNavigationActive) {
           _snapNavigationCameraNow();
         }
       });
@@ -346,28 +454,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _openMapboxTurnByTurn() async {
-    final order = _activeDeliveryOrder;
-    final cur = _currentPosition;
-    if (order == null || cur == null) return;
-    final toStore = order.status == DeliveryStatus.accepted;
-    final destLat =
-        toStore ? order.storeLatitude : order.deliveryLatitude;
-    final destLng =
-        toStore ? order.storeLongitude : order.deliveryLongitude;
-    final label =
-        toStore ? order.storeName : order.deliveryAddress;
-    await DeliveryActiveNavigationMap.open(
-      context,
-      order: order,
-      originLatitude: cur.latitude,
-      originLongitude: cur.longitude,
-      destinationLatitude: destLat,
-      destinationLongitude: destLng,
-      destinationLabel: label,
-    );
-  }
-
   Future<void> _pollPendingDeliveriesForRider() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     if (appState.user?.isRider != true) return;
@@ -386,7 +472,8 @@ class _HomeScreenState extends State<HomeScreen> {
           continue;
         }
 
-        if (_activeDeliveryOrder != null) {
+        if (_activeDeliveryOrder != null ||
+            TripNavigationExperiment.activeSessionOpen) {
           await Future.delayed(const Duration(seconds: 15));
           continue;
         }
@@ -874,6 +961,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _recenterMap() {
     if (_currentPosition == null) return;
+    if (_embeddedMapboxLayerActive()) {
+      unawaited(_mapboxNavController?.recenter());
+      return;
+    }
+    if (_shouldApplyGoogleDriveCamera()) {
+      _applyGoogleDriveCamera();
+      return;
+    }
     if (_deliveryNavigationActive) {
       _snapNavigationCameraNow();
       return;
@@ -887,6 +982,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _zoomIn() {
+    if (_embeddedMapboxLayerActive()) return;
     setState(() => _currentZoom = (_currentZoom + 1).clamp(3.0, 21.0));
     if (_currentPosition != null) {
       _googleMapController?.animateCamera(
@@ -898,16 +994,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  LatLngBounds _toLlBounds(List<Map<String, double>> points) {
-    final lats = points.map((e) => e['lat']!).toList();
-    final lngs = points.map((e) => e['lng']!).toList();
-    return LatLngBounds(
-      southwest: LatLng(lats.reduce(math.min), lngs.reduce(math.min)),
-      northeast: LatLng(lats.reduce(math.max), lngs.reduce(math.max)),
-    );
-  }
-
   void _zoomOut() {
+    if (_embeddedMapboxLayerActive()) return;
     setState(() => _currentZoom = (_currentZoom - 1).clamp(3.0, 21.0));
     if (_currentPosition != null) {
       _googleMapController?.animateCamera(
@@ -923,6 +1011,32 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _mapType = type);
   }
 
+  Polyline _navStylePolyline({
+    required PolylineId polylineId,
+    required List<LatLng> points,
+  }) {
+    return Polyline(
+      polylineId: polylineId,
+      points: points,
+      color: _googleNavBlue,
+      width: 14,
+      geodesic: true,
+      jointType: JointType.round,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+    );
+  }
+
+  LatLngBounds _toLlBounds(List<Map<String, double>> points) {
+    final lats = points.map((e) => e['lat']!).toList();
+    final lngs = points.map((e) => e['lng']!).toList();
+    return LatLngBounds(
+      southwest: LatLng(lats.reduce(math.min), lngs.reduce(math.min)),
+      northeast: LatLng(lats.reduce(math.max), lngs.reduce(math.max)),
+    );
+  }
+
+  /// Preview no Google Map (sempre visível durante [ _deferMapboxOverlayUntil ] e fallback).
   Future<void> _drawRouteToStore(DeliveryOrder order) async {
     final user = Provider.of<AppStateProvider>(context, listen: false).user;
     final originLat = user?.currentLat ??
@@ -948,10 +1062,10 @@ class _HomeScreenState extends State<HomeScreen> {
         SnackBar(
           content: Text(
             detail != null && detail.isNotEmpty
-                ? 'Preview de rota indisponivel ($detail). Use a navegacao Mapbox para seguir vias.'
-                : 'Preview de rota indisponivel. Verifique a API /maps/directions ou use a navegacao Mapbox.',
+                ? 'Preview: rota aproximada ($detail).'
+                : 'Preview: rota aproximada. Navegacao Mapbox segue por vias.',
           ),
-          duration: const Duration(seconds: 6),
+          duration: const Duration(seconds: 5),
         ),
       );
     }
@@ -978,7 +1092,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _rebuildRiderNavMarker();
     });
 
-    if (_deliveryNavigationActive && _currentPosition != null) {
+    if (_googleDriveModeActive) {
+      await _previewRouteBoundsThenDrive(points);
+    } else if (_deliveryNavigationActive && _currentPosition != null) {
       _snapNavigationCameraNow();
     } else {
       final bounds = _toLlBounds(points);
@@ -1011,10 +1127,10 @@ class _HomeScreenState extends State<HomeScreen> {
         SnackBar(
           content: Text(
             detail != null && detail.isNotEmpty
-                ? 'Preview de rota indisponivel ($detail). Use a navegacao Mapbox para seguir vias.'
-                : 'Preview de rota indisponivel. Verifique a API /maps/directions ou use a navegacao Mapbox.',
+                ? 'Preview: rota aproximada ($detail).'
+                : 'Preview: rota aproximada. Navegacao Mapbox segue por vias.',
           ),
-          duration: const Duration(seconds: 6),
+          duration: const Duration(seconds: 5),
         ),
       );
     }
@@ -1047,7 +1163,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _rebuildRiderNavMarker();
     });
 
-    if (_deliveryNavigationActive && _currentPosition != null) {
+    if (_googleDriveModeActive) {
+      await _previewRouteBoundsThenDrive(points);
+    } else if (_deliveryNavigationActive && _currentPosition != null) {
       _snapNavigationCameraNow();
     } else {
       final bounds = _toLlBounds(points);
@@ -1069,26 +1187,29 @@ class _HomeScreenState extends State<HomeScreen> {
         riderName: user.name,
       );
       if (!mounted) return;
+
+      if (TripNavigationExperiment.enabled) {
+        RealtimeService.instance.setNavigationMode(true, orderId: accepted.id);
+        await _syncUserLocationPutForCheckpoint();
+        if (!mounted) return;
+        await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => TripNavigationScreen(initialOrder: accepted),
+          ),
+        );
+        return;
+      }
+
       setState(() {
         _activeDeliveryOrder = accepted;
+        _googleDriveModeActive = true;
+        _mapboxTripDisabled = false;
+        _deferMapboxOverlayUntil =
+            DateTime.now().add(const Duration(milliseconds: 200));
       });
       RealtimeService.instance.setNavigationMode(true, orderId: accepted.id);
-      final cachedPoints =
-          await NavigationRouteCacheService.loadRoute(accepted.id);
-      if (cachedPoints != null && cachedPoints.length >= 2) {
-        final latLngPoints =
-            cachedPoints.map((p) => LatLng(p['lat']!, p['lng']!)).toList();
-        setState(() {
-          _polylines = {
-            _navStylePolyline(
-              polylineId: const PolylineId('route_to_store'),
-              points: latLngPoints,
-            ),
-          };
-        });
-      } else {
-        await _drawRouteToStore(accepted);
-      }
+      await _drawRouteToStore(accepted);
+      if (!mounted) return;
       await _syncUserLocationPutForCheckpoint();
     } catch (e) {
       if (mounted) {
@@ -1109,7 +1230,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _activeDeliveryOrder = arrivedOrder;
+        _googleDriveModeActive = false;
+        _deferMapboxOverlayUntil = null;
       });
+      await _resetGoogleMapToOverview(zoom: 16);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1142,6 +1266,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _activeDeliveryOrder = inTransitOrder;
+        _googleDriveModeActive = true;
+        _mapboxTripDisabled = false;
+        _deferMapboxOverlayUntil =
+            DateTime.now().add(const Duration(milliseconds: 200));
       });
       await _drawRouteStoreToClient(inTransitOrder);
       if (!mounted) return;
@@ -1220,6 +1348,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _activeDeliveryOrder = null;
+        _googleDriveModeActive = false;
+        _mapboxTripDisabled = false;
+        _mapboxNavController = null;
+        _deferMapboxOverlayUntil = null;
         _polylines = {};
         _markers = {};
         _marketCircles = {};
@@ -1230,6 +1362,7 @@ class _HomeScreenState extends State<HomeScreen> {
       RealtimeService.instance.setNavigationMode(false);
       RealtimeService.instance.leaveOrderTracking(order.id);
       await NavigationRouteCacheService.clear();
+      await _resetGoogleMapToOverview();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Entrega finalizada.')),
@@ -1256,29 +1389,63 @@ class _HomeScreenState extends State<HomeScreen> {
         appState.deliveryModerationStatus.isAwaitingModeration;
 
     final initialPosition = _currentPosition ?? _defaultCenter;
+    final useEmbeddedMapbox = _embeddedMapboxLayerActive();
+    final showMapboxOverlay = useEmbeddedMapbox &&
+        _activeDeliveryOrder != null &&
+        _currentPosition != null;
+    final googleDriveCamera = _shouldApplyGoogleDriveCamera(
+      mapboxOverlayVisible: showMapboxOverlay,
+    );
+
+    final tripNavActive = _activeDeliveryOrder != null &&
+        _isActiveTripNavigationStatus(_activeDeliveryOrder!.status);
 
     return Stack(
       children: [
-        // 1. Fundo: Google Maps nativo (rotas e navegação)
+        // 1. Google Map mantém-se montado; Mapbox é uma camada por cima (evita crash ao trocar
+        // duas platform views no mesmo frame).
         Positioned.fill(
-          child: GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: LatLng(initialPosition.latitude, initialPosition.longitude),
-              zoom: _currentZoom,
-            ),
-            onMapCreated: _onMapCreated,
-            mapType: _mapType,
-            markers: _allMapMarkers,
-            polylines: _polylines,
-            circles: _marketCircles,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            compassEnabled: true,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              IgnorePointer(
+                ignoring: showMapboxOverlay,
+                child: GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: LatLng(
+                        initialPosition.latitude, initialPosition.longitude),
+                    zoom: _currentZoom,
+                  ),
+                  onMapCreated: _onMapCreated,
+                  mapType: _mapType,
+                  markers: _allMapMarkers,
+                  polylines: _polylines,
+                  circles: _marketCircles,
+                  myLocationEnabled: !googleDriveCamera,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
+                  compassEnabled: true,
+                ),
+              ),
+              if (showMapboxOverlay)
+                Positioned.fill(
+                  child: HomeEmbeddedMapboxNavigation(
+                    key: ValueKey(
+                      '${_activeDeliveryOrder!.id}_${_activeDeliveryOrder!.status.name}',
+                    ),
+                    order: _activeDeliveryOrder!,
+                    originLatitude: _currentPosition!.latitude,
+                    originLongitude: _currentPosition!.longitude,
+                    onControllerReady: (c) => _mapboxNavController = c,
+                    onNavigationFailed: _onMapboxNavigationFailed,
+                  ),
+                ),
+            ],
           ),
         ),
 
-        // 1b. Controles do mapa: zoom +/-, tipo de mapa (Normal / Satélite / Híbrido)
+        // 1b. Controles do mapa (só com Google Map)
+        if (!useEmbeddedMapbox)
         Positioned(
           left: 16,
           top: 140,
@@ -1312,23 +1479,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
         // 3. Mensagens Rápidas – canto inferior esquerdo (acima do menu)
-        Positioned(
-          left: 16,
-          bottom: 100,
-          child: QuickMessagesCard(
-            items: _quickMessages,
-            maxVisible: 3,
-            onSeeAll: () async {
-              await showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (context) => const _NotificationsFullSheet(),
-              );
-              _loadQuickMessages();
-            },
+        if (!tripNavActive)
+          Positioned(
+            left: 16,
+            bottom: 100,
+            child: QuickMessagesCard(
+              items: _quickMessages,
+              maxVisible: 3,
+              onSeeAll: () async {
+                await showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => const _NotificationsFullSheet(),
+                );
+                _loadQuickMessages();
+              },
+            ),
           ),
-        ),
 
         // 4. Coluna FAB – centro-direito
         Positioned(
@@ -1337,29 +1505,38 @@ class _HomeScreenState extends State<HomeScreen> {
           bottom: 0,
           child: Center(
             child: HomeMapFabColumn(
+              navigationTripActive: useEmbeddedMapbox,
               isHeatmapOn: _heatmapOn,
               selectedFilters: _filterOptions,
               selectedTimeWindow: _mapTimeWindow,
-              onDriveMode: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const MaintenanceDetailScreen()),
-                );
-              },
+              onDriveMode: useEmbeddedMapbox
+                  ? null
+                  : () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const MaintenanceDetailScreen()),
+                      );
+                    },
               onRecenter: _recenterMap,
-              onHeatmapChanged: (v) {
-                setState(() => _heatmapOn = v);
-                _refreshMarketIntelligenceOverlays();
-              },
-              onFilterChanged: (v) {
-                setState(() => _filterOptions = v);
-                _refreshMarketIntelligenceOverlays();
-              },
-              onTimeWindowChanged: (v) {
-                setState(() => _mapTimeWindow = v);
-                _refreshMarketIntelligenceOverlays();
-              },
+              onHeatmapChanged: useEmbeddedMapbox
+                  ? null
+                  : (v) {
+                      setState(() => _heatmapOn = v);
+                      _refreshMarketIntelligenceOverlays();
+                    },
+              onFilterChanged: useEmbeddedMapbox
+                  ? null
+                  : (v) {
+                      setState(() => _filterOptions = v);
+                      _refreshMarketIntelligenceOverlays();
+                    },
+              onTimeWindowChanged: useEmbeddedMapbox
+                  ? null
+                  : (v) {
+                      setState(() => _mapTimeWindow = v);
+                      _refreshMarketIntelligenceOverlays();
+                    },
             ),
           ),
         ),
@@ -1394,7 +1571,6 @@ class _HomeScreenState extends State<HomeScreen> {
               onArrivedAtStore: _confirmArrivalAtStore,
               onCollectAndStart: _collectAndStartDelivery,
               onCompleteDelivery: _completeDelivery,
-              onTurnByTurn: _openMapboxTurnByTurn,
             ),
           ),
       ],
@@ -1711,7 +1887,6 @@ class _DeliveryTripStageCard extends StatelessWidget {
   final VoidCallback onArrivedAtStore;
   final VoidCallback onCollectAndStart;
   final VoidCallback onCompleteDelivery;
-  final VoidCallback onTurnByTurn;
 
   const _DeliveryTripStageCard({
     required this.order,
@@ -1719,7 +1894,6 @@ class _DeliveryTripStageCard extends StatelessWidget {
     required this.onArrivedAtStore,
     required this.onCollectAndStart,
     required this.onCompleteDelivery,
-    required this.onTurnByTurn,
   });
 
   @override
@@ -1776,15 +1950,6 @@ class _DeliveryTripStageCard extends StatelessWidget {
           ),
           if (isHeadingToStore) ...[
             const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: isLoading ? null : onTurnByTurn,
-                icon: const Icon(LucideIcons.navigation, size: 18),
-                label: const Text('Navegacao Mapbox (voz e rerouter)'),
-              ),
-            ),
-            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -1845,25 +2010,15 @@ class _DeliveryTripStageCard extends StatelessWidget {
             ),
           ],
           if (isInTransit) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: isLoading ? null : onTurnByTurn,
-                icon: const Icon(LucideIcons.navigation, size: 18),
-                label: const Text('Navegacao Mapbox ate o cliente'),
-              ),
-            ),
             Padding(
-              padding: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                'Siga a rota ate o cliente e finalize quando entregar.',
+                'A rota e a navegacao Mapbox aparecem no mapa. Finalize quando entregar.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
                 ),
               ),
             ),
-            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
