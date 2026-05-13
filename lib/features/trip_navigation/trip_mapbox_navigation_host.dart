@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_mapbox_navigation/flutter_mapbox_navigation.dart';
+import 'package:provider/provider.dart';
 
+import '../../providers/theme_provider.dart';
+import '../../utils/giro_mapbox_navigation_theme.dart';
 import 'delivery_trip_controller.dart';
 import 'widgets/trip_navigation_hud.dart';
 
@@ -33,6 +36,8 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
   double? _lastRoutedDestLat;
   double? _lastRoutedDestLng;
   bool _lastGuidanceActive = false;
+  ThemeProvider? _themeProvider;
+  bool? _lastIsDark;
 
   DeliveryTripController get _trip => widget.controller;
 
@@ -47,15 +52,38 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
     _options.bannerInstructionsEnabled = false;
     _options.simulateRoute = false;
     _options.longPressDestinationEnabled = false;
-    _options.tilt = 50;
-    _options.zoom = 17;
     _options.bearing = 0;
     _options.enableRefresh = true;
     _options.alternatives = true;
     _options.animateBuildRoute = true;
     _applyInitialCamera();
-    MapBoxNavigation.instance.setDefaultOptions(_options);
     _trip.addListener(_onTripChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    if (_themeProvider != themeProvider) {
+      _themeProvider?.removeListener(_onAppThemeChanged);
+      _themeProvider = themeProvider;
+      _themeProvider?.addListener(_onAppThemeChanged);
+    }
+    _syncMapAppearance();
+  }
+
+  void _onAppThemeChanged() {
+    if (!mounted) return;
+    _syncMapAppearance();
+  }
+
+  void _syncMapAppearance() {
+    final isDark = _themeProvider?.isDarkMode ??
+        Theme.of(context).brightness == Brightness.dark;
+    if (_lastIsDark == isDark) return;
+    _lastIsDark = isDark;
+    GiroMapboxNavigationTheme.apply(_options, isDarkMode: isDark);
+    MapBoxNavigation.instance.setDefaultOptions(_options);
   }
 
   Future<void> recenterNavigation() async {
@@ -66,6 +94,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
 
   @override
   void dispose() {
+    _themeProvider?.removeListener(_onAppThemeChanged);
     _trip.removeListener(_onTripChanged);
     unawaited(_mapController?.finishNavigation());
     _mapController?.dispose();

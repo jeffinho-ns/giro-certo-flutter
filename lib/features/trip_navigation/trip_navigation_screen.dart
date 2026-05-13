@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/delivery_order.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
 import 'delivery_trip_controller.dart';
 import 'trip_mapbox_navigation_host.dart';
@@ -110,7 +111,9 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
     return ChangeNotifierProvider<DeliveryTripController>.value(
       value: _controller,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: context.watch<ThemeProvider>().isDarkMode
+            ? AppColors.darkBackground
+            : AppColors.lightBackground,
         body: Consumer<DeliveryTripController>(
           builder: (context, trip, _) {
             return Stack(

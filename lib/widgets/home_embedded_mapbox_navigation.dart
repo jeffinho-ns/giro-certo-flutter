@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_mapbox_navigation/flutter_mapbox_navigation.dart';
+import 'package:provider/provider.dart';
 
 import '../models/delivery_order.dart';
+import '../providers/theme_provider.dart';
+import '../utils/giro_mapbox_navigation_theme.dart';
 
 /// Mapa Mapbox embutido na home: rota + navegação ativa (estilo app de navegação).
 class HomeEmbeddedMapboxNavigation extends StatefulWidget {
@@ -41,6 +44,8 @@ class HomeEmbeddedMapboxNavigationState
   String? _error;
   double? _distanceRemainingM;
   double? _durationRemainingS;
+  ThemeProvider? _themeProvider;
+  bool? _lastIsDark;
 
   bool get _headingToStore => widget.order.status == DeliveryStatus.accepted;
 
@@ -66,19 +71,43 @@ class HomeEmbeddedMapboxNavigationState
     _options.bannerInstructionsEnabled = true;
     _options.simulateRoute = false;
     _options.longPressDestinationEnabled = false;
-    _options.tilt = 50;
-    _options.zoom = 17;
     _options.bearing = 0;
     _options.enableRefresh = true;
     _options.alternatives = true;
     _options.initialLatitude = widget.originLatitude;
     _options.initialLongitude = widget.originLongitude;
     _options.animateBuildRoute = true;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    if (_themeProvider != themeProvider) {
+      _themeProvider?.removeListener(_onAppThemeChanged);
+      _themeProvider = themeProvider;
+      _themeProvider?.addListener(_onAppThemeChanged);
+    }
+    _syncMapAppearance();
+  }
+
+  void _onAppThemeChanged() {
+    if (!mounted) return;
+    _syncMapAppearance();
+  }
+
+  void _syncMapAppearance() {
+    final isDark = _themeProvider?.isDarkMode ??
+        Theme.of(context).brightness == Brightness.dark;
+    if (_lastIsDark == isDark) return;
+    _lastIsDark = isDark;
+    GiroMapboxNavigationTheme.apply(_options, isDarkMode: isDark);
     MapBoxNavigation.instance.setDefaultOptions(_options);
   }
 
   @override
   void dispose() {
+    _themeProvider?.removeListener(_onAppThemeChanged);
     unawaited(_controller?.finishNavigation());
     _controller?.dispose();
     super.dispose();
