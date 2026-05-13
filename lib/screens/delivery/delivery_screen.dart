@@ -15,6 +15,7 @@ import '../../utils/colors.dart';
 import '../../utils/delivery_constants.dart';
 import '../../utils/delivery_status_utils.dart';
 import '../../models/vehicle_type.dart';
+import '../../features/trip_navigation/trip_navigation_launcher.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/rider_dashboard.dart';
 import 'delivery_order_card.dart';
@@ -273,30 +274,23 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     if (user == null) return;
 
     try {
-      final updatedOrder = await ApiService.acceptOrder(
-        order.id,
+      final completed = await TripNavigationLauncher.acceptAndOpen(
+        context,
+        order: order,
         riderId: user.id,
         riderName: user.name,
       );
 
+      if (!mounted) return;
+
       setState(() {
         _orders.removeWhere((o) => o.id == order.id);
-        _myOrders.removeWhere((o) => o.id == updatedOrder.id);
-        _myOrders.add(updatedOrder);
-
-        // Atualizar estatísticas
+        _myOrders.removeWhere((o) => o.id == order.id);
         _updateStats();
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Corrida aceita! Ganhos estimados: R\$ ${order.deliveryFee.toStringAsFixed(2)}'),
-            backgroundColor: AppColors.neonGreen,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+      if (completed == true) {
+        await _loadOrders(silent: true);
       }
     } catch (e) {
       if (mounted) {
@@ -350,96 +344,6 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         );
       }
     }
-  }
-
-  Future<void> _advanceDeliveryStage(DeliveryOrder order) async {
-    try {
-      DeliveryOrder updatedOrder;
-      String successMessage;
-      if (order.status == DeliveryStatus.accepted) {
-        updatedOrder = await ApiService.markArrivedAtStore(order.id);
-        successMessage = 'Chegada na loja confirmada.';
-      } else if (order.status == DeliveryStatus.arrivedAtStore) {
-        final pickupCode = await _promptPickupCode(order);
-        if (pickupCode == null || pickupCode.isEmpty) return;
-        updatedOrder =
-            await ApiService.startTransit(order.id, pickupCode: pickupCode);
-        successMessage = 'Entrega iniciada. Siga para o cliente.';
-      } else if (order.status == DeliveryStatus.inTransit ||
-          order.status == DeliveryStatus.inProgress) {
-        await _completeOrder(order);
-        return;
-      } else {
-        return;
-      }
-
-      if (!mounted) return;
-      setState(() {
-        final index = _myOrders.indexWhere((o) => o.id == updatedOrder.id);
-        if (index != -1) {
-          _myOrders[index] = updatedOrder;
-        }
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(successMessage),
-          backgroundColor: AppColors.neonGreen,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erro ao atualizar etapa da corrida: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<String?> _promptPickupCode(DeliveryOrder order) async {
-    final controller = TextEditingController();
-    final expected = (order.internalCode ?? '').trim();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmar retirada'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (expected.isNotEmpty)
-              Text(
-                'Código da loja: $expected',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            const SizedBox(height: 8),
-            const Text('Digite o código interno informado pela loja.'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: controller,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                hintText: 'GC-XXXXXXXX',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.of(context).pop(controller.text.trim().toUpperCase()),
-            child: const Text('Confirmar'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -1351,30 +1255,20 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   }
 
   Widget _buildRiderStageAction(ThemeData theme, DeliveryOrder order) {
-    String? label;
-    Color backgroundColor = theme.colorScheme.primary;
-    if (order.status == DeliveryStatus.accepted) {
-      label = 'Confirmar chegada na loja';
-      backgroundColor = AppColors.racingOrange;
-    } else if (order.status == DeliveryStatus.arrivedAtStore) {
-      label = 'Coletar e iniciar entrega';
-      backgroundColor = Colors.deepOrange;
-    } else if (order.status == DeliveryStatus.inTransit ||
-        order.status == DeliveryStatus.inProgress) {
-      label = 'Finalizar entrega';
-      backgroundColor = AppColors.neonGreen;
+    if (!DeliveryStatusUtils.isActive(order.status)) {
+      return const SizedBox.shrink();
     }
-
-    if (label == null) return const SizedBox.shrink();
 
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () => _advanceDeliveryStage(order),
+        onPressed: () {
+          unawaited(TripNavigationLauncher.open(context, order));
+        },
         icon: const Icon(LucideIcons.navigation, size: 16),
-        label: Text(label),
+        label: const Text('Continuar corrida'),
         style: ElevatedButton.styleFrom(
-          backgroundColor: backgroundColor,
+          backgroundColor: AppColors.racingOrange,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
