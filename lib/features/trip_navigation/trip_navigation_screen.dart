@@ -8,12 +8,14 @@ import 'package:provider/provider.dart';
 import '../../models/delivery_order.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
+import '../../utils/delivery_geofence.dart';
 import 'delivery_trip_controller.dart';
 import 'trip_mapbox_navigation_host.dart';
 import 'trip_navigation_experiment.dart';
 import 'trip_navigation_immersive_scope.dart';
 import 'trip_navigation_performance.dart';
 import 'widgets/trip_navigation_perf_overlay.dart';
+import 'widgets/trip_pickup_code_dialog.dart';
 import 'widgets/trip_stage_action_sheet.dart';
 
 /// Modo Corrida dedicado: Mapbox em tela cheia + HUD e acoes do Giro Certo.
@@ -63,56 +65,34 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
     super.dispose();
   }
 
-  Future<String?> _promptPickupCode(DeliveryOrder order) async {
-    final controller = TextEditingController();
-    final expected = (order.internalCode ?? '').trim();
-    return showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Confirmar retirada'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (expected.isNotEmpty)
-                Text(
-                  'Código da loja: $expected',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              const SizedBox(height: 8),
-              const Text('Digite o código interno para iniciar a entrega.'),
-              const SizedBox(height: 10),
-              TextField(
-                controller: controller,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  hintText: 'GC-XXXXXXXX',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context)
-                  .pop(controller.text.trim().toUpperCase()),
-              child: const Text('Confirmar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Future<void> _onCollectAndStart() async {
-    final code = await _promptPickupCode(_controller.order);
+    final code = await showTripPickupCodeDialog(context);
     if (code == null || code.isEmpty) return;
     await _controller.collectAndStartDelivery(code);
+  }
+
+  Future<void> _onConfirmArrivalAtStore() async {
+    final result = await _controller.confirmArrivalAtStore();
+    if (!mounted) return;
+    if (result == ConfirmArrivalResult.tooFarFromStore) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Você precisa estar mais perto da loja para confirmar a chegada',
+          ),
+        ),
+      );
+      return;
+    }
+    if (result == ConfirmArrivalResult.locationUnavailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nao foi possivel obter sua localizacao. Tente novamente.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _onComplete() async {
@@ -168,7 +148,7 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
                       top: false,
                       child: TripStageActionSheet(
                         trip: trip,
-                        onArrivedAtStore: trip.confirmArrivalAtStore,
+                        onArrivedAtStore: _onConfirmArrivalAtStore,
                         onCollectAndStart: _onCollectAndStart,
                         onCompleteDelivery: _onComplete,
                       ),

@@ -163,5 +163,37 @@ class DeliveryOrder {
       estimatedTime: estimatedTime,
     );
   }
+
+  /// Remove o codigo de retirada antes de expor o pedido ao entregador.
+  DeliveryOrder withoutInternalCode() {
+    return DeliveryOrder(
+      id: id,
+      storeId: storeId,
+      storeName: storeName,
+      storeAddress: storeAddress,
+      storeLatitude: storeLatitude,
+      storeLongitude: storeLongitude,
+      deliveryAddress: deliveryAddress,
+      deliveryLatitude: deliveryLatitude,
+      deliveryLongitude: deliveryLongitude,
+      recipientName: recipientName,
+      recipientPhone: recipientPhone,
+      notes: notes,
+      value: value,
+      deliveryFee: deliveryFee,
+      status: status,
+      priority: priority,
+      createdAt: createdAt,
+      acceptedAt: acceptedAt,
+      completedAt: completedAt,
+      riderId: riderId,
+      riderName: riderName,
+      riderEmail: riderEmail,
+      riderPhone: riderPhone,
+      riderPhotoUrl: riderPhotoUrl,
+      distance: distance,
+      estimatedTime: estimatedTime,
+    );
+  }
 }
 

@@ -106,7 +106,7 @@ class TripStageActionSheet extends StatelessWidget {
       case DeliveryTripPhase.headingToStore:
         return 'Confirme quando estiver no local de retirada.';
       case DeliveryTripPhase.waitingAtStore:
-        return 'Pedido pronto? Informe o codigo e siga para o cliente.';
+        return 'Pedido pronto? Solicite o codigo ao lojista e informe abaixo.';
       case DeliveryTripPhase.headingToClient:
         return 'Finalize quando a entrega for concluida.';
     }

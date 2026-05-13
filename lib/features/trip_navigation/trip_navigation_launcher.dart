@@ -25,7 +25,9 @@ class TripNavigationLauncher {
 
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => TripNavigationScreen(initialOrder: initialOrder),
+        builder: (_) => TripNavigationScreen(
+          initialOrder: initialOrder.withoutInternalCode(),
+        ),
       ),
     );
 

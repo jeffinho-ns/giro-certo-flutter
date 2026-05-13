@@ -186,8 +186,12 @@ class _DeliveryScreenState extends State<DeliveryScreen>
       if (_isRiderMode) {
         // Motociclista: pedidos pendentes + minhas corridas
         final results = await Future.wait([
-          ApiService.getDeliveryOrders(status: 'pending', limit: 60),
-          ApiService.getDeliveryOrders(riderId: user.id),
+          ApiService.getDeliveryOrders(
+            status: 'pending',
+            limit: 60,
+            hidePickupCode: true,
+          ),
+          ApiService.getDeliveryOrders(riderId: user.id, hidePickupCode: true),
           ApiService.getPartners(),
         ]);
         final allOrders = results[0] as List<DeliveryOrder>;

@@ -8,6 +8,7 @@ import '../../models/delivery_order.dart';
 import '../../services/api_service.dart';
 import '../../services/navigation_route_cache_service.dart';
 import '../../services/realtime_service.dart';
+import '../../utils/delivery_geofence.dart';
 
 enum DeliveryTripPhase {
   headingToStore,
@@ -18,7 +19,7 @@ enum DeliveryTripPhase {
 /// Estado da corrida ativa para o experimento do Modo Corrida dedicado.
 class DeliveryTripController extends ChangeNotifier {
   DeliveryTripController({required DeliveryOrder initialOrder})
-      : _order = initialOrder {
+      : _order = initialOrder.withoutInternalCode() {
     _phase = _phaseFromStatus(initialOrder.status);
     RealtimeService.instance.setNavigationMode(true, orderId: initialOrder.id);
   }
@@ -145,19 +146,54 @@ class DeliveryTripController extends ChangeNotifier {
     }
   }
 
-  Future<void> confirmArrivalAtStore() async {
-    if (_isLoading) return;
+  Future<void> _refreshCurrentPosition() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      _latitude = pos.latitude;
+      _longitude = pos.longitude;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('DeliveryTripController refresh GPS: $e');
+    }
+  }
+
+  Future<ConfirmArrivalResult> confirmArrivalAtStore() async {
+    if (_isLoading) return ConfirmArrivalResult.failed;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
+      await _refreshCurrentPosition();
+      final lat = _latitude;
+      final lng = _longitude;
+      if (lat == null || lng == null) {
+        return ConfirmArrivalResult.locationUnavailable;
+      }
+
+      final distance = DeliveryGeofence.distanceMeters(
+        fromLatitude: lat,
+        fromLongitude: lng,
+        toLatitude: _order.storeLatitude,
+        toLongitude: _order.storeLongitude,
+      );
+      if (distance == null ||
+          distance > DeliveryGeofence.storeArrivalMaxMeters) {
+        return ConfirmArrivalResult.tooFarFromStore;
+      }
+
       final updated = await ApiService.markArrivedAtStore(_order.id);
-      _order = updated;
+      _order = updated.withoutInternalCode();
       _phase = DeliveryTripPhase.waitingAtStore;
       _errorMessage = null;
       await _syncLocationCheckpoint();
+      return ConfirmArrivalResult.confirmed;
     } catch (e) {
       _errorMessage = 'Nao foi possivel confirmar chegada: $e';
+      return ConfirmArrivalResult.failed;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -172,7 +208,7 @@ class DeliveryTripController extends ChangeNotifier {
     try {
       final updated =
           await ApiService.startTransit(_order.id, pickupCode: pickupCode);
-      _order = updated;
+      _order = updated.withoutInternalCode();
       _phase = DeliveryTripPhase.headingToClient;
       _errorMessage = null;
       await _syncLocationCheckpoint();

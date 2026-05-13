@@ -223,8 +223,11 @@ class _HomeScreenState extends State<HomeScreen> {
           continue;
         }
 
-        final orders =
-            await ApiService.getDeliveryOrders(status: 'pending', limit: 10);
+        final orders = await ApiService.getDeliveryOrders(
+          status: 'pending',
+          limit: 10,
+          hidePickupCode: true,
+        );
         if (!mounted) break;
         if (orders.isNotEmpty && _pipcarOrder == null) {
           setState(() => _pipcarOrder = orders.first);

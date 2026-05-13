@@ -617,6 +617,7 @@ class ApiService {
     String? storeId,
     String? riderId,
     int? limit,
+    bool hidePickupCode = false,
   }) async {
     final queryParams = <String, String>{};
     if (status != null) queryParams['status'] = status;
@@ -639,7 +640,10 @@ class ApiService {
     final data = json.decode(response.body);
     final List<dynamic> orders = data is List ? data : (data['orders'] ?? []);
 
-    return orders.map((json) => _deliveryOrderFromJson(json)).toList();
+    return orders.map((json) {
+      final order = _deliveryOrderFromJson(json as Map<String, dynamic>);
+      return hidePickupCode ? order.withoutInternalCode() : order;
+    }).toList();
   }
 
   /// Criar pedido (lojista)
@@ -741,7 +745,7 @@ class ApiService {
     final orderJson = data is Map<String, dynamic>
         ? (data['order'] as Map<String, dynamic>? ?? data)
         : <String, dynamic>{};
-    return _deliveryOrderFromJson(orderJson);
+    return _deliveryOrderFromJson(orderJson).withoutInternalCode();
   }
 
   /// Concluir corrida
@@ -762,7 +766,7 @@ class ApiService {
     final orderJson = data is Map<String, dynamic>
         ? (data['order'] as Map<String, dynamic>? ?? data)
         : <String, dynamic>{};
-    return _deliveryOrderFromJson(orderJson);
+    return _deliveryOrderFromJson(orderJson).withoutInternalCode();
   }
 
   /// Confirmar chegada ao estabelecimento
@@ -784,7 +788,7 @@ class ApiService {
     final orderJson = data is Map<String, dynamic>
         ? (data['order'] as Map<String, dynamic>? ?? data)
         : <String, dynamic>{};
-    return _deliveryOrderFromJson(orderJson);
+    return _deliveryOrderFromJson(orderJson).withoutInternalCode();
   }
 
   /// Iniciar deslocamento para o cliente após coleta
@@ -809,11 +813,14 @@ class ApiService {
     final orderJson = data is Map<String, dynamic>
         ? (data['order'] as Map<String, dynamic>? ?? data)
         : <String, dynamic>{};
-    return _deliveryOrderFromJson(orderJson);
+    return _deliveryOrderFromJson(orderJson).withoutInternalCode();
   }
 
   /// Obter detalhes do pedido
-  static Future<DeliveryOrder> getDeliveryOrder(String orderId) async {
+  static Future<DeliveryOrder> getDeliveryOrder(
+    String orderId, {
+    bool hidePickupCode = false,
+  }) async {
     final response = await http.get(
       Uri.parse('$baseUrl/delivery/$orderId'),
       headers: await _getHeaders(),
@@ -822,7 +829,8 @@ class ApiService {
     _handleError(response);
 
     final data = json.decode(response.body);
-    return _deliveryOrderFromJson(data);
+    final order = _deliveryOrderFromJson(data);
+    return hidePickupCode ? order.withoutInternalCode() : order;
   }
 
   // Converter JSON da API para DeliveryOrder
