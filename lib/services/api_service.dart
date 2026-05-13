@@ -834,6 +834,10 @@ class ApiService {
   }
 
   // Converter JSON da API para DeliveryOrder
+  static DeliveryOrder riderDeliveryOrderFromJson(Map<String, dynamic> json) {
+    return _deliveryOrderFromJson(json).withoutInternalCode();
+  }
+
   static DeliveryOrder _deliveryOrderFromJson(Map<String, dynamic> json) {
     final rawStoreLat = (json['storeLatitude'] as num).toDouble();
     final rawStoreLng = (json['storeLongitude'] as num).toDouble();
@@ -861,7 +865,9 @@ class ApiService {
       deliveryFee: (json['deliveryFee'] as num).toDouble(),
       status: _parseDeliveryStatus(json['status'] as String),
       priority: _parseDeliveryPriority(json['priority'] as String? ?? 'normal'),
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : DateTime.now(),
       acceptedAt: json['acceptedAt'] != null
           ? DateTime.parse(json['acceptedAt'] as String)
           : null,

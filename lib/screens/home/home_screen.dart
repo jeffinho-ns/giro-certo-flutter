@@ -11,6 +11,7 @@ import '../../services/realtime_service.dart';
 import '../../services/onboarding_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/delivery_order.dart';
+import '../../models/delivery_offer_payload.dart';
 import '../../models/partner.dart';
 import '../../models/pilot_profile.dart';
 import '../../utils/colors.dart';
@@ -40,12 +41,14 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasLoadedPartnerOnce = false;
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
+  StreamSubscription<DeliveryOfferPayload>? _deliveryOfferSubscription;
+  StreamSubscription<Map<String, dynamic>>? _deliveryNotificationSubscription;
   Timer? _realtimePartnerReloadDebounce;
   bool _heatmapOn = false;
   Set<MapFilterOption> _filterOptions = {};
   MapTimeWindowOption _mapTimeWindow = MapTimeWindowOption.now;
   List<QuickMessageItem> _quickMessages = [];
-  DeliveryOrder? _pipcarOrder;
+  DeliveryOfferPayload? _activeOffer;
   List<DeliveryOrder> _marketPendingOrders = [];
   List<Partner> _marketPartners = [];
   MapType _mapType = MapType.normal;
@@ -61,8 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadPartnerData();
     _loadMarketIntelligenceData();
     _subscribePartnerRealtimeUpdates();
+    _subscribeDeliveryOffers();
     _syncDeliveryModerationStatus();
-    _pollPendingDeliveriesForRider();
+    _startDeliveryModerationSync();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
         final p =
@@ -200,43 +204,46 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _pollPendingDeliveriesForRider() async {
+  Future<void> _startDeliveryModerationSync() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     if (appState.user?.isRider != true) return;
     while (mounted) {
-      try {
-        await _syncDeliveryModerationStatus();
-        final isDeliveryProfile = appState.isDeliveryPilot;
-        final isDeliveryApproved = appState.deliveryModerationStatus ==
-            DeliveryModerationStatus.approved;
-
-        if (isDeliveryProfile && !isDeliveryApproved) {
-          if (_pipcarOrder != null && mounted) {
-            setState(() => _pipcarOrder = null);
-          }
-          await Future.delayed(const Duration(seconds: 15));
-          continue;
-        }
-
-        if (TripNavigationExperiment.activeSessionOpen) {
-          await Future.delayed(const Duration(seconds: 15));
-          continue;
-        }
-
-        final orders = await ApiService.getDeliveryOrders(
-          status: 'pending',
-          limit: 10,
-          hidePickupCode: true,
-        );
-        if (!mounted) break;
-        if (orders.isNotEmpty && _pipcarOrder == null) {
-          setState(() => _pipcarOrder = orders.first);
-        }
-      } catch (e) {
-        debugPrint('Falha ao consultar corridas pendentes: $e');
-      }
-      await Future.delayed(const Duration(seconds: 15));
+      await _syncDeliveryModerationStatus();
+      if (!mounted) break;
+      await Future.delayed(const Duration(seconds: 60));
     }
+  }
+
+  void _subscribeDeliveryOffers() {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    if (appState.user?.isRider != true) return;
+
+    _deliveryOfferSubscription?.cancel();
+    _deliveryOfferSubscription =
+        RealtimeService.instance.onDeliveryNewOrderOffer.listen((offer) {
+      if (!mounted) return;
+      if (TripNavigationExperiment.activeSessionOpen) return;
+      final isDeliveryProfile = appState.isDeliveryPilot;
+      final isDeliveryApproved = appState.deliveryModerationStatus ==
+          DeliveryModerationStatus.approved;
+      if (isDeliveryProfile && !isDeliveryApproved) return;
+      setState(() => _activeOffer = offer);
+    });
+
+    _deliveryNotificationSubscription?.cancel();
+    _deliveryNotificationSubscription =
+        RealtimeService.instance.onNotification.listen((payload) {
+      if (!mounted) return;
+      if (payload['type'] != 'delivery_race_lost') return;
+      final orderId = payload['orderId'] as String?;
+      if (orderId == null || _activeOffer?.order.id != orderId) return;
+      setState(() => _activeOffer = null);
+    });
+  }
+
+  void _dismissActiveOffer() {
+    if (_activeOffer == null) return;
+    setState(() => _activeOffer = null);
   }
 
   Future<void> _syncDeliveryModerationStatus() async {
@@ -285,6 +292,13 @@ class _HomeScreenState extends State<HomeScreen> {
         appState.setDeliveryModerationStatus(nextStatus);
       }
 
+      if (appState.isDeliveryPilot &&
+          appState.deliveryModerationStatus != DeliveryModerationStatus.approved &&
+          _activeOffer != null &&
+          mounted) {
+        setState(() => _activeOffer = null);
+      }
+
       await OnboardingService.setLastKnownDeliveryRegStatus(
         rawStatus.isEmpty ? null : rawStatus,
       );
@@ -298,6 +312,8 @@ class _HomeScreenState extends State<HomeScreen> {
     RealtimeService.instance.setNavigationMode(false);
     _positionSubscription?.cancel();
     _deliveryStatusSubscription?.cancel();
+    _deliveryOfferSubscription?.cancel();
+    _deliveryNotificationSubscription?.cancel();
     _realtimePartnerReloadDebounce?.cancel();
     super.dispose();
   }
@@ -747,7 +763,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = Provider.of<AppStateProvider>(context, listen: false).user;
     if (user == null) return;
 
-    setState(() => _pipcarOrder = null);
+    setState(() => _activeOffer = null);
     try {
       await TripNavigationLauncher.acceptAndOpen(
         context,
@@ -883,14 +899,17 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
 
         // 5. Modal pipcar (corrida disponível) – centro
-        if (_pipcarOrder != null)
+        if (_activeOffer != null)
           Positioned.fill(
             child: Container(
               color: Colors.black38,
               child: DeliveryPipcarModal(
-                order: _pipcarOrder!,
-                onAccept: () => _acceptPipcar(_pipcarOrder!),
-                onReject: () => setState(() => _pipcarOrder = null),
+                order: _activeOffer!.order,
+                distanceToStoreKm: _activeOffer!.distanceToStoreKm,
+                routeDistanceKm: _activeOffer!.routeDistanceKm,
+                countdownSeconds: _activeOffer!.expiresInSeconds,
+                onAccept: () => _acceptPipcar(_activeOffer!.order),
+                onReject: _dismissActiveOffer,
               ),
             ),
           ),

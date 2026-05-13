@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'package:flutter/foundation.dart';
+import '../models/delivery_offer_payload.dart';
 import 'api_service.dart';
 import 'notification_service.dart';
 
@@ -49,6 +51,8 @@ class RealtimeService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _riderLocationController =
       StreamController<RiderLocationPayload>.broadcast();
+  final _deliveryOfferController =
+      StreamController<DeliveryOfferPayload>.broadcast();
 
   Stream<ChatMessagePayload> get onChatMessage => _chatMessageController.stream;
   Stream<Map<String, dynamic>> get onNotification =>
@@ -57,6 +61,8 @@ class RealtimeService {
       _deliveryStatusController.stream;
   Stream<RiderLocationPayload> get onRiderLocationUpdate =>
       _riderLocationController.stream;
+  Stream<DeliveryOfferPayload> get onDeliveryNewOrderOffer =>
+      _deliveryOfferController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -162,6 +168,34 @@ class RealtimeService {
     _socket!.on('delivery:update', (data) {
       if (data is Map) {
         _deliveryStatusController.add(Map<String, dynamic>.from(data));
+      }
+    });
+    _socket!.on('delivery:new_order_offer', (data) {
+      if (data is! Map) return;
+      final map = Map<String, dynamic>.from(data);
+      final orderRaw = map['order'];
+      if (orderRaw is! Map) return;
+      try {
+        final order = ApiService.riderDeliveryOrderFromJson(
+          Map<String, dynamic>.from(orderRaw),
+        );
+        final expires = map['expiresInSeconds'];
+        final distanceToStore = map['distanceToStoreKm'];
+        final routeDistance = map['routeDistanceKm'];
+        _deliveryOfferController.add(
+          DeliveryOfferPayload(
+            order: order,
+            expiresInSeconds: expires is num ? expires.toInt() : 15,
+            distanceToStoreKm: distanceToStore is num
+                ? distanceToStore.toDouble()
+                : double.tryParse('$distanceToStore'),
+            routeDistanceKm: routeDistance is num
+                ? routeDistance.toDouble()
+                : double.tryParse('$routeDistance'),
+          ),
+        );
+      } catch (e) {
+        debugPrint('delivery:new_order_offer parse: $e');
       }
     });
     _socket!.on('rider:location:update', (data) {
@@ -287,5 +321,6 @@ class RealtimeService {
     _notificationController.close();
     _deliveryStatusController.close();
     _riderLocationController.close();
+    _deliveryOfferController.close();
   }
 }

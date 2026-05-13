@@ -1,25 +1,67 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+
 import '../models/delivery_order.dart';
 import '../utils/colors.dart';
 
-/// Modal flutuante no centro da tela quando uma corrida "pipcar" (nova entrega disponível).
-class DeliveryPipcarModal extends StatelessWidget {
-  final DeliveryOrder order;
-  final VoidCallback onAccept;
-  final VoidCallback onReject;
-
+/// Oferta imersiva de corrida com contagem regressiva.
+class DeliveryPipcarModal extends StatefulWidget {
   const DeliveryPipcarModal({
     super.key,
     required this.order,
     required this.onAccept,
     required this.onReject,
+    this.countdownSeconds = 15,
+    this.distanceToStoreKm,
+    this.routeDistanceKm,
   });
+
+  final DeliveryOrder order;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+  final int countdownSeconds;
+  final double? distanceToStoreKm;
+  final double? routeDistanceKm;
+
+  @override
+  State<DeliveryPipcarModal> createState() => _DeliveryPipcarModalState();
+}
+
+class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
+  late int _secondsLeft;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _secondsLeft = widget.countdownSeconds;
+    unawaited(SystemSound.play(SystemSoundType.alert));
+    HapticFeedback.heavyImpact();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (_secondsLeft <= 1) {
+        timer.cancel();
+        widget.onReject();
+        return;
+      }
+      setState(() => _secondsLeft -= 1);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final progress = _secondsLeft / widget.countdownSeconds;
 
     return Center(
       child: Padding(
@@ -40,14 +82,14 @@ class DeliveryPipcarModal extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: AppColors.racingOrange.withOpacity(0.3),
+                color: AppColors.racingOrange.withValues(alpha: 0.35),
                 width: 1.5,
               ),
               boxShadow: AppColors.raisedPanelShadows(isDark),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
@@ -58,14 +100,14 @@ class DeliveryPipcarModal extends StatelessWidget {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            AppColors.racingOrangeLight.withOpacity(0.95),
-                            AppColors.racingOrangeDark.withOpacity(0.92),
+                            AppColors.racingOrangeLight.withValues(alpha: 0.95),
+                            AppColors.racingOrangeDark.withValues(alpha: 0.92),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: AppColors.insetPanelShadows(isDark),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         LucideIcons.package,
                         color: Colors.white,
                         size: 28,
@@ -85,7 +127,7 @@ class DeliveryPipcarModal extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            order.storeName,
+                            widget.order.storeName,
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
@@ -94,17 +136,19 @@ class DeliveryPipcarModal extends StatelessWidget {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.45),
+                        color: Colors.black.withValues(alpha: 0.45),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: AppColors.neonGreen.withOpacity(0.35),
-                          width: 1,
+                          color: AppColors.neonGreen.withValues(alpha: 0.35),
                         ),
                       ),
                       child: Text(
-                        'R\$ ${order.totalValue.toStringAsFixed(2)}',
+                        'R\$ ${widget.order.deliveryFee.toStringAsFixed(2)}',
                         style: const TextStyle(
                           color: AppColors.neonGreen,
                           fontSize: 20,
@@ -114,7 +158,26 @@ class DeliveryPipcarModal extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 6,
+                    backgroundColor: Colors.black.withValues(alpha: 0.18),
+                    color: AppColors.racingOrange,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Tempo para responder: ${_secondsLeft}s',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.racingOrange,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -125,18 +188,39 @@ class DeliveryPipcarModal extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _row(theme, LucideIcons.mapPin, 'Entrega', order.deliveryAddress),
-                      if (order.recipientName != null) ...[
+                      _row(
+                        theme,
+                        LucideIcons.mapPin,
+                        'Entrega',
+                        widget.order.deliveryAddress,
+                      ),
+                      if (widget.order.recipientName != null) ...[
                         const SizedBox(height: 8),
-                        _row(theme, LucideIcons.user, 'Destinatário', order.recipientName!),
+                        _row(
+                          theme,
+                          LucideIcons.user,
+                          'Destinatário',
+                          widget.order.recipientName!,
+                        ),
                       ],
                       const SizedBox(height: 8),
                       _row(
                         theme,
-                        LucideIcons.mapPin,
-                        'Distância',
-                        '${order.totalDistance.toStringAsFixed(1)} km',
+                        LucideIcons.navigation,
+                        'Distância até a loja',
+                        widget.distanceToStoreKm != null
+                            ? '${widget.distanceToStoreKm!.toStringAsFixed(1)} km'
+                            : '${widget.order.totalDistance.toStringAsFixed(1)} km',
                       ),
+                      if (widget.routeDistanceKm != null) ...[
+                        const SizedBox(height: 8),
+                        _row(
+                          theme,
+                          LucideIcons.map,
+                          'Rota loja-cliente',
+                          '${widget.routeDistanceKm!.toStringAsFixed(1)} km',
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -145,9 +229,7 @@ class DeliveryPipcarModal extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () {
-                          onReject();
-                        },
+                        onPressed: widget.onReject,
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           side: BorderSide(color: theme.dividerColor),
@@ -162,9 +244,7 @@ class DeliveryPipcarModal extends StatelessWidget {
                     Expanded(
                       flex: 2,
                       child: ElevatedButton(
-                        onPressed: () {
-                          onAccept();
-                        },
+                        onPressed: widget.onAccept,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.racingOrangeDark,
                           foregroundColor: Colors.white,
@@ -172,17 +252,16 @@ class DeliveryPipcarModal extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                             side: BorderSide(
-                              color: Colors.white.withOpacity(0.2),
-                              width: 1,
+                              color: Colors.white.withValues(alpha: 0.2),
                             ),
                           ),
                           elevation: 0,
                         ),
-                        child: Row(
+                        child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(LucideIcons.check, size: 20),
-                            const SizedBox(width: 8),
+                            Icon(LucideIcons.check, size: 20),
+                            SizedBox(width: 8),
                             Text(
                               'Aceitar',
                               style: TextStyle(
@@ -217,7 +296,7 @@ class DeliveryPipcarModal extends StatelessWidget {
               Text(
                 label,
                 style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
                 ),
               ),
               const SizedBox(height: 2),
