@@ -1,4 +1,6 @@
 // 1) Copie para MapboxKeys.xcconfig (na pasta ios/):  cp MapboxKeys.xcconfig.example MapboxKeys.xcconfig
 // 2) Substitua o valor por um token publico pk. de https://account.mapbox.com/access-tokens/
+// 3) Opcional: estilos Mapbox Studio (mapbox://styles/<usuario>/<style-id>)
+//    via --dart-define=MAPBOX_STYLE_DAY=... e MAPBOX_STYLE_NIGHT=... no flutter run/build
 // MapboxKeys.xcconfig esta no .gitignore e e incluido por Debug/Release/Profile.xcconfig.
 MAPBOX_ACCESS_TOKEN=pk.SUBSTITUA_PELO_SEU_TOKEN_PUBLICO_MAPBOX

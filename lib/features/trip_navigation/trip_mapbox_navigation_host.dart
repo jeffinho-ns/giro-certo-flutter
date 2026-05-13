@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/giro_mapbox_navigation_theme.dart';
 import 'delivery_trip_controller.dart';
+import 'trip_navigation_performance.dart';
 import 'widgets/trip_navigation_hud.dart';
 
 /// Mapbox em tela cheia para o experimento: uma única platform view por sessão.
@@ -15,9 +16,11 @@ class TripMapboxNavigationHost extends StatefulWidget {
   const TripMapboxNavigationHost({
     super.key,
     required this.controller,
+    this.performance,
   });
 
   final DeliveryTripController controller;
+  final TripNavigationPerformance? performance;
 
   @override
   State<TripMapboxNavigationHost> createState() =>
@@ -38,6 +41,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
   bool _lastGuidanceActive = false;
   ThemeProvider? _themeProvider;
   bool? _lastIsDark;
+  EdgeInsets? _lastViewportPadding;
 
   DeliveryTripController get _trip => widget.controller;
 
@@ -77,12 +81,22 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
     _syncMapAppearance();
   }
 
-  void _syncMapAppearance() {
+  void _syncMapAppearance({EdgeInsets? viewportPadding}) {
     final isDark = _themeProvider?.isDarkMode ??
         Theme.of(context).brightness == Brightness.dark;
-    if (_lastIsDark == isDark) return;
+    final themeChanged = _lastIsDark != isDark;
+    final paddingChanged = viewportPadding != null &&
+        viewportPadding != _lastViewportPadding;
+    if (!themeChanged && !paddingChanged) return;
     _lastIsDark = isDark;
-    GiroMapboxNavigationTheme.apply(_options, isDarkMode: isDark);
+    if (viewportPadding != null) {
+      _lastViewportPadding = viewportPadding;
+    }
+    GiroMapboxNavigationTheme.apply(
+      _options,
+      isDarkMode: isDark,
+      viewportPadding: viewportPadding ?? _lastViewportPadding,
+    );
     MapBoxNavigation.instance.setDefaultOptions(_options);
   }
 
@@ -159,6 +173,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
         }
         break;
       case MapBoxEvent.route_building:
+        widget.performance?.markRouteBuildStarted();
         if (mounted) {
           setState(() {
             _buildingRoute = true;
@@ -167,6 +182,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
         }
         break;
       case MapBoxEvent.route_built:
+        widget.performance?.markRouteBuilt();
         if (mounted) {
           setState(() {
             _buildingRoute = false;
@@ -201,6 +217,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
         }
         break;
       case MapBoxEvent.navigation_running:
+        widget.performance?.markNavigationRunning();
         if (mounted) setState(() => _starting = false);
         break;
       case MapBoxEvent.navigation_finished:
@@ -280,6 +297,13 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
     final topInset = MediaQuery.of(context).padding.top;
     const nativeControlsWidth = 80.0;
     const nativeControlsHeight = 56.0;
+    final viewportPadding = EdgeInsets.fromLTRB(
+      12,
+      topInset + nativeControlsHeight + 120,
+      nativeControlsWidth + 12,
+      220,
+    );
+    _syncMapAppearance(viewportPadding: viewportPadding);
 
     return Stack(
       fit: StackFit.expand,
@@ -290,6 +314,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
           onCreated: (controller) async {
             _mapController = controller;
             _trip.mapboxController = controller;
+            widget.performance?.markMapViewReady();
             await Future<void>.delayed(const Duration(milliseconds: 120));
             if (!mounted) return;
             if (_trip.navigationGuidanceActive) {

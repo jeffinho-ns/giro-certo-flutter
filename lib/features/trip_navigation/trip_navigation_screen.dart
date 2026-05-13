@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +11,9 @@ import '../../utils/colors.dart';
 import 'delivery_trip_controller.dart';
 import 'trip_mapbox_navigation_host.dart';
 import 'trip_navigation_experiment.dart';
+import 'trip_navigation_immersive_scope.dart';
+import 'trip_navigation_performance.dart';
+import 'widgets/trip_navigation_perf_overlay.dart';
 import 'widgets/trip_stage_action_sheet.dart';
 
 /// Modo Corrida dedicado: Mapbox em tela cheia + HUD e acoes do Giro Certo.
@@ -29,6 +33,8 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
   final GlobalKey<TripMapboxNavigationHostState> _mapHostKey =
       GlobalKey<TripMapboxNavigationHostState>();
   late final DeliveryTripController _controller;
+  final TripNavigationPerformance _performance = TripNavigationPerformance();
+  TimingsCallback? _frameTimingsCallback;
 
   @override
   void initState() {
@@ -36,10 +42,22 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
     TripNavigationExperiment.activeSessionOpen = true;
     _controller = DeliveryTripController(initialOrder: widget.initialOrder);
     _controller.startLocationTracking();
+    _frameTimingsCallback = (List<FrameTiming> timings) {
+      for (final timing in timings) {
+        _performance.recordSlowFrame(
+          timing.totalSpan.inMicroseconds / 1000,
+        );
+      }
+    };
+    SchedulerBinding.instance.addTimingsCallback(_frameTimingsCallback!);
   }
 
   @override
   void dispose() {
+    if (_frameTimingsCallback != null) {
+      SchedulerBinding.instance.removeTimingsCallback(_frameTimingsCallback!);
+    }
+    _performance.logSummary(orderId: _controller.order.id);
     TripNavigationExperiment.activeSessionOpen = false;
     _controller.dispose();
     super.dispose();
@@ -108,69 +126,75 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<DeliveryTripController>.value(
-      value: _controller,
-      child: Scaffold(
-        backgroundColor: context.watch<ThemeProvider>().isDarkMode
-            ? AppColors.darkBackground
-            : AppColors.lightBackground,
-        body: Consumer<DeliveryTripController>(
-          builder: (context, trip, _) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                TripMapboxNavigationHost(
-                  key: _mapHostKey,
-                  controller: trip,
-                ),
-                Positioned(
-                  right: 16,
-                  bottom: 188,
-                  child: SafeArea(
-                    top: false,
-                    child: _RecenterFab(
-                      onPressed: () {
-                        unawaited(
-                          _mapHostKey.currentState?.recenterNavigation(),
-                        );
-                      },
-                    ),
+    return TripNavigationImmersiveScope(
+      child: ChangeNotifierProvider<DeliveryTripController>.value(
+        value: _controller,
+        child: Scaffold(
+          extendBody: true,
+          extendBodyBehindAppBar: true,
+          backgroundColor: context.watch<ThemeProvider>().isDarkMode
+              ? AppColors.darkBackground
+              : AppColors.lightBackground,
+          body: Consumer<DeliveryTripController>(
+            builder: (context, trip, _) {
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  TripMapboxNavigationHost(
+                    key: _mapHostKey,
+                    controller: trip,
+                    performance: _performance,
                   ),
-                ),
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: 16,
-                  child: SafeArea(
-                    top: false,
-                    child: TripStageActionSheet(
-                      trip: trip,
-                      onArrivedAtStore: trip.confirmArrivalAtStore,
-                      onCollectAndStart: _onCollectAndStart,
-                      onCompleteDelivery: _onComplete,
-                    ),
-                  ),
-                ),
-                if (trip.errorMessage != null)
+                  TripNavigationPerfOverlay(performance: _performance),
                   Positioned(
-                    left: 16,
                     right: 16,
-                    top: MediaQuery.of(context).padding.top + 8,
-                    child: Material(
-                      color: AppColors.alertRed,
-                      borderRadius: BorderRadius.circular(10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          trip.errorMessage!,
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                    bottom: 188,
+                    child: SafeArea(
+                      top: false,
+                      child: _RecenterFab(
+                        onPressed: () {
+                          unawaited(
+                            _mapHostKey.currentState?.recenterNavigation(),
+                          );
+                        },
                       ),
                     ),
                   ),
-              ],
-            );
-          },
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: SafeArea(
+                      top: false,
+                      child: TripStageActionSheet(
+                        trip: trip,
+                        onArrivedAtStore: trip.confirmArrivalAtStore,
+                        onCollectAndStart: _onCollectAndStart,
+                        onCompleteDelivery: _onComplete,
+                      ),
+                    ),
+                  ),
+                  if (trip.errorMessage != null)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      top: MediaQuery.of(context).padding.top + 8,
+                      child: Material(
+                        color: AppColors.alertRed,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            trip.errorMessage!,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
