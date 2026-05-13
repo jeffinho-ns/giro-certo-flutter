@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_mbtiles/flutter_map_mbtiles.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../services/api_service.dart';
-import '../../services/offline_map_service.dart';
 import '../../services/realtime_service.dart';
 import '../../models/delivery_order.dart';
 import '../../utils/colors.dart';
@@ -27,10 +24,9 @@ class PartnerHomeScreen extends StatefulWidget {
 }
 
 class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
-  final MapController _mapController = MapController();
+  GoogleMapController? _mapController;
   bool _isLoading = false;
   bool _hasLoadedOnce = false;
-  String? _offlineMbtilesPath;
   List<DeliveryOrder> _activeOrders = [];
   List<DeliveryOrder> _pendingOrders = [];
   int _totalOrders = 0;
@@ -108,24 +104,11 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
         }
       });
       _hasLoadedOnce = true;
-      await _resolveOfflineMapForUser(user.currentLat, user.currentLng);
     } catch (_) {
       if (mounted && showBlockingLoader) {
         setState(() => _isLoading = false);
       }
     }
-  }
-
-  Future<void> _resolveOfflineMapForUser(double? lat, double? lng) async {
-    if (lat == null || lng == null) return;
-    try {
-      final local = await OfflineMapService.resolveBestLocalMapForPosition(
-        latitude: lat,
-        longitude: lng,
-      );
-      if (!mounted) return;
-      setState(() => _offlineMbtilesPath = local?.localPath);
-    } catch (_) {}
   }
 
   @override
@@ -153,15 +136,12 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     final user = appState.user;
     final userLat = user?.currentLat ?? -23.5505;
     final userLng = user?.currentLng ?? -46.6333;
-    final mapMarkers = <Marker>[
+    final mapMarkers = <Marker>{
       Marker(
-        width: 42,
-        height: 42,
-        point: LatLng(userLat, userLng),
-        child: const Icon(
-          LucideIcons.store,
-          color: AppColors.racingOrange,
-          size: 26,
+        markerId: const MarkerId('partner_store'),
+        position: LatLng(userLat, userLng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          BitmapDescriptor.hueOrange,
         ),
       ),
       ..._activeOrders
@@ -169,21 +149,18 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
           .take(20)
           .map(
             (o) => Marker(
-              width: 38,
-              height: 38,
-              point: LatLng(o.deliveryLatitude, o.deliveryLongitude),
-              child: Tooltip(
-                message:
-                    '${o.recipientName ?? 'Destino'} • ${o.internalCode ?? o.id.substring(0, 8)}',
-                child: const Icon(
-                  LucideIcons.mapPin,
-                  color: AppColors.neonGreen,
-                  size: 24,
-                ),
+              markerId: MarkerId('partner_delivery_${o.id}'),
+              position: LatLng(o.deliveryLatitude, o.deliveryLongitude),
+              infoWindow: InfoWindow(
+                title: o.recipientName ?? 'Destino',
+                snippet: o.internalCode ?? o.id.substring(0, 8),
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueGreen,
               ),
             ),
           ),
-    ];
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,31 +173,16 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
             boxShadow: AppColors.raisedPanelShadows(isDark),
           ),
           clipBehavior: Clip.antiAlias,
-          child: FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: LatLng(userLat, userLng),
-              initialZoom: 14,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.pinchZoom |
-                    InteractiveFlag.drag |
-                    InteractiveFlag.doubleTapZoom,
-              ),
+          child: GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: LatLng(userLat, userLng),
+              zoom: 14,
             ),
-            children: [
-              if (_offlineMbtilesPath != null)
-                TileLayer(
-                  tileProvider: MbTilesTileProvider.fromPath(
-                    path: _offlineMbtilesPath!,
-                  ),
-                )
-              else
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.giro_certo',
-                ),
-              MarkerLayer(markers: mapMarkers),
-            ],
+            onMapCreated: (controller) => _mapController = controller,
+            mapType: MapType.normal,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            markers: mapMarkers,
           ),
         ),
         const SizedBox(height: 20),

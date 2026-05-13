@@ -2,8 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../models/delivery_order.dart';
 import '../../models/partner.dart';
@@ -36,7 +35,7 @@ enum ZoneTimeWindow { now, lunchPeak, eveningPeak }
 class _DeliveryScreenState extends State<DeliveryScreen>
     with TickerProviderStateMixin {
   TabController? _tabController;
-  final MapController _mapController = MapController();
+  GoogleMapController? _mapController;
   Timer? _marketPulseTimer;
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<Map<String, dynamic>>? _deliveryRealtimeSubscription;
@@ -96,7 +95,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     _deliveryRealtimeSubscription?.cancel();
     _realtimeReloadDebounce?.cancel();
     _tabController?.dispose();
-    _mapController.dispose();
+    _mapController?.dispose();
     super.dispose();
   }
 
@@ -126,25 +125,19 @@ class _DeliveryScreenState extends State<DeliveryScreen>
           accuracy: LocationAccuracy.high,
           distanceFilter: 3,
         ),
-      ).listen((pos) async {
+      ).listen((pos) {
         if (!mounted) return;
         setState(() {
           _userLatitude = pos.latitude;
           _userLongitude = pos.longitude;
         });
-        try {
-          await ApiService.updateUserLocation(
-            latitude: pos.latitude,
-            longitude: pos.longitude,
-          );
-          final activeOrder = _myOrders.isNotEmpty ? _myOrders.first : null;
-          RealtimeService.instance.emitRiderLocationThrottled(
-            lat: pos.latitude,
-            lng: pos.longitude,
-            orderId: activeOrder?.id,
-            orderStatus: activeOrder?.status.name,
-          );
-        } catch (_) {}
+        final activeOrder = _myOrders.isNotEmpty ? _myOrders.first : null;
+        RealtimeService.instance.emitRiderLocationThrottled(
+          lat: pos.latitude,
+          lng: pos.longitude,
+          orderId: activeOrder?.id,
+          orderStatus: activeOrder?.status.name,
+        );
       });
     } catch (_) {}
   }
@@ -683,6 +676,69 @@ class _DeliveryScreenState extends State<DeliveryScreen>
       ThemeData theme, List<DeliveryOrder> orders, Color primaryColor) {
     final userLocation = LatLng(_userLatitude, _userLongitude);
     final hotZones = _buildHotZones(orders, _partners);
+    final markers = <Marker>{
+      Marker(
+        markerId: const MarkerId('user_location'),
+        position: userLocation,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        infoWindow: const InfoWindow(title: 'Sua localização'),
+      ),
+      ...hotZones.map((zone) {
+        final zonePoint =
+            LatLng(zone['latitude'] as double, zone['longitude'] as double);
+        final label = zone['label'] as String;
+        return Marker(
+          markerId: MarkerId('hot_zone_$label'),
+          position: zonePoint,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+          infoWindow: InfoWindow(title: 'Zona quente', snippet: label),
+        );
+      }),
+      ...(_showOrderPins ? orders : <DeliveryOrder>[]).expand((order) => [
+            Marker(
+              markerId: MarkerId('order_store_${order.id}'),
+              position: LatLng(order.storeLatitude, order.storeLongitude),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueOrange,
+              ),
+              onTap: () => _showOrderDetail(order),
+              infoWindow: InfoWindow(
+                title: 'Loja',
+                snippet: order.storeName,
+              ),
+            ),
+            Marker(
+              markerId: MarkerId('order_delivery_${order.id}'),
+              position: LatLng(order.deliveryLatitude, order.deliveryLongitude),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueGreen,
+              ),
+              onTap: () => _showOrderDetail(order),
+              infoWindow: InfoWindow(
+                title: 'Entrega',
+                snippet: order.deliveryAddress,
+              ),
+            ),
+          ]),
+      ...(_showPartnerPins ? _partners : <Partner>[]).map(
+        (partner) => Marker(
+          markerId: MarkerId('partner_${partner.id}'),
+          position: LatLng(partner.latitude, partner.longitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            partner.type == PartnerType.store
+                ? BitmapDescriptor.hueOrange
+                : BitmapDescriptor.hueCyan,
+          ),
+          onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${partner.name} • ${partner.address}'),
+              duration: const Duration(seconds: 2),
+            ),
+          ),
+          infoWindow: InfoWindow(title: partner.name),
+        ),
+      ),
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -691,203 +747,17 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         Expanded(
           child: Stack(
             children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: userLocation,
-                  initialZoom: 13.0,
-                  minZoom: 10.0,
-                  maxZoom: 18.0,
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.all,
-                  ),
+              GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: userLocation,
+                  zoom: 13.0,
                 ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.girocerto.app',
-                    maxZoom: 19,
-                  ),
-                  MarkerLayer(
-                    markers: [
-                      // Localização do usuário
-                      Marker(
-                        point: userLocation,
-                        width: 40,
-                        height: 40,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.blue.withOpacity(0.5),
-                                blurRadius: 12,
-                                spreadRadius: 3,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            LucideIcons.mapPin,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-
-                      // Zonas quentes (mapa de calor)
-                      ...hotZones.map((zone) {
-                        final zonePoint = LatLng(zone['latitude'] as double,
-                            zone['longitude'] as double);
-                        final level = zone['level'] as int;
-                        final label = zone['label'] as String;
-                        final size =
-                            34.0 + (level * 5.0); // Tamanho baseado no score
-
-                        return Marker(
-                          point: zonePoint,
-                          width: size,
-                          height: size,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: primaryColor.withOpacity(0.6),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: primaryColor,
-                                width: 2,
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                label,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-
-                      // Marcadores de pedidos pendentes
-                      ...(_showOrderPins ? orders : <DeliveryOrder>[])
-                          .map((order) {
-                        final storePoint =
-                            LatLng(order.storeLatitude, order.storeLongitude);
-                        final deliveryPoint = LatLng(
-                            order.deliveryLatitude, order.deliveryLongitude);
-
-                        return [
-                          // Loja - apenas ícone para evitar overflow
-                          Marker(
-                            point: storePoint,
-                            width: 40,
-                            height: 40,
-                            child: GestureDetector(
-                              onTap: () => _showOrderDetail(order),
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: primaryColor,
-                                  shape: BoxShape.circle,
-                                  border:
-                                      Border.all(color: Colors.white, width: 3),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: primaryColor.withOpacity(0.5),
-                                      blurRadius: 12,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  LucideIcons.store,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Entrega
-                          Marker(
-                            point: deliveryPoint,
-                            width: 50,
-                            height: 50,
-                            child: GestureDetector(
-                              onTap: () => _showOrderDetail(order),
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppColors.neonGreen,
-                                  shape: BoxShape.circle,
-                                  border:
-                                      Border.all(color: Colors.white, width: 3),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color:
-                                          AppColors.neonGreen.withOpacity(0.5),
-                                      blurRadius: 12,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  LucideIcons.mapPin,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ];
-                      }).expand((markers) => markers),
-                      ...(_showPartnerPins ? _partners : <Partner>[])
-                          .map((partner) {
-                        final point =
-                            LatLng(partner.latitude, partner.longitude);
-                        return Marker(
-                          point: point,
-                          width: 36,
-                          height: 36,
-                          child: GestureDetector(
-                            onTap: () =>
-                                ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '${partner.name} • ${partner.address}',
-                                ),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            ),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: partner.type == PartnerType.store
-                                    ? Colors.deepOrange
-                                    : AppColors.neonGreen,
-                                shape: BoxShape.circle,
-                                border:
-                                    Border.all(color: Colors.white, width: 2),
-                              ),
-                              child: Icon(
-                                partner.type == PartnerType.store
-                                    ? LucideIcons.store
-                                    : LucideIcons.wrench,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ],
+                onMapCreated: (controller) => _mapController = controller,
+                mapType: MapType.normal,
+                markers: markers,
+                myLocationEnabled: true,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
               ),
               Positioned(
                 right: 10,

@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_mbtiles/flutter_map_mbtiles.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../models/partner.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../services/api_service.dart';
-import '../../services/offline_map_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import 'partner_detail_modal.dart';
@@ -31,8 +28,7 @@ class _PartnersScreenState extends State<PartnersScreen>
     'Melhor Avaliação'
   ];
   late TabController _tabController;
-  final MapController _mapController = MapController();
-  String? _offlineMbtilesPath;
+  GoogleMapController? _mapController;
   bool _isLoading = false;
   String? _loadError;
   List<Partner> _partners = [];
@@ -58,14 +54,9 @@ class _PartnersScreenState extends State<PartnersScreen>
     });
     try {
       final partners = await ApiService.getPartners();
-      final offline = await OfflineMapService.resolveBestLocalMapForPosition(
-        latitude: _userLatitude,
-        longitude: _userLongitude,
-      );
       if (!mounted) return;
       setState(() {
         _partners = partners;
-        _offlineMbtilesPath = offline?.localPath;
         _isLoading = false;
       });
     } catch (e) {
@@ -109,31 +100,29 @@ class _PartnersScreenState extends State<PartnersScreen>
     return list;
   }
 
-  List<Marker> _buildMarkers(List<Partner> partners) {
-    final markers = <Marker>[
+  Set<Marker> _buildMarkers(List<Partner> partners) {
+    final markers = <Marker>{
       Marker(
-        point: LatLng(_userLatitude, _userLongitude),
-        width: 36,
-        height: 36,
-        child: const Icon(LucideIcons.navigation, color: Colors.blue, size: 22),
+        markerId: const MarkerId('partners_user'),
+        position: LatLng(_userLatitude, _userLongitude),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
       )
-    ];
+    };
 
     for (final p in partners) {
       markers.add(
         Marker(
-          point: LatLng(p.latitude, p.longitude),
-          width: 36,
-          height: 36,
-          child: GestureDetector(
-            onTap: () => setState(() => _selectedPartner = p),
-            child: Icon(
-              p.type == PartnerType.store ? LucideIcons.store : LucideIcons.wrench,
-              color: p.type == PartnerType.store
-                  ? AppColors.racingOrange
-                  : AppColors.neonGreen,
-              size: 22,
-            ),
+          markerId: MarkerId('partner_${p.id}'),
+          position: LatLng(p.latitude, p.longitude),
+          onTap: () => setState(() => _selectedPartner = p),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            p.type == PartnerType.store
+                ? BitmapDescriptor.hueOrange
+                : BitmapDescriptor.hueGreen,
+          ),
+          infoWindow: InfoWindow(
+            title: p.name,
+            snippet: p.address,
           ),
         ),
       );
@@ -142,24 +131,30 @@ class _PartnersScreenState extends State<PartnersScreen>
     return markers;
   }
 
-  List<Polyline> _buildRouteLine() {
+  Set<Polyline> _buildRouteLine() {
     final selected = _selectedPartner;
-    if (selected == null) return [];
-    return [
+    if (selected == null) return {};
+    return {
       Polyline(
+        polylineId: const PolylineId('partner_route'),
         points: [
           LatLng(_userLatitude, _userLongitude),
           LatLng(selected.latitude, selected.longitude),
         ],
         color: AppColors.racingOrange,
-        strokeWidth: 4,
+        width: 4,
       )
-    ];
+    };
   }
 
   void _focusPartnerOnMap(Partner partner) {
     setState(() => _selectedPartner = partner);
-    _mapController.move(LatLng(partner.latitude, partner.longitude), 14.8);
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(
+        LatLng(partner.latitude, partner.longitude),
+        14.8,
+      ),
+    );
   }
 
   @override
@@ -282,27 +277,18 @@ class _PartnersScreenState extends State<PartnersScreen>
     return Column(
       children: [
         Expanded(
-          child: FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: LatLng(_userLatitude, _userLongitude),
-              initialZoom: 12.6,
+          child: GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: LatLng(_userLatitude, _userLongitude),
+              zoom: 12.6,
             ),
-            children: [
-              if (_offlineMbtilesPath != null)
-                TileLayer(
-                  tileProvider: MbTilesTileProvider.fromPath(
-                    path: _offlineMbtilesPath!,
-                  ),
-                )
-              else
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.giro_certo',
-                ),
-              PolylineLayer(polylines: _buildRouteLine()),
-              MarkerLayer(markers: _buildMarkers(partners)),
-            ],
+            onMapCreated: (controller) => _mapController = controller,
+            mapType: MapType.normal,
+            markers: _buildMarkers(partners),
+            polylines: _buildRouteLine(),
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
           ),
         ),
         Container(

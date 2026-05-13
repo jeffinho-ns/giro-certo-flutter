@@ -1272,11 +1272,14 @@ class ApiService {
     return '$origin${url.startsWith('/') ? url : '/$url'}';
   }
 
-  /// Atualizar localização do usuário
+  /// Atualiza `User.currentLat`/`currentLng` no servidor.
+  /// **Não** deve ser chamado a cada tick de GPS — apenas em marcos da corrida
+  /// ou quando for necessário sincronizar explicitamente a última posição.
   static Future<void> updateUserLocation({
     required double latitude,
     required double longitude,
     bool? isOnline,
+    bool? navigationActive,
   }) async {
     final pos = GeoCoordinatesBrazil.normalizeRoutingPair(latitude, longitude);
     final response = await http.put(
@@ -1286,6 +1289,7 @@ class ApiService {
         'latitude': pos.lat,
         'longitude': pos.lng,
         if (isOnline != null) 'isOnline': isOnline,
+        if (navigationActive != null) 'navigationActive': navigationActive,
       }),
     );
 

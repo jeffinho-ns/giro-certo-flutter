@@ -6,6 +6,20 @@ plugins {
 }
 
 // Lê GOOGLE_MAPS_API_KEY sem java.util.Properties (evita "Unresolved reference: util" no Kotlin DSL).
+/** Token público Mapbox (pk.) — também em `android/.../mapbox_access_token.xml` se preferir ficheiro. */
+val mapboxAccessToken = run {
+    val f = rootProject.file("local.properties")
+    if (!f.exists()) return@run ""
+    f.readLines().mapNotNull { line ->
+        val trimmed = line.trim()
+        if (trimmed.startsWith("MAPBOX_ACCESS_TOKEN=")) {
+            trimmed.substringAfter("=", "").trim().trim('"')
+        } else {
+            null
+        }
+    }.firstOrNull()
+}?.takeIf { it.isNotEmpty() } ?: (System.getenv("MAPBOX_ACCESS_TOKEN") ?: "")
+
 val googleMapsApiKey = run {
     val f = rootProject.file("local.properties")
     if (!f.exists()) return@run ""
@@ -44,6 +58,13 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
+        resValue(
+            "string",
+            "mapbox_access_token",
+            mapboxAccessToken.ifEmpty {
+                "CONFIGURE_MAPBOX_ACCESS_TOKEN_NO_LOCAL_PROPERTIES"
+            },
+        )
     }
 
     buildTypes {

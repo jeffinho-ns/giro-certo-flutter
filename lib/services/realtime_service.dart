@@ -38,9 +38,8 @@ class RealtimeService {
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
   int _lastRiderLocationEmitMs = 0;
-  static const int _riderLocationEmitMinMs = 8000;
-  static const int _riderLocationEmitNavMinMs = 1500;
-  bool _navigationMode = false;
+  /// Intervalo único (Torre de Controle): 4 s — evita flood no Node/Render.
+  static const int riderLocationEmitIntervalMs = 4000;
 
   final _chatMessageController =
       StreamController<ChatMessagePayload>.broadcast();
@@ -211,7 +210,8 @@ class RealtimeService {
     });
   }
 
-  /// Emite posição para a Torre de Controle (throttle ~8s). Espelha o PUT /users/me/location.
+  /// Emite posição para a Torre de Controle via Socket.io (throttle ~4 s).
+  /// A persistência no PostgreSQL é feita no servidor ao receber `rider:location`.
   void emitRiderLocationThrottled({
     required double lat,
     required double lng,
@@ -220,9 +220,7 @@ class RealtimeService {
   }) {
     if (_socket?.connected != true || _connectedUserId == null) return;
     final now = DateTime.now().millisecondsSinceEpoch;
-    final minMs =
-        _navigationMode ? _riderLocationEmitNavMinMs : _riderLocationEmitMinMs;
-    if (now - _lastRiderLocationEmitMs < minMs) return;
+    if (now - _lastRiderLocationEmitMs < riderLocationEmitIntervalMs) return;
     _lastRiderLocationEmitMs = now;
     _socket!.emit('rider:location', {
       'userId': _connectedUserId,
@@ -234,8 +232,28 @@ class RealtimeService {
     });
   }
 
+  /// Uma emissão imediata (ex.: após marco da corrida + PUT), sem esperar o intervalo normal.
+  void emitRiderLocationImmediate({
+    required double lat,
+    required double lng,
+    String? orderId,
+    String? orderStatus,
+  }) {
+    if (_socket?.connected != true || _connectedUserId == null) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _lastRiderLocationEmitMs = now;
+    _socket!.emit('rider:location', {
+      'userId': _connectedUserId,
+      'lat': lat,
+      'lng': lng,
+      if (orderId != null) 'orderId': orderId,
+      if (orderStatus != null) 'status': orderStatus,
+      'at': now,
+      'checkpoint': true,
+    });
+  }
+
   void setNavigationMode(bool enabled, {String? orderId}) {
-    _navigationMode = enabled;
     if (enabled && orderId != null && orderId.isNotEmpty) {
       joinOrderTracking(orderId);
     }

@@ -43,6 +43,8 @@
 	</array>
 	<key>io.flutter.embedded_views_preview</key>
 	<true/>
+	<key>MBXAccessToken</key>
+	<string>$(MAPBOX_ACCESS_TOKEN)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>O Giro Certo usa a sua localização para mostrar o mapa e corridas próximas.</string>
 	<key>NSFaceIDUsageDescription</key>

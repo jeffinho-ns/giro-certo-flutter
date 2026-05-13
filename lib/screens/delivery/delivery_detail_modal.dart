@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../models/delivery_order.dart';
 import '../../services/api_service.dart';
 import '../../utils/colors.dart';
@@ -186,112 +185,43 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: FlutterMap(
-                          options: MapOptions(
-                            initialCenter: storePoint,
-                            initialZoom: 14.0,
-                            interactionOptions: const InteractionOptions(
-                              flags: InteractiveFlag.all,
-                            ),
+                        child: GoogleMap(
+                          initialCameraPosition: CameraPosition(
+                            target: storePoint,
+                            zoom: 14.0,
                           ),
-                          children: [
-                            TileLayer(
-                              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                              userAgentPackageName: 'com.girocerto.app',
+                          mapType: MapType.normal,
+                          markers: {
+                            Marker(
+                              markerId: const MarkerId('store'),
+                              position: storePoint,
+                              infoWindow: const InfoWindow(title: 'Loja'),
+                              icon: BitmapDescriptor.defaultMarkerWithHue(
+                                BitmapDescriptor.hueOrange,
+                              ),
                             ),
-                            MarkerLayer(
-                              markers: [
-                                Marker(
-                                  point: storePoint,
-                                  width: 50,
-                                  height: 50,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.racingOrange,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 3),
-                                        ),
-                                        child: const Icon(
-                                          LucideIcons.store,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: theme.cardColor,
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          'Loja',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Marker(
-                                  point: deliveryPoint,
-                                  width: 50,
-                                  height: 50,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.neonGreen,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 3),
-                                        ),
-                                        child: const Icon(
-                                          LucideIcons.mapPin,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: theme.cardColor,
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          'Entrega',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                            Marker(
+                              markerId: const MarkerId('delivery'),
+                              position: deliveryPoint,
+                              infoWindow: const InfoWindow(title: 'Entrega'),
+                              icon: BitmapDescriptor.defaultMarkerWithHue(
+                                BitmapDescriptor.hueGreen,
+                              ),
                             ),
-                            if (_routeHistory.length >= 2)
-                              PolylineLayer(
-                                polylines: [
+                          },
+                          polylines: _routeHistory.length >= 2
+                              ? {
                                   Polyline(
+                                    polylineId:
+                                        const PolylineId('delivery_route_history'),
                                     points: _routeHistory,
                                     color: AppColors.racingOrange,
-                                    strokeWidth: 5,
+                                    width: 5,
                                   ),
-                                ],
-                              ),
-                          ],
+                                }
+                              : {},
+                          zoomControlsEnabled: false,
+                          myLocationButtonEnabled: false,
                         ),
                       ),
                     ),

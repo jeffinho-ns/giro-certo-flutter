@@ -49,6 +49,9 @@ app.*.map.json
 android/.gradle/
 android/local.properties
 
+# Mapbox iOS: copiar ios/MapboxKeys.xcconfig.example para ios/MapboxKeys.xcconfig
+ios/MapboxKeys.xcconfig
+
 # Generated files
 android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 

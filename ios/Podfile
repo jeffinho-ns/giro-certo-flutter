@@ -1,4 +1,10 @@
 # Uncomment this line to define a global platform for your project
+# Mapbox (flutter_mapbox_navigation): o pod MapboxNavigationNative descarrega de api.mapbox.com.
+# Se `pod install` falhar com curl 401, cria ~/.netrc com:
+#   machine api.mapbox.com
+#   login mapbox
+#   password SEU_TOKEN_SECRETO_COM_SCOPE_DOWNLOADS_READ
+# Ver: https://docs.mapbox.com/ios/maps/guides/install/#configure-credentials
 platform :ios, '14.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
