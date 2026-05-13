@@ -9,6 +9,7 @@ import '../models/partner.dart';
 import '../models/bike.dart';
 import '../models/vehicle_type.dart';
 import '../utils/geo_coordinates_brazil.dart';
+import '../utils/delivery_proof_pin.dart';
 
 class ApiService {
   // TODO: Configurar via variável de ambiente
@@ -748,14 +749,20 @@ class ApiService {
     return _deliveryOrderFromJson(orderJson).withoutInternalCode();
   }
 
-  /// Concluir corrida
-  static Future<DeliveryOrder> completeOrder(String orderId) async {
+  /// Concluir corrida com PIN de prova de entrega.
+  static Future<DeliveryOrder> completeOrder(
+    String orderId, {
+    required String deliveryPin,
+  }) async {
     final idempotencyKey = 'status:$orderId:completed:${DateTime.now().millisecondsSinceEpoch}';
     final response = await _requestWithRetry(
       (headers) => http.patch(
         Uri.parse('$baseUrl/delivery/$orderId/status'),
         headers: headers,
-        body: json.encode({'status': 'completed'}),
+        body: json.encode({
+          'status': 'completed',
+          'deliveryPin': DeliveryProofPin.normalize(deliveryPin),
+        }),
       ),
       extraHeaders: {'x-idempotency-key': idempotencyKey},
     );

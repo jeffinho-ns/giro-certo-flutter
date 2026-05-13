@@ -9,6 +9,7 @@ import '../../services/api_service.dart';
 import '../../services/navigation_route_cache_service.dart';
 import '../../services/realtime_service.dart';
 import '../../utils/delivery_geofence.dart';
+import '../../utils/delivery_proof_pin.dart';
 
 enum DeliveryTripPhase {
   headingToStore,
@@ -222,14 +223,22 @@ class DeliveryTripController extends ChangeNotifier {
     }
   }
 
-  Future<bool> completeDelivery() async {
+  Future<bool> completeDelivery(String deliveryPin) async {
     if (_isLoading) return false;
+    if (!DeliveryProofPin.isValidFormat(deliveryPin)) {
+      _errorMessage = 'Informe os 4 digitos do PIN do cliente.';
+      notifyListeners();
+      return false;
+    }
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
       await _syncLocationCheckpoint();
-      await ApiService.completeOrder(_order.id);
+      await ApiService.completeOrder(
+        _order.id,
+        deliveryPin: deliveryPin,
+      );
       await NavigationRouteCacheService.clear();
       RealtimeService.instance.setNavigationMode(false);
       RealtimeService.instance.leaveOrderTracking(_order.id);

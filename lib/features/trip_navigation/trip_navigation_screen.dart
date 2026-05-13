@@ -15,6 +15,7 @@ import 'trip_navigation_experiment.dart';
 import 'trip_navigation_immersive_scope.dart';
 import 'trip_navigation_performance.dart';
 import 'widgets/trip_navigation_perf_overlay.dart';
+import 'widgets/trip_delivery_proof_dialog.dart';
 import 'widgets/trip_pickup_code_dialog.dart';
 import 'widgets/trip_stage_action_sheet.dart';
 
@@ -96,7 +97,9 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
   }
 
   Future<void> _onComplete() async {
-    final ok = await _controller.completeDelivery();
+    final pin = await showTripDeliveryProofDialog(context);
+    if (pin == null || pin.isEmpty) return;
+    final ok = await _controller.completeDelivery(pin);
     if (!mounted || !ok) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Entrega finalizada.')),

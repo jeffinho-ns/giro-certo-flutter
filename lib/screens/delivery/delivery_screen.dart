@@ -12,7 +12,8 @@ import '../../services/realtime_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
-import '../../utils/delivery_constants.dart';
+import '../../features/trip_navigation/widgets/trip_delivery_proof_dialog.dart';
+import '../../utils/delivery_proof_pin.dart';
 import '../../utils/delivery_status_utils.dart';
 import '../../models/vehicle_type.dart';
 import '../../features/trip_navigation/trip_navigation_launcher.dart';
@@ -316,8 +317,14 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   }
 
   Future<void> _completeOrder(DeliveryOrder order) async {
+    final pin = await showTripDeliveryProofDialog(context);
+    if (pin == null || !DeliveryProofPin.isValidFormat(pin)) return;
+
     try {
-      final updatedOrder = await ApiService.completeOrder(order.id);
+      final updatedOrder = await ApiService.completeOrder(
+        order.id,
+        deliveryPin: pin,
+      );
 
       setState(() {
         _orders.removeWhere((o) => o.id == order.id);

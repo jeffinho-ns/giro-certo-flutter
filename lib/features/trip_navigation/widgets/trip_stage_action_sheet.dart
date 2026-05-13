@@ -108,7 +108,7 @@ class TripStageActionSheet extends StatelessWidget {
       case DeliveryTripPhase.waitingAtStore:
         return 'Pedido pronto? Solicite o codigo ao lojista e informe abaixo.';
       case DeliveryTripPhase.headingToClient:
-        return 'Finalize quando a entrega for concluida.';
+        return 'Solicite ao cliente os 4 ultimos digitos do telefone para concluir.';
     }
   }
 
