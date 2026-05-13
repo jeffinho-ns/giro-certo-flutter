@@ -9,8 +9,9 @@ import '../../utils/colors.dart';
 import 'delivery_trip_controller.dart';
 import 'trip_mapbox_navigation_host.dart';
 import 'trip_navigation_experiment.dart';
+import 'widgets/trip_stage_action_sheet.dart';
 
-/// Modo Corrida dedicado (experimento Fase 1): apenas Mapbox + HUD Giro Certo.
+/// Modo Corrida dedicado: Mapbox em tela cheia + HUD e acoes do Giro Certo.
 class TripNavigationScreen extends StatefulWidget {
   const TripNavigationScreen({
     super.key,
@@ -98,6 +99,9 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
   Future<void> _onComplete() async {
     final ok = await _controller.completeDelivery();
     if (!mounted || !ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Entrega finalizada.')),
+    );
     Navigator.of(context).pop(true);
   }
 
@@ -136,7 +140,7 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
                   bottom: 16,
                   child: SafeArea(
                     top: false,
-                    child: _TripStageActions(
+                    child: TripStageActionSheet(
                       trip: trip,
                       onArrivedAtStore: trip.confirmArrivalAtStore,
                       onCollectAndStart: _onCollectAndStart,
@@ -196,141 +200,6 @@ class _RecenterFab extends StatelessWidget {
             LucideIcons.crosshair,
             color: AppColors.neonGreen,
             size: 22,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TripStageActions extends StatelessWidget {
-  const _TripStageActions({
-    required this.trip,
-    required this.onArrivedAtStore,
-    required this.onCollectAndStart,
-    required this.onCompleteDelivery,
-  });
-
-  final DeliveryTripController trip;
-  final Future<void> Function() onArrivedAtStore;
-  final Future<void> Function() onCollectAndStart;
-  final Future<void> Function() onCompleteDelivery;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final order = trip.order;
-    final loading = trip.isLoading;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            isDark
-                ? AppColors.panelDarkHigh.withValues(alpha: 0.96)
-                : AppColors.panelLightHigh.withValues(alpha: 0.98),
-            isDark
-                ? AppColors.panelDarkLow.withValues(alpha: 0.93)
-                : AppColors.panelLightLow.withValues(alpha: 0.95),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.racingOrange.withValues(alpha: 0.28)),
-        boxShadow: AppColors.raisedPanelShadows(isDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            trip.stageTitle,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            trip.phase == DeliveryTripPhase.headingToClient
-                ? order.deliveryAddress
-                : order.storeAddress,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.8),
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (trip.phase == DeliveryTripPhase.headingToStore) ...[
-            const SizedBox(height: 10),
-            _primaryButton(
-              label: loading ? 'Atualizando...' : 'Cheguei no estabelecimento',
-              icon: LucideIcons.flag,
-              color: AppColors.racingOrangeDark,
-              loading: loading,
-              onPressed: loading ? null : onArrivedAtStore,
-            ),
-          ],
-          if (trip.phase == DeliveryTripPhase.waitingAtStore) ...[
-            const SizedBox(height: 10),
-            _primaryButton(
-              label: loading ? 'Atualizando...' : 'Coletar e iniciar entrega',
-              icon: LucideIcons.package,
-              color: AppColors.neonGreen,
-              loading: loading,
-              onPressed: loading ? null : onCollectAndStart,
-            ),
-          ],
-          if (trip.phase == DeliveryTripPhase.headingToClient) ...[
-            const SizedBox(height: 10),
-            _primaryButton(
-              label: loading ? 'Finalizando...' : 'Finalizar entrega',
-              icon: LucideIcons.checkCircle,
-              color: AppColors.neonGreen,
-              loading: loading,
-              onPressed: loading ? null : onCompleteDelivery,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _primaryButton({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required bool loading,
-    required Future<void> Function()? onPressed,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: onPressed == null
-            ? null
-            : () async {
-                await onPressed();
-              },
-        icon: loading
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(icon, size: 18),
-        label: Text(label),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
           ),
         ),
       ),

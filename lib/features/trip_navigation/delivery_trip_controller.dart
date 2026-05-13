@@ -105,7 +105,6 @@ class DeliveryTripController extends ChangeNotifier {
       ).listen((pos) {
         _latitude = pos.latitude;
         _longitude = pos.longitude;
-        notifyListeners();
         _emitLocationThrottled();
       });
     } catch (e) {
@@ -155,6 +154,7 @@ class DeliveryTripController extends ChangeNotifier {
       final updated = await ApiService.markArrivedAtStore(_order.id);
       _order = updated;
       _phase = DeliveryTripPhase.waitingAtStore;
+      _errorMessage = null;
       await _syncLocationCheckpoint();
     } catch (e) {
       _errorMessage = 'Nao foi possivel confirmar chegada: $e';
@@ -174,6 +174,7 @@ class DeliveryTripController extends ChangeNotifier {
           await ApiService.startTransit(_order.id, pickupCode: pickupCode);
       _order = updated;
       _phase = DeliveryTripPhase.headingToClient;
+      _errorMessage = null;
       await _syncLocationCheckpoint();
       return true;
     } catch (e) {

@@ -1,4 +1,4 @@
-/// Experimento Fase 1: Modo Corrida dedicado (`TripNavigationScreen`).
+/// Experimento Modo Corrida dedicado (`TripNavigationScreen`).
 ///
 /// Rollback imediato: defina [enabled] como `false` e faça hot restart.
 /// A Home volta a usar o overlay Mapbox e o fluxo embutido anteriores.

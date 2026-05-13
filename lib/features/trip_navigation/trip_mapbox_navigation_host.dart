@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_mapbox_navigation/flutter_mapbox_navigation.dart';
 
 import 'delivery_trip_controller.dart';
+import 'widgets/trip_navigation_hud.dart';
 
 /// Mapbox em tela cheia para o experimento: uma única platform view por sessão.
 /// Ao mudar o destino (loja → cliente), recalcula a rota sem remontar o widget.
@@ -83,15 +84,17 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
   void _onTripChanged() {
     if (!mounted) return;
     _applyInitialCamera();
-    if (_trip.navigationGuidanceActive) {
-      if (_mapController != null &&
-          _lastRoutedDestLat == null &&
-          _trip.latitude != null &&
-          _trip.longitude != null) {
-        unawaited(_startRouteBuild());
-      } else {
-        _maybeRebuildRouteForDestination();
+    if (!_trip.navigationGuidanceActive) {
+      if (_lastGuidanceActive) {
+        _lastGuidanceActive = false;
       }
+      setState(() {});
+      return;
+    }
+    if (_mapController != null &&
+        _trip.latitude != null &&
+        _trip.longitude != null) {
+      unawaited(_maybeRebuildRouteForDestination());
     }
     setState(() {});
   }
@@ -241,7 +244,9 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
     final statusLabel = waiting
         ? 'No estabelecimento · aguardando retirada'
         : _buildingRoute
-            ? 'Calculando a melhor rota...'
+            ? (_trip.phase == DeliveryTripPhase.headingToClient
+                ? 'Recalculando rota para o cliente...'
+                : 'Calculando a melhor rota...')
             : 'Navegacao ativa · trafego em tempo real';
     final topInset = MediaQuery.of(context).padding.top;
     const nativeControlsWidth = 80.0;
@@ -289,7 +294,10 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _TripHudCard(
+              TripStageProgressIndicator(phase: _trip.phase),
+              const SizedBox(height: 10),
+              TripNavigationHud(
+                phase: _trip.phase,
                 stageLabel: _trip.stageTitle,
                 destination: _trip.destinationLabel,
                 instruction: waiting
@@ -300,147 +308,10 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
                 distanceLabel: _formatDistance(_distanceRemainingM),
                 etaLabel: _formatDuration(_durationRemainingS),
                 statusLabel: statusLabel,
+                isBuildingRoute: _buildingRoute && !waiting,
+                errorMessage: _error,
               ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Material(
-                    color: Colors.red.shade900,
-                    borderRadius: BorderRadius.circular(10),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ),
-              if (_buildingRoute && _error == null && !waiting)
-                const Padding(
-                  padding: EdgeInsets.only(top: 16),
-                  child: Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  ),
-                ),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TripHudCard extends StatelessWidget {
-  const _TripHudCard({
-    required this.stageLabel,
-    required this.destination,
-    required this.instruction,
-    required this.distanceLabel,
-    required this.etaLabel,
-    required this.statusLabel,
-  });
-
-  final String stageLabel;
-  final String destination;
-  final String instruction;
-  final String distanceLabel;
-  final String etaLabel;
-  final String statusLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      elevation: 4,
-      color: const Color(0xFF1E1E1E).withValues(alpha: 0.92),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: const Color(0xFFFF6B3D).withValues(alpha: 0.35),
-          ),
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              stageLabel,
-              style: const TextStyle(
-                color: Color(0xFFFF8A65),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              destination,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              instruction,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                height: 1.25,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _HudMetric(label: 'Restante', value: distanceLabel),
-                const SizedBox(width: 16),
-                _HudMetric(label: 'ETA', value: etaLabel),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              statusLabel,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HudMetric extends StatelessWidget {
-  const _HudMetric({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
-            fontSize: 11,
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
           ),
         ),
       ],
