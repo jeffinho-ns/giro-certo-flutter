@@ -4,6 +4,30 @@ version '1.0-SNAPSHOT'
 buildscript {
     ext.kotlin_version = '1.7.10'
     ext.android_gradle_version = '7.4.2'
+
+    def resolveMapboxDownloadsToken = {
+        if (project.hasProperty('MAPBOX_DOWNLOADS_TOKEN')) {
+            def configured = project.property('MAPBOX_DOWNLOADS_TOKEN')?.toString()?.trim()
+            if (configured) {
+                return configured
+            }
+        }
+        def envToken = System.getenv('MAPBOX_DOWNLOADS_TOKEN')?.trim()
+        if (envToken) {
+            return envToken
+        }
+        def localProps = new Properties()
+        def localPropsFile = rootProject.file('local.properties')
+        if (localPropsFile.exists()) {
+            localPropsFile.withInputStream { localProps.load(it) }
+            def localToken = localProps.getProperty('MAPBOX_DOWNLOADS_TOKEN')?.trim()
+            if (localToken) {
+                return localToken
+            }
+        }
+        return ''
+    }
+
     repositories {
         google()
         mavenCentral()
@@ -14,7 +38,7 @@ buildscript {
             }
             credentials {
                 username = "mapbox"
-                password = project.hasProperty('MAPBOX_DOWNLOADS_TOKEN') ? project.property('MAPBOX_DOWNLOADS_TOKEN') : System.getenv('MAPBOX_DOWNLOADS_TOKEN')
+                password = resolveMapboxDownloadsToken()
                 if (password == null || password == "") {
                     throw new GradleException("MAPBOX_DOWNLOADS_TOKEN isn't set. Set it to the project properties or to the enviroment variables.")
                 }
@@ -30,6 +54,29 @@ buildscript {
 }
 
 rootProject.allprojects {
+    def resolveMapboxDownloadsToken = {
+        if (project.hasProperty('MAPBOX_DOWNLOADS_TOKEN')) {
+            def configured = project.property('MAPBOX_DOWNLOADS_TOKEN')?.toString()?.trim()
+            if (configured) {
+                return configured
+            }
+        }
+        def envToken = System.getenv('MAPBOX_DOWNLOADS_TOKEN')?.trim()
+        if (envToken) {
+            return envToken
+        }
+        def localProps = new Properties()
+        def localPropsFile = rootProject.file('local.properties')
+        if (localPropsFile.exists()) {
+            localPropsFile.withInputStream { localProps.load(it) }
+            def localToken = localProps.getProperty('MAPBOX_DOWNLOADS_TOKEN')?.trim()
+            if (localToken) {
+                return localToken
+            }
+        }
+        return ''
+    }
+
     repositories {
         google()
         mavenCentral()
@@ -41,7 +88,7 @@ rootProject.allprojects {
             }
             credentials {
                 username = "mapbox"
-                password = project.hasProperty('MAPBOX_DOWNLOADS_TOKEN') ? project.property('MAPBOX_DOWNLOADS_TOKEN') : System.getenv('MAPBOX_DOWNLOADS_TOKEN')
+                password = resolveMapboxDownloadsToken()
                 if (password == null || password == "") {
                     throw new GradleException("MAPBOX_DOWNLOADS_TOKEN isn't set. Set it to the project properties or to the enviroment variables.")
                 }
@@ -54,6 +101,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 android {
+    namespace 'com.eopeter.fluttermapboxnavigation'
     compileSdkVersion 33
 
     sourceSets {

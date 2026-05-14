@@ -10,13 +10,13 @@ class TripStageActionSheet extends StatelessWidget {
     required this.trip,
     required this.onArrivedAtStore,
     required this.onCollectAndStart,
-    required this.onCompleteDelivery,
+    required this.onArrivedAtDestination,
   });
 
   final DeliveryTripController trip;
   final Future<void> Function() onArrivedAtStore;
   final Future<void> Function() onCollectAndStart;
-  final Future<void> Function() onCompleteDelivery;
+  final Future<void> Function() onArrivedAtDestination;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +81,9 @@ class TripStageActionSheet extends StatelessWidget {
               ),
             if (trip.phase == DeliveryTripPhase.waitingAtStore)
               _primaryButton(
-                label: loading ? 'Atualizando...' : 'Coletar e iniciar entrega',
+                label: loading
+                    ? 'Atualizando...'
+                    : 'Coletar Pedido e Iniciar Entrega',
                 icon: LucideIcons.package,
                 color: AppColors.neonGreen,
                 loading: loading,
@@ -89,11 +91,11 @@ class TripStageActionSheet extends StatelessWidget {
               ),
             if (trip.phase == DeliveryTripPhase.headingToClient)
               _primaryButton(
-                label: loading ? 'Finalizando...' : 'Finalizar entrega',
-                icon: LucideIcons.checkCircle,
-                color: AppColors.neonGreen,
+                label: loading ? 'Atualizando...' : 'Cheguei no Cliente',
+                icon: LucideIcons.mapPin,
+                color: AppColors.racingOrangeDark,
                 loading: loading,
-                onPressed: loading ? null : onCompleteDelivery,
+                onPressed: loading ? null : onArrivedAtDestination,
               ),
           ],
         ),
@@ -106,9 +108,11 @@ class TripStageActionSheet extends StatelessWidget {
       case DeliveryTripPhase.headingToStore:
         return 'Confirme quando estiver no local de retirada.';
       case DeliveryTripPhase.waitingAtStore:
-        return 'Pedido pronto? Solicite o codigo ao lojista e informe abaixo.';
+        return 'Pedido pronto? Solicite o codigo ao lojista para liberar a entrega.';
       case DeliveryTripPhase.headingToClient:
-        return 'Solicite ao cliente os 4 ultimos digitos do telefone para concluir.';
+        return 'Confirme quando estiver no endereco do cliente.';
+      case DeliveryTripPhase.awaitingDeliveryProof:
+        return 'Finalize a entrega com o PIN do cliente.';
     }
   }
 

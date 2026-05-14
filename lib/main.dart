@@ -6,6 +6,7 @@ import 'providers/drawer_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/social_feed_provider.dart';
 import 'providers/notifications_count_provider.dart';
+import 'providers/rider_delivery_session_provider.dart';
 import 'utils/theme.dart';
 import 'screens/login/splash_screen.dart';
 import 'screens/login/login_screen.dart';
@@ -31,6 +32,7 @@ import 'services/api_service.dart';
 import 'services/push_notification_service.dart' as push;
 import 'services/notification_service.dart' as local_notifications;
 import 'widgets/realtime_connection.dart';
+import 'widgets/rider_delivery_overlay_host.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +54,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => SocialFeedProvider()),
         ChangeNotifierProvider(create: (_) => NotificationsCountProvider()),
+        ChangeNotifierProvider(create: (_) => RiderDeliverySessionProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
@@ -69,6 +72,11 @@ class MyApp extends StatelessWidget {
             themeMode:
                 themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
             debugShowCheckedModeBanner: false,
+            builder: (context, child) {
+              return RiderDeliveryOverlayHost(
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: const AuthWrapper(),
           );
         },

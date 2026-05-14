@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../utils/delivery_proof_pin.dart';
+import '../../../utils/delivery_proof_pin.dart';
 
 /// Solicita o PIN de prova de entrega (ultimos 4 digitos do telefone do cliente).
 Future<String?> showTripDeliveryProofDialog(BuildContext context) {

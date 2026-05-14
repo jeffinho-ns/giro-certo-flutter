@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/delivery_order.dart';
 import '../../providers/theme_provider.dart';
+import '../../services/realtime_service.dart';
 import '../../utils/colors.dart';
 import '../../utils/delivery_geofence.dart';
 import 'delivery_trip_controller.dart';
@@ -15,8 +16,8 @@ import 'trip_navigation_experiment.dart';
 import 'trip_navigation_immersive_scope.dart';
 import 'trip_navigation_performance.dart';
 import 'widgets/trip_navigation_perf_overlay.dart';
-import 'widgets/trip_delivery_proof_dialog.dart';
-import 'widgets/trip_pickup_code_dialog.dart';
+import 'widgets/trip_delivery_proof_panel.dart';
+import 'widgets/trip_pickup_code_sheet.dart';
 import 'widgets/trip_stage_action_sheet.dart';
 
 /// Modo Corrida dedicado: Mapbox em tela cheia + HUD e acoes do Giro Certo.
@@ -62,14 +63,24 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
     }
     _performance.logSummary(orderId: _controller.order.id);
     TripNavigationExperiment.activeSessionOpen = false;
+    RealtimeService.instance.setNavigationMode(false);
     _controller.dispose();
     super.dispose();
   }
 
   Future<void> _onCollectAndStart() async {
-    final code = await showTripPickupCodeDialog(context);
+    final code = await showTripPickupCodeSheet(context);
     if (code == null || code.isEmpty) return;
-    await _controller.collectAndStartDelivery(code);
+    final ok = await _controller.collectAndStartDelivery(code);
+    if (!mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _controller.errorMessage ??
+              'Nao foi possivel validar o codigo de retirada.',
+        ),
+      ),
+    );
   }
 
   Future<void> _onConfirmArrivalAtStore() async {
@@ -96,9 +107,20 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
     }
   }
 
-  Future<void> _onComplete() async {
-    final pin = await showTripDeliveryProofDialog(context);
-    if (pin == null || pin.isEmpty) return;
+  Future<void> _onArrivedAtDestination() async {
+    final ok = await _controller.confirmArrivalAtDestination();
+    if (!mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _controller.errorMessage ??
+              'Nao foi possivel confirmar a chegada ao cliente.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onCompleteDelivery(String pin) async {
     final ok = await _controller.completeDelivery(pin);
     if (!mounted || !ok) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -120,44 +142,57 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
               : AppColors.lightBackground,
           body: Consumer<DeliveryTripController>(
             builder: (context, trip, _) {
+              final showProofPanel =
+                  trip.phase == DeliveryTripPhase.awaitingDeliveryProof;
+
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  TripMapboxNavigationHost(
-                    key: _mapHostKey,
-                    controller: trip,
-                    performance: _performance,
-                  ),
-                  TripNavigationPerfOverlay(performance: _performance),
-                  Positioned(
-                    right: 16,
-                    bottom: 188,
-                    child: SafeArea(
-                      top: false,
-                      child: _RecenterFab(
-                        onPressed: () {
-                          unawaited(
-                            _mapHostKey.currentState?.recenterNavigation(),
-                          );
-                        },
+                  if (!showProofPanel)
+                    TripMapboxNavigationHost(
+                      key: _mapHostKey,
+                      controller: trip,
+                      performance: _performance,
+                    ),
+                  if (showProofPanel)
+                    TripDeliveryProofPanel(
+                      order: trip.order,
+                      isLoading: trip.isLoading,
+                      errorMessage: trip.errorMessage,
+                      onSubmit: _onCompleteDelivery,
+                    ),
+                  if (!showProofPanel) ...[
+                    TripNavigationPerfOverlay(performance: _performance),
+                    Positioned(
+                      right: 16,
+                      bottom: 188,
+                      child: SafeArea(
+                        top: false,
+                        child: _RecenterFab(
+                          onPressed: () {
+                            unawaited(
+                              _mapHostKey.currentState?.recenterNavigation(),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: 16,
-                    child: SafeArea(
-                      top: false,
-                      child: TripStageActionSheet(
-                        trip: trip,
-                        onArrivedAtStore: _onConfirmArrivalAtStore,
-                        onCollectAndStart: _onCollectAndStart,
-                        onCompleteDelivery: _onComplete,
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      child: SafeArea(
+                        top: false,
+                        child: TripStageActionSheet(
+                          trip: trip,
+                          onArrivedAtStore: _onConfirmArrivalAtStore,
+                          onCollectAndStart: _onCollectAndStart,
+                          onArrivedAtDestination: _onArrivedAtDestination,
+                        ),
                       ),
                     ),
-                  ),
-                  if (trip.errorMessage != null)
+                  ],
+                  if (!showProofPanel && trip.errorMessage != null)
                     Positioned(
                       left: 16,
                       right: 16,

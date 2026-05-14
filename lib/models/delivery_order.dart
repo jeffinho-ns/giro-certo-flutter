@@ -1,13 +1,15 @@
 import 'dart:math' as math;
 
 enum DeliveryStatus {
-  pending,      // Aguardando motociclista
-  accepted,     // Aceito por um motociclista
-  arrivedAtStore, // Motociclista chegou no estabelecimento
-  inTransit,    // Coletado e em entrega para o cliente
-  inProgress,   // Em andamento
-  completed,    // Concluído
-  cancelled,    // Cancelado
+  awaitingDispatch,
+  pending,
+  accepted,
+  arrivedAtStore,
+  inTransit,
+  arrivedAtDestination,
+  inProgress,
+  completed,
+  cancelled,
 }
 
 enum DeliveryPriority {

@@ -158,6 +158,7 @@ class RiderStats {
       o.status == DeliveryStatus.accepted || 
       o.status == DeliveryStatus.arrivedAtStore ||
       o.status == DeliveryStatus.inTransit ||
+      o.status == DeliveryStatus.arrivedAtDestination ||
       o.status == DeliveryStatus.inProgress
     ).toList();
     

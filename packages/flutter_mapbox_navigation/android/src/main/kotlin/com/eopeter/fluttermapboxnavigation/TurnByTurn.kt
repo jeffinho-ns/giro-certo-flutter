@@ -19,6 +19,8 @@ import com.eopeter.fluttermapboxnavigation.utilities.CustomInfoPanelEndNavButton
 import com.eopeter.fluttermapboxnavigation.utilities.PluginUtilities
 import com.google.gson.Gson
 import com.mapbox.maps.MapView
+import com.mapbox.maps.Style
+import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.navigation.ui.maps.camera.NavigationCamera
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.api.directions.v5.DirectionsCriteria
@@ -242,14 +244,11 @@ open class TurnByTurn(
     private fun ensureNavigationCamera() {
         if (navigationCamera != null) return
         val mapView = findMapView(binding.navigationView) ?: return
-        val navigation = MapboxNavigationApp.current() ?: return
-        val viewportDataSource = MapboxNavigationViewportDataSource(
-            mapView.mapboxMap,
-            navigation
-        )
+        val mapboxMap = mapView.getMapboxMap()
+        val viewportDataSource = MapboxNavigationViewportDataSource(mapboxMap)
         navigationCamera = NavigationCamera(
-            navigation,
-            mapView.mapboxMap,
+            mapboxMap,
+            mapView.camera,
             viewportDataSource
         )
     }

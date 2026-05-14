@@ -130,6 +130,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
     if (!_trip.navigationGuidanceActive) {
       if (_lastGuidanceActive) {
         _lastGuidanceActive = false;
+        unawaited(_mapController?.finishNavigation());
       }
       setState(() {});
       return;

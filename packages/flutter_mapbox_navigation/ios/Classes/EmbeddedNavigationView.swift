@@ -373,22 +373,16 @@ public class FlutterMapboxNavigationView : NavigationFactory, FlutterPlatformVie
                 result(false)
                 return
             }
-            let transition = NavigationCameraTransitionOptions(
-                duration: 0.35,
-                maxDuration: 0.35
-            )
-            if let navVC = self._navigationViewController {
-                navVC.navigationMapView.navigationCamera.update(
-                    cameraState: .following,
-                    transitionOptions: transition
-                )
+            if let navVC = self._navigationViewController,
+               let embeddedMapView = navVC.navigationMapView {
+                embeddedMapView.navigationCamera.follow {
+                    result(true)
+                }
             } else {
-                self.navigationMapView.navigationCamera.update(
-                    cameraState: .following,
-                    transitionOptions: transition
-                )
+                self.navigationMapView.navigationCamera.follow {
+                    result(true)
+                }
             }
-            result(true)
         }
     }
 

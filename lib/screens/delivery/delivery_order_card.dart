@@ -62,6 +62,8 @@ class DeliveryOrderCard extends StatelessWidget {
 
   Color _getStatusColor(DeliveryStatus status, ThemeData theme) {
     switch (status) {
+      case DeliveryStatus.awaitingDispatch:
+        return Colors.amber;
       case DeliveryStatus.pending:
         return Colors.orange;
       case DeliveryStatus.accepted:
@@ -70,6 +72,8 @@ class DeliveryOrderCard extends StatelessWidget {
         return Colors.deepOrange;
       case DeliveryStatus.inTransit:
         return theme.colorScheme.primary;
+      case DeliveryStatus.arrivedAtDestination:
+        return Colors.teal;
       case DeliveryStatus.inProgress:
         return theme.colorScheme.primary;
       case DeliveryStatus.completed:
@@ -81,6 +85,8 @@ class DeliveryOrderCard extends StatelessWidget {
 
   String _getStatusLabel(DeliveryStatus status) {
     switch (status) {
+      case DeliveryStatus.awaitingDispatch:
+        return 'Aguardando despacho';
       case DeliveryStatus.pending:
         return 'Aguardando';
       case DeliveryStatus.accepted:
@@ -89,6 +95,8 @@ class DeliveryOrderCard extends StatelessWidget {
         return 'Chegou na loja';
       case DeliveryStatus.inTransit:
         return 'Em transito';
+      case DeliveryStatus.arrivedAtDestination:
+        return 'Chegou no cliente';
       case DeliveryStatus.inProgress:
         return 'Em andamento';
       case DeliveryStatus.completed:

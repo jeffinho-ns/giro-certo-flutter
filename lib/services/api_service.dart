@@ -749,6 +749,46 @@ class ApiService {
     return _deliveryOrderFromJson(orderJson).withoutInternalCode();
   }
 
+  /// Liberar pedido para os motociclistas da regiao.
+  static Future<DeliveryOrder> dispatchOrder(String orderId) async {
+    final response = await _requestWithRetry(
+      (headers) => http.post(
+        Uri.parse('$baseUrl/delivery/$orderId/dispatch'),
+        headers: headers,
+      ),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final orderJson = data is Map<String, dynamic>
+        ? (data['order'] as Map<String, dynamic>? ?? data)
+        : <String, dynamic>{};
+    return _deliveryOrderFromJson(orderJson);
+  }
+
+  /// Confirmar chegada ao cliente.
+  static Future<DeliveryOrder> markArrivedAtDestination(String orderId) async {
+    final idempotencyKey =
+        'status:$orderId:arrivedAtDestination:${DateTime.now().millisecondsSinceEpoch}';
+    final response = await _requestWithRetry(
+      (headers) => http.patch(
+        Uri.parse('$baseUrl/delivery/$orderId/status'),
+        headers: headers,
+        body: json.encode({'status': 'arrivedAtDestination'}),
+      ),
+      extraHeaders: {'x-idempotency-key': idempotencyKey},
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final orderJson = data is Map<String, dynamic>
+        ? (data['order'] as Map<String, dynamic>? ?? data)
+        : <String, dynamic>{};
+    return _deliveryOrderFromJson(orderJson).withoutInternalCode();
+  }
+
   /// Concluir corrida com PIN de prova de entrega.
   static Future<DeliveryOrder> completeOrder(
     String orderId, {
@@ -897,18 +937,20 @@ class ApiService {
   }
 
   static DeliveryStatus _parseDeliveryStatus(String status) {
-    final normalized = status.toLowerCase();
+    final normalized = status.toLowerCase().replaceAll('_', '');
     switch (normalized) {
+      case 'awaitingdispatch':
+        return DeliveryStatus.awaitingDispatch;
       case 'pending':
         return DeliveryStatus.pending;
       case 'accepted':
         return DeliveryStatus.accepted;
       case 'arrivedatstore':
-      case 'arrived_at_store':
         return DeliveryStatus.arrivedAtStore;
       case 'intransit':
-      case 'in_transit':
         return DeliveryStatus.inTransit;
+      case 'arrivedatdestination':
+        return DeliveryStatus.arrivedAtDestination;
       case 'inprogress':
         return DeliveryStatus.inProgress;
       case 'completed':

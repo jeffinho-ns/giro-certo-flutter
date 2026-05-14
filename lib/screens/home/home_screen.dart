@@ -6,12 +6,12 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/notifications_count_provider.dart';
+import '../../providers/rider_delivery_session_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
 import '../../services/onboarding_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/delivery_order.dart';
-import '../../models/delivery_offer_payload.dart';
 import '../../models/partner.dart';
 import '../../models/pilot_profile.dart';
 import '../../utils/colors.dart';
@@ -19,9 +19,6 @@ import '../../utils/delivery_status_utils.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/quick_messages_card.dart';
 import '../../widgets/home_map_fab_column.dart';
-import '../../widgets/delivery_pipcar_modal.dart';
-import '../../features/trip_navigation/trip_navigation_experiment.dart';
-import '../../features/trip_navigation/trip_navigation_launcher.dart';
 import '../maintenance/maintenance_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -41,14 +38,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasLoadedPartnerOnce = false;
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
-  StreamSubscription<DeliveryOfferPayload>? _deliveryOfferSubscription;
-  StreamSubscription<Map<String, dynamic>>? _deliveryNotificationSubscription;
   Timer? _realtimePartnerReloadDebounce;
   bool _heatmapOn = false;
   Set<MapFilterOption> _filterOptions = {};
   MapTimeWindowOption _mapTimeWindow = MapTimeWindowOption.now;
   List<QuickMessageItem> _quickMessages = [];
-  DeliveryOfferPayload? _activeOffer;
   List<DeliveryOrder> _marketPendingOrders = [];
   List<Partner> _marketPartners = [];
   MapType _mapType = MapType.normal;
@@ -64,7 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadPartnerData();
     _loadMarketIntelligenceData();
     _subscribePartnerRealtimeUpdates();
-    _subscribeDeliveryOffers();
     _syncDeliveryModerationStatus();
     _startDeliveryModerationSync();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -214,38 +207,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _subscribeDeliveryOffers() {
-    final appState = Provider.of<AppStateProvider>(context, listen: false);
-    if (appState.user?.isRider != true) return;
-
-    _deliveryOfferSubscription?.cancel();
-    _deliveryOfferSubscription =
-        RealtimeService.instance.onDeliveryNewOrderOffer.listen((offer) {
-      if (!mounted) return;
-      if (TripNavigationExperiment.activeSessionOpen) return;
-      final isDeliveryProfile = appState.isDeliveryPilot;
-      final isDeliveryApproved = appState.deliveryModerationStatus ==
-          DeliveryModerationStatus.approved;
-      if (isDeliveryProfile && !isDeliveryApproved) return;
-      setState(() => _activeOffer = offer);
-    });
-
-    _deliveryNotificationSubscription?.cancel();
-    _deliveryNotificationSubscription =
-        RealtimeService.instance.onNotification.listen((payload) {
-      if (!mounted) return;
-      if (payload['type'] != 'delivery_race_lost') return;
-      final orderId = payload['orderId'] as String?;
-      if (orderId == null || _activeOffer?.order.id != orderId) return;
-      setState(() => _activeOffer = null);
-    });
-  }
-
-  void _dismissActiveOffer() {
-    if (_activeOffer == null) return;
-    setState(() => _activeOffer = null);
-  }
-
   Future<void> _syncDeliveryModerationStatus() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     if (!appState.isDeliveryPilot) return;
@@ -294,9 +255,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (appState.isDeliveryPilot &&
           appState.deliveryModerationStatus != DeliveryModerationStatus.approved &&
-          _activeOffer != null &&
           mounted) {
-        setState(() => _activeOffer = null);
+        context.read<RiderDeliverySessionProvider>().dismissOffer();
       }
 
       await OnboardingService.setLastKnownDeliveryRegStatus(
@@ -312,8 +272,6 @@ class _HomeScreenState extends State<HomeScreen> {
     RealtimeService.instance.setNavigationMode(false);
     _positionSubscription?.cancel();
     _deliveryStatusSubscription?.cancel();
-    _deliveryOfferSubscription?.cancel();
-    _deliveryNotificationSubscription?.cancel();
     _realtimePartnerReloadDebounce?.cancel();
     super.dispose();
   }
@@ -759,27 +717,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _mapType = type);
   }
 
-  void _acceptPipcar(DeliveryOrder order) async {
-    final user = Provider.of<AppStateProvider>(context, listen: false).user;
-    if (user == null) return;
-
-    setState(() => _activeOffer = null);
-    try {
-      await TripNavigationLauncher.acceptAndOpen(
-        context,
-        order: order,
-        riderId: user.id,
-        riderName: user.name,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao aceitar: $e')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
@@ -897,22 +834,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-
-        // 5. Modal pipcar (corrida disponível) – centro
-        if (_activeOffer != null)
-          Positioned.fill(
-            child: Container(
-              color: Colors.black38,
-              child: DeliveryPipcarModal(
-                order: _activeOffer!.order,
-                distanceToStoreKm: _activeOffer!.distanceToStoreKm,
-                routeDistanceKm: _activeOffer!.routeDistanceKm,
-                countdownSeconds: _activeOffer!.expiresInSeconds,
-                onAccept: () => _acceptPipcar(_activeOffer!.order),
-                onReject: _dismissActiveOffer,
-              ),
-            ),
-          ),
 
         // 6. Conteúdo lojista (overlay quando é partner e não rider)
         if (!isRider && _isLoading)

@@ -9,6 +9,7 @@ import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
 import '../../models/delivery_order.dart';
 import '../../utils/colors.dart';
+import '../../utils/delivery_status_utils.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/api_image.dart';
 import '../delivery/create_delivery_modal.dart';
@@ -28,7 +29,9 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
   bool _isLoading = false;
   bool _hasLoadedOnce = false;
   List<DeliveryOrder> _activeOrders = [];
+  List<DeliveryOrder> _awaitingDispatchOrders = [];
   List<DeliveryOrder> _pendingOrders = [];
+  final Set<String> _dispatchingOrderIds = <String>{};
   int _totalOrders = 0;
   int _completedOrders = 0;
   double _totalRevenue = 0.0;
@@ -76,13 +79,14 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     try {
       final allOrders = await ApiService.getDeliveryOrders(storeId: user.partnerId);
       final activeOrders = allOrders
-          .where((o) =>
-              o.status == DeliveryStatus.accepted ||
-              o.status == DeliveryStatus.arrivedAtStore ||
-              o.status == DeliveryStatus.inTransit ||
-              o.status == DeliveryStatus.inProgress)
+          .where((o) => DeliveryStatusUtils.isActive(o.status))
           .toList();
-      final pendingOrders = allOrders.where((o) => o.status == DeliveryStatus.pending).toList();
+      final awaitingDispatchOrders = allOrders
+          .where((o) => DeliveryStatusUtils.isAwaitingDispatch(o.status))
+          .toList();
+      final pendingOrders = allOrders
+          .where((o) => DeliveryStatusUtils.isPending(o.status))
+          .toList();
       final completedOrders = allOrders.where((o) => o.status == DeliveryStatus.completed).toList();
       final today = DateTime.now();
       final todayOrders = completedOrders.where((o) =>
@@ -95,6 +99,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
       if (!mounted) return;
       setState(() {
         _activeOrders = activeOrders;
+        _awaitingDispatchOrders = awaitingDispatchOrders;
         _pendingOrders = pendingOrders;
         _totalOrders = allOrders.length;
         _completedOrders = completedOrders.length;
@@ -107,6 +112,32 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     } catch (_) {
       if (mounted && showBlockingLoader) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _dispatchOrder(DeliveryOrder order) async {
+    if (_dispatchingOrderIds.contains(order.id)) return;
+    setState(() => _dispatchingOrderIds.add(order.id));
+    try {
+      await ApiService.dispatchOrder(order.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Pedido liberado. O app esta notificando motociclistas na regiao.',
+          ),
+        ),
+      );
+      await _loadPartnerData(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nao foi possivel chamar motociclista: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _dispatchingOrderIds.remove(order.id));
       }
     }
   }
@@ -366,13 +397,40 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
                 child: _buildOrderCard(context, theme, order, isActive: true),
               )),
         ],
+        if (_awaitingDispatchOrders.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Aguardando Despacho',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ..._awaitingDispatchOrders.take(3).map((order) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildOrderCard(
+                  context,
+                  theme,
+                  order,
+                  isActive: false,
+                  showDispatchButton: true,
+                ),
+              )),
+        ],
         if (_pendingOrders.isNotEmpty) ...[
           const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Aguardando Aprovação',
+                'Chamando Entregadores',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -460,8 +518,10 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     ThemeData theme,
     DeliveryOrder order, {
     required bool isActive,
+    bool showDispatchButton = false,
   }) {
     final isDark = theme.brightness == Brightness.dark;
+    final isDispatching = _dispatchingOrderIds.contains(order.id);
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final user = appState.user;
     final userLat = user?.currentLat ?? -23.5505;
@@ -630,6 +690,41 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
                       ),
                     ],
                   ],
+                ),
+              ),
+            ],
+            if (showDispatchButton &&
+                DeliveryStatusUtils.isAwaitingDispatch(order.status)) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isDispatching ? null : () => _dispatchOrder(order),
+                  icon: isDispatching
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(LucideIcons.bike, size: 18),
+                  label: Text(
+                    isDispatching
+                        ? 'Chamando motociclistas...'
+                        : 'Confirmar e Chamar Motociclista',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.racingOrangeDark,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                    ),
+                  ),
                 ),
               ),
             ],

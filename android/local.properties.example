@@ -1,0 +1,14 @@
+# Copie para local.properties: cp local.properties.example local.properties
+# O ficheiro local.properties esta no .gitignore.
+
+sdk.dir=/caminho/para/Android/sdk
+flutter.sdk=/caminho/para/flutter
+
+# Mapbox Android: token secreto de downloads (sk.*, scope DOWNLOADS:READ)
+MAPBOX_DOWNLOADS_TOKEN=sk.SUBSTITUA_PELO_SEU_TOKEN_SECRETO_MAPBOX
+
+# Mapbox Android: token publico de runtime (pk.*)
+MAPBOX_ACCESS_TOKEN=pk.SUBSTITUA_PELO_SEU_TOKEN_PUBLICO_MAPBOX
+
+# Google Maps (opcional)
+GOOGLE_MAPS_API_KEY=SUA_CHAVE_GOOGLE_MAPS

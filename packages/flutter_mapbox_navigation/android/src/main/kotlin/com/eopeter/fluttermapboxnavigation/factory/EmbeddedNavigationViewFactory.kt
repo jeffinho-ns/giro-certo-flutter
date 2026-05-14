@@ -11,6 +11,7 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
+import androidx.appcompat.R as AppCompatR
 
 class EmbeddedNavigationViewFactory(
     private val messenger: BinaryMessenger,
@@ -32,7 +33,7 @@ class EmbeddedNavigationViewFactory(
 
         view.initialize()
 
-        activity.setTheme(R.style.Theme_AppCompat_NoActionBar)
+        activity.setTheme(AppCompatR.style.Theme_AppCompat_NoActionBar)
 
         return view
     }

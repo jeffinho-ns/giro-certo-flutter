@@ -363,6 +363,64 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                       ),
                     ),
                     
+                    if (!widget.isRider &&
+                        order.status == DeliveryStatus.awaitingDispatch) ...[
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            try {
+                              await ApiService.dispatchOrder(order.id);
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Pedido liberado. O app esta notificando motociclistas na regiao.',
+                                  ),
+                                ),
+                              );
+                              widget.onOrderUpdated?.call();
+                              Navigator.of(context).pop();
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Nao foi possivel chamar motociclista: $e',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.racingOrangeDark,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(LucideIcons.bike),
+                              SizedBox(width: 8),
+                              Text(
+                                'Confirmar e Chamar Motociclista',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
                     if (widget.isRider && order.status == DeliveryStatus.pending && widget.onAccept != null) ...[
                       const SizedBox(height: 24),
                       SizedBox(
@@ -400,7 +458,9 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                       ),
                     ],
                     
-                    if (widget.isRider && (order.status == DeliveryStatus.inTransit || order.status == DeliveryStatus.inProgress) && widget.onComplete != null) ...[
+                    if (widget.isRider &&
+                        order.status == DeliveryStatus.arrivedAtDestination &&
+                        widget.onComplete != null) ...[
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
