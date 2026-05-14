@@ -755,6 +755,7 @@ class ApiService {
       (headers) => http.post(
         Uri.parse('$baseUrl/delivery/$orderId/dispatch'),
         headers: headers,
+        body: json.encode({}),
       ),
     );
 
