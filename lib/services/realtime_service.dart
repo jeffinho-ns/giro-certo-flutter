@@ -194,6 +194,13 @@ class RealtimeService {
                 : double.tryParse('$routeDistance'),
           ),
         );
+        showLocalNotification(
+          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          title: 'Nova corrida disponivel',
+          body:
+              '${order.storeName} • R\$ ${order.deliveryFee.toStringAsFixed(2)}',
+          payload: 'delivery_offer:${order.id}',
+        );
       } catch (e) {
         debugPrint('delivery:new_order_offer parse: $e');
       }

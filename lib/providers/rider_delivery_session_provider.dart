@@ -16,6 +16,8 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
   StreamSubscription<DeliveryOfferPayload>? _offerSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
   StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
+  Timer? _pendingOfferPollTimer;
+  final Set<String> _dismissedOfferOrderIds = <String>{};
   String? _attachedRiderId;
   bool _isDeliveryPilot = false;
   bool _isDeliveryApproved = true;
@@ -52,19 +54,28 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
     _deliveryStatusSubscription =
         RealtimeService.instance.onDeliveryStatusChanged.listen(_onDeliveryStatus);
 
+    _pendingOfferPollTimer = Timer.periodic(
+      const Duration(seconds: 12),
+      (_) => unawaited(_syncPendingOffersFromApi()),
+    );
+
     unawaited(refreshActiveTrip(riderId));
+    unawaited(_syncPendingOffersFromApi());
   }
 
   void detach() {
     _offerSubscription?.cancel();
     _notificationSubscription?.cancel();
     _deliveryStatusSubscription?.cancel();
+    _pendingOfferPollTimer?.cancel();
     _offerSubscription = null;
     _notificationSubscription = null;
     _deliveryStatusSubscription = null;
+    _pendingOfferPollTimer = null;
     _attachedRiderId = null;
     _pendingOffer = null;
     _activeTripOrder = null;
+    _dismissedOfferOrderIds.clear();
     notifyListeners();
   }
 
@@ -72,11 +83,17 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
     if (!_canReceiveOffers) return;
     if (TripNavigationExperiment.activeSessionOpen) return;
     if (_activeTripOrder != null) return;
+    if (_dismissedOfferOrderIds.contains(offer.order.id)) return;
+    if (_pendingOffer?.order.id == offer.order.id) return;
     _pendingOffer = offer;
     notifyListeners();
   }
 
   void dismissOffer() {
+    final current = _pendingOffer;
+    if (current != null) {
+      _dismissedOfferOrderIds.add(current.order.id);
+    }
     if (_pendingOffer == null) return;
     _pendingOffer = null;
     notifyListeners();
@@ -122,7 +139,8 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
 
   bool get _canReceiveOffers {
     if (_attachedRiderId == null) return false;
-    if (_isDeliveryPilot && !_isDeliveryApproved) return false;
+    if (!_isDeliveryPilot) return false;
+    if (!_isDeliveryApproved) return false;
     return true;
   }
 
@@ -141,7 +159,6 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
     final riderId = _attachedRiderId;
     if (riderId == null) return;
 
-    final orderId = payload['orderId'] as String? ?? payload['id'] as String?;
     final orderRaw = payload['order'];
     if (orderRaw is Map<String, dynamic>) {
       try {
@@ -149,6 +166,11 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
         if (order.riderId != null && order.riderId != riderId) return;
         if (DeliveryStatusUtils.isActive(order.status)) {
           setActiveTrip(order);
+          return;
+        }
+        if (DeliveryStatusUtils.isPending(order.status) &&
+            order.riderId == null) {
+          _presentOfferFromOrder(order);
           return;
         }
         if (_activeTripOrder?.id == order.id) {
@@ -160,6 +182,7 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
       }
     }
 
+    final orderId = payload['orderId'] as String? ?? payload['id'] as String?;
     if (orderId == null || _activeTripOrder?.id != orderId) return;
     final statusRaw = payload['status'] as String?;
     if (statusRaw == null) {
@@ -170,6 +193,38 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
     if (!DeliveryStatusUtils.isActive(status)) {
       clearActiveTrip();
     }
+  }
+
+  Future<void> _syncPendingOffersFromApi() async {
+    if (!_canReceiveOffers) return;
+    if (_pendingOffer != null || _activeTripOrder != null) return;
+
+    try {
+      final orders = await ApiService.getDeliveryOrders(
+        status: 'pending',
+        limit: 8,
+        hidePickupCode: true,
+      );
+      for (final order in orders) {
+        if (!DeliveryStatusUtils.isPending(order.status)) continue;
+        if (_dismissedOfferOrderIds.contains(order.id)) continue;
+        _presentOfferFromOrder(order);
+        return;
+      }
+    } catch (e) {
+      debugPrint('Falha ao sincronizar ofertas pendentes: $e');
+    }
+  }
+
+  void _presentOfferFromOrder(DeliveryOrder order) {
+    presentOffer(
+      DeliveryOfferPayload(
+        order: order.withoutInternalCode(),
+        expiresInSeconds: 15,
+        distanceToStoreKm: null,
+        routeDistanceKm: order.totalDistance,
+      ),
+    );
   }
 
   DeliveryStatus _statusFromApi(String raw) {

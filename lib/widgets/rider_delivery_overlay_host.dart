@@ -39,7 +39,7 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
       listen: false,
     );
     final user = appState.user;
-    if (user == null || !user.isRider) {
+    if (user == null || !user.isRider || !appState.isDeliveryPilot) {
       session.detach();
       return;
     }

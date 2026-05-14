@@ -39,6 +39,8 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
   Timer? _realtimePartnerReloadDebounce;
+  Timer? _deliveryPresenceSyncDebounce;
+  DateTime? _lastDeliveryPresenceSyncAt;
   bool _heatmapOn = false;
   Set<MapFilterOption> _filterOptions = {};
   MapTimeWindowOption _mapTimeWindow = MapTimeWindowOption.now;
@@ -195,6 +197,33 @@ class _HomeScreenState extends State<HomeScreen> {
       orderId: activeOrder?.id,
       orderStatus: activeOrder != null ? activeOrder.status.name : null,
     );
+    if (appState.isDeliveryPilot) {
+      _scheduleDeliveryPresenceSync(lat, lng);
+    }
+  }
+
+  void _scheduleDeliveryPresenceSync(double lat, double lng) {
+    final lastSync = _lastDeliveryPresenceSyncAt;
+    if (lastSync != null &&
+        DateTime.now().difference(lastSync) < const Duration(seconds: 20)) {
+      return;
+    }
+    _deliveryPresenceSyncDebounce?.cancel();
+    _deliveryPresenceSyncDebounce = Timer(
+      const Duration(milliseconds: 400),
+      () async {
+        _lastDeliveryPresenceSyncAt = DateTime.now();
+        try {
+          await ApiService.updateUserLocation(
+            latitude: lat,
+            longitude: lng,
+            isOnline: true,
+          );
+        } catch (e) {
+          debugPrint('Falha ao sincronizar presenca do entregador: $e');
+        }
+      },
+    );
   }
 
   Future<void> _startDeliveryModerationSync() async {
@@ -273,6 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _positionSubscription?.cancel();
     _deliveryStatusSubscription?.cancel();
     _realtimePartnerReloadDebounce?.cancel();
+    _deliveryPresenceSyncDebounce?.cancel();
     super.dispose();
   }
 
