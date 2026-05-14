@@ -24,29 +24,50 @@ class PartnerHomeScreen extends StatefulWidget {
   State<PartnerHomeScreen> createState() => _PartnerHomeScreenState();
 }
 
-class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
+class _PartnerHomeScreenState extends State<PartnerHomeScreen>
+    with WidgetsBindingObserver {
   GoogleMapController? _mapController;
   bool _isLoading = false;
   bool _hasLoadedOnce = false;
+  List<DeliveryOrder> _allOrders = [];
   List<DeliveryOrder> _activeOrders = [];
   List<DeliveryOrder> _awaitingDispatchOrders = [];
   List<DeliveryOrder> _pendingOrders = [];
   final Set<String> _dispatchingOrderIds = <String>{};
+  final Set<String> _knownOrderIds = <String>{};
   int _totalOrders = 0;
   int _completedOrders = 0;
   double _totalRevenue = 0.0;
   StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
   Timer? _realtimeReloadDebounce;
+  String? _subscribedPartnerId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _subscribeRealtimeUpdates();
+      _loadPartnerData();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _subscribeRealtimeUpdates();
-    _loadPartnerData();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadPartnerData(silent: true);
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _deliveryStatusSubscription?.cancel();
     _realtimeReloadDebounce?.cancel();
     super.dispose();
@@ -54,16 +75,104 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
 
   void _subscribeRealtimeUpdates() {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
-    final userId = appState.user?.id;
-    if (userId == null) return;
+    final user = appState.user;
+    final userId = user?.id;
+    final partnerId = user?.partnerId;
+    if (userId == null || partnerId == null || !user!.isPartner) return;
+    if (_subscribedPartnerId == partnerId && _deliveryStatusSubscription != null) {
+      return;
+    }
+
+    _deliveryStatusSubscription?.cancel();
+    _subscribedPartnerId = partnerId;
     RealtimeService.instance.connect(userId);
     _deliveryStatusSubscription =
-        RealtimeService.instance.onDeliveryStatusChanged.listen((_) {
-      _realtimeReloadDebounce?.cancel();
-      _realtimeReloadDebounce = Timer(
-        const Duration(milliseconds: 500),
-        () => _loadPartnerData(silent: true),
-      );
+        RealtimeService.instance.onDeliveryStatusChanged.listen(
+      _handleRealtimeDeliveryEvent,
+    );
+  }
+
+  void _handleRealtimeDeliveryEvent(Map<String, dynamic> payload) {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final partnerId = appState.user?.partnerId;
+    if (partnerId == null) return;
+
+    final orderRaw = payload['order'];
+    if (orderRaw is Map<String, dynamic>) {
+      try {
+        final order = ApiService.deliveryOrderFromJson(
+          Map<String, dynamic>.from(orderRaw),
+        );
+        if (order.storeId != partnerId) return;
+
+        final isNewOrder = !_knownOrderIds.contains(order.id);
+        final merged = <DeliveryOrder>[
+          order,
+          ..._allOrders.where((existing) => existing.id != order.id),
+        ];
+        _syncFromOrderList(merged);
+        if (isNewOrder &&
+            DeliveryStatusUtils.isAwaitingDispatch(order.status) &&
+            mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Novo pedido aguardando despacho: ${order.storeName}',
+              ),
+            ),
+          );
+        }
+        _scheduleRealtimeReload();
+        return;
+      } catch (e) {
+        debugPrint('Falha ao aplicar pedido em tempo real: $e');
+      }
+    }
+
+    _scheduleRealtimeReload();
+  }
+
+  void _scheduleRealtimeReload() {
+    _realtimeReloadDebounce?.cancel();
+    _realtimeReloadDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () => _loadPartnerData(silent: true),
+    );
+  }
+
+  void _syncFromOrderList(List<DeliveryOrder> allOrders) {
+    final activeOrders = allOrders
+        .where((o) => DeliveryStatusUtils.isActive(o.status))
+        .toList();
+    final awaitingDispatchOrders = allOrders
+        .where((o) => DeliveryStatusUtils.isAwaitingDispatch(o.status))
+        .toList();
+    final pendingOrders = allOrders
+        .where((o) => DeliveryStatusUtils.isPending(o.status))
+        .toList();
+    final completedOrders =
+        allOrders.where((o) => o.status == DeliveryStatus.completed).toList();
+    final today = DateTime.now();
+    final todayOrders = completedOrders.where((o) =>
+        o.completedAt != null &&
+        o.completedAt!.year == today.year &&
+        o.completedAt!.month == today.month &&
+        o.completedAt!.day == today.day);
+    final revenue =
+        todayOrders.fold<double>(0.0, (sum, order) => sum + order.totalValue);
+
+    if (!mounted) return;
+    setState(() {
+      _allOrders = allOrders;
+      _activeOrders = activeOrders;
+      _awaitingDispatchOrders = awaitingDispatchOrders;
+      _pendingOrders = pendingOrders;
+      _totalOrders = allOrders.length;
+      _completedOrders = completedOrders.length;
+      _totalRevenue = revenue;
+      _knownOrderIds
+        ..clear()
+        ..addAll(allOrders.map((order) => order.id));
     });
   }
 
@@ -78,36 +187,11 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen> {
     }
     try {
       final allOrders = await ApiService.getDeliveryOrders(storeId: user.partnerId);
-      final activeOrders = allOrders
-          .where((o) => DeliveryStatusUtils.isActive(o.status))
-          .toList();
-      final awaitingDispatchOrders = allOrders
-          .where((o) => DeliveryStatusUtils.isAwaitingDispatch(o.status))
-          .toList();
-      final pendingOrders = allOrders
-          .where((o) => DeliveryStatusUtils.isPending(o.status))
-          .toList();
-      final completedOrders = allOrders.where((o) => o.status == DeliveryStatus.completed).toList();
-      final today = DateTime.now();
-      final todayOrders = completedOrders.where((o) =>
-          o.completedAt != null &&
-          o.completedAt!.year == today.year &&
-          o.completedAt!.month == today.month &&
-          o.completedAt!.day == today.day);
-      final revenue = todayOrders.fold<double>(0.0, (sum, order) => sum + order.totalValue);
-
       if (!mounted) return;
-      setState(() {
-        _activeOrders = activeOrders;
-        _awaitingDispatchOrders = awaitingDispatchOrders;
-        _pendingOrders = pendingOrders;
-        _totalOrders = allOrders.length;
-        _completedOrders = completedOrders.length;
-        _totalRevenue = revenue;
-        if (showBlockingLoader) {
-          _isLoading = false;
-        }
-      });
+      _syncFromOrderList(allOrders);
+      if (showBlockingLoader) {
+        setState(() => _isLoading = false);
+      }
       _hasLoadedOnce = true;
     } catch (_) {
       if (mounted && showBlockingLoader) {

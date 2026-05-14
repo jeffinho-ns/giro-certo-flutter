@@ -886,6 +886,10 @@ class ApiService {
     return _deliveryOrderFromJson(json).withoutInternalCode();
   }
 
+  static DeliveryOrder deliveryOrderFromJson(Map<String, dynamic> json) {
+    return _deliveryOrderFromJson(json);
+  }
+
   static DeliveryOrder _deliveryOrderFromJson(Map<String, dynamic> json) {
     final rawStoreLat = (json['storeLatitude'] as num).toDouble();
     final rawStoreLng = (json['storeLongitude'] as num).toDouble();
