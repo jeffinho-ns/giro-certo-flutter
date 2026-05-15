@@ -110,7 +110,10 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
   void dispose() {
     _themeProvider?.removeListener(_onAppThemeChanged);
     _trip.removeListener(_onTripChanged);
-    unawaited(_mapController?.finishNavigation());
+    // [DeliveryTripController] já pode ter chamado finishNavigation ao chegar ao destino.
+    if (_trip.phase != DeliveryTripPhase.awaitingDeliveryProof) {
+      unawaited(_mapController?.finishNavigation());
+    }
     _mapController?.dispose();
     super.dispose();
   }

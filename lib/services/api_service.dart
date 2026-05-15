@@ -770,8 +770,7 @@ class ApiService {
 
   /// Confirmar chegada ao cliente.
   static Future<DeliveryOrder> markArrivedAtDestination(String orderId) async {
-    final idempotencyKey =
-        'status:$orderId:arrivedAtDestination:${DateTime.now().millisecondsSinceEpoch}';
+    final idempotencyKey = 'status:$orderId:arrivedAtDestination';
     final response = await _requestWithRetry(
       (headers) => http.patch(
         Uri.parse('$baseUrl/delivery/$orderId/status'),
@@ -819,8 +818,7 @@ class ApiService {
 
   /// Confirmar chegada ao estabelecimento
   static Future<DeliveryOrder> markArrivedAtStore(String orderId) async {
-    final idempotencyKey =
-        'status:$orderId:arrivedAtStore:${DateTime.now().millisecondsSinceEpoch}';
+    final idempotencyKey = 'status:$orderId:arrivedAtStore';
     final response = await _requestWithRetry(
       (headers) => http.patch(
         Uri.parse('$baseUrl/delivery/$orderId/status'),

@@ -30,6 +30,7 @@ class DeliveryTripController extends ChangeNotifier {
   DeliveryOrder _order;
   late DeliveryTripPhase _phase;
   bool _isLoading = false;
+  bool _finishNavigationOnce = false;
   String? _errorMessage;
   double? _latitude;
   double? _longitude;
@@ -247,8 +248,18 @@ class DeliveryTripController extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      await _syncLocationCheckpoint();
-      final updated = await ApiService.markArrivedAtDestination(_order.id);
+      unawaited(
+        _syncLocationCheckpoint().timeout(
+          const Duration(seconds: 4),
+          onTimeout: () {},
+        ),
+      );
+      final updated = await ApiService.markArrivedAtDestination(_order.id).timeout(
+        const Duration(seconds: 45),
+        onTimeout: () => throw Exception(
+          'Tempo esgotado ao confirmar chegada. Verifique a rede e tente de novo.',
+        ),
+      );
       _order = updated.withoutInternalCode();
       _phase = DeliveryTripPhase.awaitingDeliveryProof;
       _errorMessage = null;
@@ -298,6 +309,8 @@ class DeliveryTripController extends ChangeNotifier {
   }
 
   Future<void> _endNavigationGuidance() async {
+    if (_finishNavigationOnce) return;
+    _finishNavigationOnce = true;
     try {
       await mapboxController?.finishNavigation();
     } catch (e) {

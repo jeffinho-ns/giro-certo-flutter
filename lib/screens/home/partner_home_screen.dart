@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
@@ -12,6 +13,7 @@ import '../../utils/colors.dart';
 import '../../utils/delivery_status_utils.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/api_image.dart';
+import '../../widgets/partner_delivery_status_tracker.dart';
 import '../delivery/create_delivery_modal.dart';
 import '../delivery/delivery_detail_modal.dart';
 import '../delivery/delivery_screen.dart';
@@ -41,6 +43,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   double _totalRevenue = 0.0;
   StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
   Timer? _realtimeReloadDebounce;
+  Timer? _partnerBackgroundSyncTimer;
   String? _subscribedPartnerId;
 
   @override
@@ -50,6 +53,14 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _subscribeRealtimeUpdates();
       _loadPartnerData();
+    });
+    _partnerBackgroundSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      if (!mounted) return;
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      final u = appState.user;
+      if (u != null && u.isPartner && u.partnerId != null) {
+        _loadPartnerData(silent: true);
+      }
     });
   }
 
@@ -71,6 +82,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     WidgetsBinding.instance.removeObserver(this);
     _deliveryStatusSubscription?.cancel();
     _realtimeReloadDebounce?.cancel();
+    _partnerBackgroundSyncTimer?.cancel();
     super.dispose();
   }
 
@@ -128,7 +140,6 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
             SnackBar(content: Text(msg)),
           );
         }
-        _scheduleRealtimeReload();
         return;
       } catch (e) {
         debugPrint('Falha ao aplicar pedido em tempo real: $e');
@@ -211,6 +222,35 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
         },
       );
     });
+  }
+
+  Future<void> _openDeliveryIssueReport(DeliveryOrder order) async {
+    final subject = Uri.encodeComponent('Problema no pedido ${order.id}');
+    final body = Uri.encodeComponent(
+      'Descreva o ocorrido:\n\n'
+      'Pedido: ${order.id}\n'
+      'Estado no app: ${order.status.name}\n'
+      'Destino: ${order.deliveryAddress}\n',
+    );
+    final uri = Uri.parse('mailto:suporte@girocerto.com.br?subject=$subject&body=$body');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível abrir o e-mail. Contacte o suporte com o ID do pedido.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao abrir relatório: $e')),
+        );
+      }
+    }
   }
 
   void _scheduleRealtimeReload() {
@@ -712,21 +752,28 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     final userLat = user?.currentLat ?? -23.5505;
     final userLng = user?.currentLng ?? -46.6333;
 
-    return GestureDetector(
-      onTap: () {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => DeliveryDetailModal(
-            order: order,
-            userLat: userLat,
-            userLng: userLng,
-            onOrderUpdated: _loadPartnerData,
-          ),
-        ).then((_) => _loadPartnerData());
-      },
-      child: Container(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => DeliveryDetailModal(
+                  order: order,
+                  userLat: userLat,
+                  userLng: userLng,
+                  onOrderUpdated: _loadPartnerData,
+                ),
+              ).then((_) => _loadPartnerData());
+            },
+            child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -795,6 +842,8 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                 ),
               ],
             ),
+            const SizedBox(height: 10),
+            PartnerDeliveryStatusTracker(status: order.status, compact: false),
             if (showMotoSearchBanner &&
                 DeliveryStatusUtils.isPending(order.status)) ...[
               const SizedBox(height: 10),
@@ -873,6 +922,23 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                                     color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
                                   ),
                                 ),
+                              if ((order.riderBikeModel ?? '').isNotEmpty ||
+                                  (order.riderBikePlate ?? '').isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    [
+                                      if ((order.riderBikeModel ?? '').isNotEmpty)
+                                        order.riderBikeModel!,
+                                      if ((order.riderBikePlate ?? '').isNotEmpty)
+                                        order.riderBikePlate!,
+                                    ].join(' · '),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.racingOrange,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -936,6 +1002,21 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
           ],
         ),
       ),
+        ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 2, right: 2),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => unawaited(_openDeliveryIssueReport(order)),
+              icon: Icon(LucideIcons.flag, size: 16, color: theme.colorScheme.error),
+              label: const Text('Reportar problema'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

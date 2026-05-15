@@ -182,14 +182,28 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
   }
 
   void setActiveTrip(DeliveryOrder order) {
+    final next = order.withoutInternalCode();
+    if (_activeTripOrder != null &&
+        _activeTripOrder!.id == next.id &&
+        _activeTripOrder!.status == next.status) {
+      return;
+    }
     _pendingOffer = null;
-    _activeTripOrder = order.withoutInternalCode();
+    _activeTripOrder = next;
     notifyListeners();
   }
 
   void updateActiveTrip(DeliveryOrder order) {
     if (_activeTripOrder?.id != order.id) return;
-    _activeTripOrder = order.withoutInternalCode();
+    final next = order.withoutInternalCode();
+    final cur = _activeTripOrder!;
+    if (cur.status == next.status &&
+        cur.riderId == next.riderId &&
+        cur.riderName == next.riderName &&
+        cur.riderPhotoUrl == next.riderPhotoUrl) {
+      return;
+    }
+    _activeTripOrder = next;
     notifyListeners();
   }
 
