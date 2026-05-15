@@ -4,6 +4,9 @@ import 'package:geolocator/geolocator.dart';
 class DeliveryGeofence {
   DeliveryGeofence._();
 
+  /// MVP / testes: quando `false`, o motociclista pode confirmar chegada na loja sem validar GPS.
+  static const bool requireStoreArrivalProximity = false;
+
   static const double storeArrivalMaxMeters = 150;
 
   static double? distanceMeters({

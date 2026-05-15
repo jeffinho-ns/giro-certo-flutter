@@ -55,7 +55,7 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
         RealtimeService.instance.onDeliveryStatusChanged.listen(_onDeliveryStatus);
 
     _pendingOfferPollTimer = Timer.periodic(
-      const Duration(seconds: 12),
+      const Duration(seconds: 5),
       (_) => unawaited(_syncPendingOffersFromApi()),
     );
 
@@ -139,8 +139,8 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
 
   bool get _canReceiveOffers {
     if (_attachedRiderId == null) return false;
-    if (!_isDeliveryPilot) return false;
-    if (!_isDeliveryApproved) return false;
+    // Ofertas globais: qualquer motociclista autenticado (sem loja) pode receber.
+    // Cadastro delivery em analise nao bloqueia o modal no MVP de testes.
     return true;
   }
 

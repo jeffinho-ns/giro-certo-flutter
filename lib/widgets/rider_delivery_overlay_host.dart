@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../app_navigator_key.dart';
 import '../features/trip_navigation/trip_navigation_launcher.dart';
+import '../models/delivery_offer_payload.dart';
 import '../services/api_service.dart';
 import '../models/delivery_order.dart';
 import '../models/pilot_profile.dart';
@@ -26,6 +28,58 @@ class RiderDeliveryOverlayHost extends StatefulWidget {
 }
 
 class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
+  OverlayEntry? _offerOverlayEntry;
+  String? _offerOverlayOrderId;
+
+  @override
+  void dispose() {
+    _removeOfferOverlay();
+    super.dispose();
+  }
+
+  void _removeOfferOverlay() {
+    _offerOverlayEntry?.remove();
+    _offerOverlayEntry = null;
+    _offerOverlayOrderId = null;
+  }
+
+  void _syncOfferOverlay(
+    DeliveryOfferPayload? offer,
+    RiderDeliverySessionProvider session,
+  ) {
+    final root = appNavigatorKey.currentContext;
+    if (root == null) return;
+
+    if (offer == null) {
+      _removeOfferOverlay();
+      return;
+    }
+
+    if (_offerOverlayOrderId == offer.order.id && _offerOverlayEntry != null) {
+      return;
+    }
+
+    _removeOfferOverlay();
+    _offerOverlayOrderId = offer.order.id;
+
+    _offerOverlayEntry = OverlayEntry(
+      builder: (overlayContext) => DeliveryPipcarModal(
+        order: offer.order,
+        distanceToStoreKm: offer.distanceToStoreKm,
+        routeDistanceKm: offer.routeDistanceKm,
+        countdownSeconds: offer.expiresInSeconds,
+        onAccept: () => _acceptOffer(session, offer),
+        onReject: () {
+          session.dismissOffer();
+          _removeOfferOverlay();
+        },
+      ),
+    );
+    Overlay.of(root, rootOverlay: true).insert(_offerOverlayEntry!);
+  }
+
+  String? _lastOfferSyncKey;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -39,8 +93,9 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
       listen: false,
     );
     final user = appState.user;
-    if (user == null || !user.isRider || !appState.isDeliveryPilot) {
+    if (user == null || !user.isRider) {
       session.detach();
+      _removeOfferOverlay();
       return;
     }
 
@@ -52,13 +107,15 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
     );
   }
 
-  Future<void> _acceptOffer() async {
-    final session = context.read<RiderDeliverySessionProvider>();
-    final offer = session.pendingOffer;
+  Future<void> _acceptOffer(
+    RiderDeliverySessionProvider session,
+    DeliveryOfferPayload offer,
+  ) async {
     final user = context.read<AppStateProvider>().user;
-    if (offer == null || user == null) return;
+    if (user == null) return;
 
     session.dismissOffer();
+    _removeOfferOverlay();
     try {
       await TripNavigationLauncher.acceptAndOpen(
         context,
@@ -112,6 +169,15 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
     return Consumer<RiderDeliverySessionProvider>(
       builder: (context, session, _) {
         final offer = session.pendingOffer;
+        final syncKey = offer?.order.id ?? '_none_';
+        if (syncKey != _lastOfferSyncKey) {
+          _lastOfferSyncKey = syncKey;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _syncOfferOverlay(session.pendingOffer, session);
+          });
+        }
+
         final activeTrip = session.activeTripOrder;
         final showResume = session.shouldShowResumeTrip && activeTrip != null;
 
@@ -127,17 +193,6 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
                 child: _ActiveTripResumeBanner(
                   order: activeTrip,
                   onResume: _resumeTrip,
-                ),
-              ),
-            if (offer != null)
-              Positioned.fill(
-                child: DeliveryPipcarModal(
-                  order: offer.order,
-                  distanceToStoreKm: offer.distanceToStoreKm,
-                  routeDistanceKm: offer.routeDistanceKm,
-                  countdownSeconds: offer.expiresInSeconds,
-                  onAccept: _acceptOffer,
-                  onReject: session.dismissOffer,
                 ),
               ),
           ],

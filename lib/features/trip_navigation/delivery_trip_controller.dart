@@ -184,15 +184,17 @@ class DeliveryTripController extends ChangeNotifier {
         return ConfirmArrivalResult.locationUnavailable;
       }
 
-      final distance = DeliveryGeofence.distanceMeters(
-        fromLatitude: lat,
-        fromLongitude: lng,
-        toLatitude: _order.storeLatitude,
-        toLongitude: _order.storeLongitude,
-      );
-      if (distance == null ||
-          distance > DeliveryGeofence.storeArrivalMaxMeters) {
-        return ConfirmArrivalResult.tooFarFromStore;
+      if (DeliveryGeofence.requireStoreArrivalProximity) {
+        final distance = DeliveryGeofence.distanceMeters(
+          fromLatitude: lat,
+          fromLongitude: lng,
+          toLatitude: _order.storeLatitude,
+          toLongitude: _order.storeLongitude,
+        );
+        if (distance == null ||
+            distance > DeliveryGeofence.storeArrivalMaxMeters) {
+          return ConfirmArrivalResult.tooFarFromStore;
+        }
       }
 
       final updated = await ApiService.markArrivedAtStore(_order.id);
