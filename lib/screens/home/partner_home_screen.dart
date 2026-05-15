@@ -35,6 +35,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   List<DeliveryOrder> _pendingOrders = [];
   final Set<String> _dispatchingOrderIds = <String>{};
   final Set<String> _knownOrderIds = <String>{};
+  final Set<String> _riderArrivedDialogOrderIds = <String>{};
   int _totalOrders = 0;
   int _completedOrders = 0;
   double _totalRevenue = 0.0;
@@ -105,6 +106,8 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
         );
         if (order.storeId != partnerId) return;
 
+        _maybeShowRiderArrivedDialog(order);
+
         final isNewOrder = !_knownOrderIds.contains(order.id);
         final merged = <DeliveryOrder>[
           order,
@@ -133,6 +136,81 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     }
 
     _scheduleRealtimeReload();
+  }
+
+  void _maybeShowRiderArrivedDialog(DeliveryOrder order) {
+    if (order.status != DeliveryStatus.arrivedAtStore) return;
+    if ((order.riderId ?? '').isEmpty) return;
+    if (_riderArrivedDialogOrderIds.contains(order.id)) return;
+    _riderArrivedDialogOrderIds.add(order.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final theme = Theme.of(context);
+      final bikeParts = <String>[
+        if ((order.riderBikeModel ?? '').trim().isNotEmpty) order.riderBikeModel!.trim(),
+        if ((order.riderBikePlate ?? '').trim().isNotEmpty) order.riderBikePlate!.trim(),
+      ];
+      final bikeLine = bikeParts.isEmpty ? 'Veículo não cadastrado no app.' : bikeParts.join(' · ');
+      showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Text(
+              '${order.riderName ?? 'Motociclista'} chegou na loja',
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (order.riderPhotoUrl != null && order.riderPhotoUrl!.isNotEmpty)
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                          width: 120,
+                          height: 120,
+                          child: ApiImage(url: order.riderPhotoUrl!, fit: BoxFit.cover),
+                        ),
+                      ),
+                    ),
+                  if (order.riderPhotoUrl != null && order.riderPhotoUrl!.isNotEmpty)
+                    const SizedBox(height: 12),
+                  Text('Moto', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 4),
+                  Text(bikeLine, style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 14),
+                  Text('Código para o entregador retirar o pedido', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 4),
+                  Text(
+                    order.internalCode ?? '—',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                      color: AppColors.neonGreen,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'São 4 dígitos — leia em voz alta ou mostre no ecrã.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.textTheme.bodySmall?.color?.withOpacity(0.75),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+    });
   }
 
   void _scheduleRealtimeReload() {
@@ -807,7 +885,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                           Icon(LucideIcons.hash, size: 14, color: AppColors.neonGreen),
                           const SizedBox(width: 6),
                           Text(
-                            'Código interno: ${order.internalCode}',
+                            'Código para o entregador (4 dígitos): ${order.internalCode}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: AppColors.neonGreen,
                               fontWeight: FontWeight.w700,

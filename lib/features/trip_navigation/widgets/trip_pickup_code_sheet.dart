@@ -86,11 +86,20 @@ Future<String?> showTripPickupCodeSheet(BuildContext context) {
               TextField(
                 controller: controller,
                 textCapitalization: TextCapitalization.characters,
+                keyboardType: TextInputType.visiblePassword,
                 autocorrect: false,
                 autofocus: true,
+                maxLength: 16,
+                buildCounter: (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) =>
+                    const SizedBox.shrink(),
                 decoration: const InputDecoration(
                   labelText: 'Codigo de retirada da loja',
-                  hintText: 'Ex.: GC-1234ABCD',
+                  hintText: '4 digitos (ex.: 1847) ou codigo antigo GC-...',
                   border: OutlineInputBorder(),
                 ),
               ),

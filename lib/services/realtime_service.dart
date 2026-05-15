@@ -128,6 +128,11 @@ class RealtimeService {
         final map = Map<String, dynamic>.from(data);
         _notificationController.add(map);
 
+        if (map['type'] == 'rider_arrived_store') {
+          // Home lojista mostra modal com foto/dados; evita notificação local genérica duplicada.
+          return;
+        }
+
         final title = (map['title'] as String?) ?? 'Nova notificação';
         final body = (map['body'] as String?) ??
             (map['description'] as String?) ??

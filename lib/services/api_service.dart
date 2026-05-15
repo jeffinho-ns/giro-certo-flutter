@@ -891,10 +891,16 @@ class ApiService {
   }
 
   static DeliveryOrder _deliveryOrderFromJson(Map<String, dynamic> json) {
-    final rawStoreLat = (json['storeLatitude'] as num).toDouble();
-    final rawStoreLng = (json['storeLongitude'] as num).toDouble();
-    final rawDelLat = (json['deliveryLatitude'] as num).toDouble();
-    final rawDelLng = (json['deliveryLongitude'] as num).toDouble();
+    double jsonDouble(dynamic v, [double fallback = 0]) {
+      if (v == null) return fallback;
+      if (v is num) return v.toDouble();
+      return double.tryParse(v.toString()) ?? fallback;
+    }
+
+    final rawStoreLat = jsonDouble(json['storeLatitude']);
+    final rawStoreLng = jsonDouble(json['storeLongitude']);
+    final rawDelLat = jsonDouble(json['deliveryLatitude']);
+    final rawDelLng = jsonDouble(json['deliveryLongitude']);
     final store =
         GeoCoordinatesBrazil.normalizeRoutingPair(rawStoreLat, rawStoreLng);
     final delivery =
@@ -913,10 +919,14 @@ class ApiService {
       recipientName: json['recipientName'] as String?,
       recipientPhone: json['recipientPhone'] as String?,
       notes: json['notes'] as String?,
-      value: (json['value'] as num).toDouble(),
-      deliveryFee: (json['deliveryFee'] as num).toDouble(),
-      status: _parseDeliveryStatus(json['status'] as String),
-      priority: _parseDeliveryPriority(json['priority'] as String? ?? 'normal'),
+      value: jsonDouble(json['value']),
+      deliveryFee: jsonDouble(json['deliveryFee']),
+      status: _parseDeliveryStatus(
+        (json['status'] as String?) ?? json['status']?.toString() ?? 'pending',
+      ),
+      priority: _parseDeliveryPriority(
+        (json['priority'] as String?) ?? json['priority']?.toString() ?? 'normal',
+      ),
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : DateTime.now(),
@@ -931,12 +941,17 @@ class ApiService {
       riderEmail: json['riderEmail'] as String?,
       riderPhone: json['riderPhone'] as String?,
       riderPhotoUrl: json['riderPhotoUrl'] as String?,
+      riderBikePlate: json['riderBikePlate'] as String?,
+      riderBikeModel: json['riderBikeModel'] as String?,
+      riderBikeVehicleType: json['riderBikeVehicleType'] as String?,
       internalCode: json['internalCode'] as String?,
       distance: json['distance'] != null
-          ? (json['distance'] as num).toDouble()
+          ? jsonDouble(json['distance'])
           : null,
       estimatedTime: json['estimatedTime'] != null
-          ? (json['estimatedTime'] as num).toInt()
+          ? (json['estimatedTime'] is num
+              ? (json['estimatedTime'] as num).toInt()
+              : int.tryParse('${json['estimatedTime']}'))
           : null,
     );
   }

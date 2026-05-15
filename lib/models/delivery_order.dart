@@ -44,6 +44,9 @@ class DeliveryOrder {
   final String? riderEmail;
   final String? riderPhone;
   final String? riderPhotoUrl;
+  final String? riderBikePlate;
+  final String? riderBikeModel;
+  final String? riderBikeVehicleType;
   final String? internalCode;
   final double? distance; // Distância em km
   final int? estimatedTime; // Tempo estimado em minutos
@@ -73,6 +76,9 @@ class DeliveryOrder {
     this.riderEmail,
     this.riderPhone,
     this.riderPhotoUrl,
+    this.riderBikePlate,
+    this.riderBikeModel,
+    this.riderBikeVehicleType,
     this.internalCode,
     this.distance,
     this.estimatedTime,
@@ -131,6 +137,9 @@ class DeliveryOrder {
     String? riderEmail,
     String? riderPhone,
     String? riderPhotoUrl,
+    String? riderBikePlate,
+    String? riderBikeModel,
+    String? riderBikeVehicleType,
     String? internalCode,
     DateTime? acceptedAt,
     DateTime? completedAt,
@@ -160,6 +169,9 @@ class DeliveryOrder {
       riderEmail: riderEmail ?? this.riderEmail,
       riderPhone: riderPhone ?? this.riderPhone,
       riderPhotoUrl: riderPhotoUrl ?? this.riderPhotoUrl,
+      riderBikePlate: riderBikePlate ?? this.riderBikePlate,
+      riderBikeModel: riderBikeModel ?? this.riderBikeModel,
+      riderBikeVehicleType: riderBikeVehicleType ?? this.riderBikeVehicleType,
       internalCode: internalCode ?? this.internalCode,
       distance: distance,
       estimatedTime: estimatedTime,
@@ -193,6 +205,9 @@ class DeliveryOrder {
       riderEmail: riderEmail,
       riderPhone: riderPhone,
       riderPhotoUrl: riderPhotoUrl,
+      riderBikePlate: riderBikePlate,
+      riderBikeModel: riderBikeModel,
+      riderBikeVehicleType: riderBikeVehicleType,
       distance: distance,
       estimatedTime: estimatedTime,
     );
