@@ -15,5 +15,10 @@ class NavigationProvider extends ChangeNotifier {
   void navigateToHome() {
     navigateTo(0);
   }
+
+  /// Hub principal com mapa: [HomeScreen] para motociclista ou [PartnerHomeScreen] para lojista.
+  void navigateToRiderOrPartnerHub() {
+    navigateTo(2);
+  }
 }
 

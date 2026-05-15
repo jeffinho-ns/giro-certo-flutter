@@ -10,6 +10,7 @@ import '../../models/rider_stats.dart';
 import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
 import '../../providers/app_state_provider.dart';
+import '../../providers/rider_delivery_session_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
 import '../../features/trip_navigation/widgets/trip_delivery_proof_dialog.dart';
@@ -186,6 +187,8 @@ class _DeliveryScreenState extends State<DeliveryScreen>
 
       // Integrar com API real
       if (_isRiderMode) {
+        final riderSession =
+            Provider.of<RiderDeliverySessionProvider>(context, listen: false);
         // Motociclista: pedidos pendentes + minhas corridas
         final results = await Future.wait([
           ApiService.getDeliveryOrders(
@@ -203,6 +206,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         setState(() {
           _orders = allOrders
               .where((o) => DeliveryStatusUtils.isPending(o.status))
+              .where((o) => !riderSession.isOrderHiddenFromRiderLists(o.id))
               .toList();
           _myOrders = myOrders
               .where((o) => DeliveryStatusUtils.isActive(o.status))
@@ -364,8 +368,12 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     final primaryColor = themeProvider.primaryColor;
     final isDark = theme.brightness == Brightness.dark;
-    final pendingOrders =
-        _orders.where((o) => DeliveryStatusUtils.isPending(o.status)).toList();
+    final riderSession = context.watch<RiderDeliverySessionProvider>();
+    final pendingOrders = _orders
+        .where((o) => DeliveryStatusUtils.isPending(o.status))
+        .where((o) =>
+            !_isRiderMode || !riderSession.isOrderHiddenFromRiderLists(o.id))
+        .toList();
 
     return Scaffold(
       body: Column(

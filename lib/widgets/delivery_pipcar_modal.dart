@@ -37,6 +37,8 @@ class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
   Timer? _timer;
   final DeliveryOfferAlertFeedback _alertFeedback = DeliveryOfferAlertFeedback();
   bool _isClosing = false;
+  /// Quando chega a zero o card continua; só para alerta contínuo (o rider deve aceitar ou recusar).
+  bool _countdownEnded = false;
 
   @override
   void initState() {
@@ -47,10 +49,19 @@ class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
       if (!mounted || _isClosing) return;
       if (_secondsLeft <= 1) {
         timer.cancel();
-        _closeOffer(expired: true);
+        unawaited(_onCountdownReachedZero());
         return;
       }
       setState(() => _secondsLeft -= 1);
+    });
+  }
+
+  Future<void> _onCountdownReachedZero() async {
+    if (!mounted || _isClosing) return;
+    await _alertFeedback.stop();
+    setState(() {
+      _secondsLeft = 0;
+      _countdownEnded = true;
     });
   }
 
@@ -61,7 +72,7 @@ class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
     super.dispose();
   }
 
-  Future<void> _closeOffer({required bool expired}) async {
+  Future<void> _closeOfferAsReject() async {
     if (_isClosing) return;
     _isClosing = true;
     _timer?.cancel();
@@ -80,7 +91,7 @@ class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
   }
 
   Future<void> _handleReject() async {
-    await _closeOffer(expired: false);
+    await _closeOfferAsReject();
   }
 
   String get _distanceToStoreLabel {
@@ -95,15 +106,13 @@ class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final progress = _secondsLeft / widget.countdownSeconds;
+    final progress = _countdownEnded
+        ? 1.0
+        : (_secondsLeft / widget.countdownSeconds).clamp(0.0, 1.0);
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) {
-          unawaited(_handleReject());
-        }
-      },
+      onPopInvokedWithResult: (didPop, _) {},
       child: Material(
         color: isDark
             ? AppColors.darkBackground.withValues(alpha: 0.98)
@@ -128,7 +137,9 @@ class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Responda antes que outro motociclista aceite.',
+                            _countdownEnded
+                                ? 'A corrida continua disponível. Aceite ou recuse para fechar.'
+                                : 'Responda antes que outro motociclista aceite.',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.textTheme.bodyMedium?.color
                                   ?.withValues(alpha: 0.72),
@@ -138,7 +149,8 @@ class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
                       ),
                     ),
                     IconButton(
-                      onPressed: _isClosing ? null : () => unawaited(_handleReject()),
+                      onPressed:
+                          _isClosing ? null : () => unawaited(_handleReject()),
                       tooltip: 'Recusar corrida',
                       icon: const Icon(LucideIcons.x, size: 28),
                     ),
@@ -168,14 +180,14 @@ class _DeliveryPipcarModalState extends State<DeliveryPipcarModal> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '$_secondsLeft',
+                              _countdownEnded ? '—' : '$_secondsLeft',
                               style: theme.textTheme.displaySmall?.copyWith(
                                 fontWeight: FontWeight.w900,
                                 height: 1,
                               ),
                             ),
                             Text(
-                              'segundos',
+                              _countdownEnded ? 'aguardando' : 'segundos',
                               style: theme.textTheme.labelMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: theme.textTheme.bodyMedium?.color

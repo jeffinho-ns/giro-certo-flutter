@@ -112,14 +112,17 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
         ];
         _syncFromOrderList(merged);
         if (isNewOrder &&
-            DeliveryStatusUtils.isAwaitingDispatch(order.status) &&
+            (DeliveryStatusUtils.isAwaitingDispatch(order.status) ||
+                DeliveryStatusUtils.isPending(order.status)) &&
             mounted) {
+          final fromWa = (order.notes ?? '').toLowerCase().contains('whatsapp');
+          final msg = DeliveryStatusUtils.isPending(order.status)
+              ? (fromWa
+                  ? 'Novo chamado (WhatsApp): motos já estão sendo notificadas.'
+                  : 'Novo chamado: buscando motociclista.')
+              : 'Novo pedido na loja — confirme para chamar motociclistas.';
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Novo pedido aguardando despacho: ${order.storeName}',
-              ),
-            ),
+            SnackBar(content: Text(msg)),
           );
         }
         _scheduleRealtimeReload();
@@ -301,6 +304,8 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
           ),
         ),
         const SizedBox(height: 20),
+        _buildChamadosDeEntregaSection(theme),
+        const SizedBox(height: 20),
         GestureDetector(
           onTap: () {
             showModalBottomSheet(
@@ -481,23 +486,73 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                 child: _buildOrderCard(context, theme, order, isActive: true),
               )),
         ],
-        if (_awaitingDispatchOrders.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Aguardando Despacho',
+        const SizedBox(height: 100),
+      ],
+    );
+  }
+
+  Widget _buildChamadosDeEntregaSection(ThemeData theme) {
+    if (_pendingOrders.isEmpty && _awaitingDispatchOrders.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Chamados de entrega',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                   letterSpacing: -0.5,
                 ),
               ),
-            ],
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DeliveryScreen()),
+                );
+              },
+              child: Text(
+                'Ver todos',
+                style: TextStyle(
+                  color: AppColors.racingOrange,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Pedidos pelo WhatsApp entram já chamando motociclistas — não precisa de aprovação. '
+          'Pedidos criados aqui na loja: use «Confirmar e chamar» para enviar aos motos.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.textTheme.bodyMedium?.color?.withOpacity(0.72),
+            height: 1.35,
           ),
-          const SizedBox(height: 16),
-          ..._awaitingDispatchOrders.take(3).map((order) => Padding(
+        ),
+        const SizedBox(height: 16),
+        ..._pendingOrders.take(6).map(
+              (order) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildOrderCard(
+                  context,
+                  theme,
+                  order,
+                  isActive: false,
+                  showDispatchButton: false,
+                  showMotoSearchBanner: true,
+                ),
+              ),
+            ),
+        ..._awaitingDispatchOrders.take(6).map(
+              (order) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _buildOrderCard(
                   context,
@@ -505,43 +560,10 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                   order,
                   isActive: false,
                   showDispatchButton: true,
-                ),
-              )),
-        ],
-        if (_pendingOrders.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Chamando Entregadores',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
+                  showMotoSearchBanner: false,
                 ),
               ),
-              TextButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const DeliveryScreen()),
-                  );
-                },
-                child: Text(
-                  'Ver todos',
-                  style: TextStyle(color: AppColors.racingOrange, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ..._pendingOrders.take(3).map((order) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildOrderCard(context, theme, order, isActive: false),
-              )),
-        ],
-        const SizedBox(height: 100),
+            ),
       ],
     );
   }
@@ -603,6 +625,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     DeliveryOrder order, {
     required bool isActive,
     bool showDispatchButton = false,
+    bool showMotoSearchBanner = false,
   }) {
     final isDark = theme.brightness == Brightness.dark;
     final isDispatching = _dispatchingOrderIds.contains(order.id);
@@ -694,6 +717,26 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                 ),
               ],
             ),
+            if (showMotoSearchBanner &&
+                DeliveryStatusUtils.isPending(order.status)) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(LucideIcons.bell, size: 14, color: AppColors.statusOk),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Motociclistas estão sendo notificados neste momento.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.statusOk,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (isActive && order.riderName != null) ...[
               const SizedBox(height: 12),
               Container(

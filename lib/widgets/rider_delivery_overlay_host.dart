@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../app_navigator_key.dart';
 import '../features/trip_navigation/trip_navigation_launcher.dart';
 import '../models/delivery_offer_payload.dart';
+import '../models/user.dart';
 import '../services/api_service.dart';
 import '../models/delivery_order.dart';
 import '../models/pilot_profile.dart';
@@ -47,9 +50,6 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
     DeliveryOfferPayload? offer,
     RiderDeliverySessionProvider session,
   ) {
-    final root = appNavigatorKey.currentContext;
-    if (root == null) return;
-
     if (offer == null) {
       _removeOfferOverlay();
       return;
@@ -69,22 +69,30 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
         routeDistanceKm: offer.routeDistanceKm,
         countdownSeconds: offer.expiresInSeconds,
         onAccept: () => _acceptOffer(session, offer),
-        onReject: () {
-          session.dismissOffer();
-          _removeOfferOverlay();
-        },
+        onReject: () => unawaited(_rejectOfferAndRemoveOverlay(session)),
       ),
     );
-    Overlay.of(root, rootOverlay: true).insert(_offerOverlayEntry!);
+
+    final inserted = _insertOfferOnNavigatorOverlay(_offerOverlayEntry!);
+    if (!inserted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _offerOverlayEntry == null) return;
+        _insertOfferOnNavigatorOverlay(_offerOverlayEntry!);
+      });
+    }
+  }
+
+  /// O [RiderDeliveryOverlayHost] fica *acima* do [Navigator] no `MaterialApp.builder`;
+  /// `Overlay.of(context)` com a chave do navigator falha — usar [NavigatorState.overlay].
+  bool _insertOfferOnNavigatorOverlay(OverlayEntry entry) {
+    final nav = appNavigatorKey.currentState;
+    final overlay = nav?.overlay;
+    if (overlay == null) return false;
+    overlay.insert(entry);
+    return true;
   }
 
   String? _lastOfferSyncKey;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _syncSessionBinding();
-  }
 
   void _syncSessionBinding() {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
@@ -93,7 +101,8 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
       listen: false,
     );
     final user = appState.user;
-    if (user == null || !user.isRider) {
+    // Só contas de loja (tipo LOJISTA) ficam fora do stream; delivery com `partnerId` na API continua a receber.
+    if (user == null || user.userType == UserType.lojista) {
       session.detach();
       _removeOfferOverlay();
       return;
@@ -107,6 +116,14 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
     );
   }
 
+  Future<void> _rejectOfferAndRemoveOverlay(
+    RiderDeliverySessionProvider session,
+  ) async {
+    await session.rejectOffer();
+    if (!mounted) return;
+    _removeOfferOverlay();
+  }
+
   Future<void> _acceptOffer(
     RiderDeliverySessionProvider session,
     DeliveryOfferPayload offer,
@@ -114,7 +131,7 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
     final user = context.read<AppStateProvider>().user;
     if (user == null) return;
 
-    session.dismissOffer();
+    session.clearPendingOffer();
     _removeOfferOverlay();
     try {
       await TripNavigationLauncher.acceptAndOpen(
@@ -166,6 +183,21 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
 
   @override
   Widget build(BuildContext context) {
+    // Obrigatório escutar o AppState aqui: com `listen: false` em didChangeDependencies
+    // o overlay não voltava a sincronizar após login/hidratação e o rider nunca fazia
+    // attach() ao stream `delivery:new_order_offer`.
+    context.select<AppStateProvider, String?>((a) => a.user?.id);
+    context.select<AppStateProvider, UserType>(
+        (a) => a.user?.userType ?? UserType.unknown);
+    context.select<AppStateProvider, bool>((a) => a.isDeliveryPilot);
+    context.select<AppStateProvider, DeliveryModerationStatus>(
+        (a) => a.deliveryModerationStatus);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncSessionBinding();
+    });
+
     return Consumer<RiderDeliverySessionProvider>(
       builder: (context, session, _) {
         final offer = session.pendingOffer;

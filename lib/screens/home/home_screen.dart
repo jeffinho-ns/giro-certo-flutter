@@ -285,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (appState.isDeliveryPilot &&
           appState.deliveryModerationStatus != DeliveryModerationStatus.approved &&
           mounted) {
-        context.read<RiderDeliverySessionProvider>().dismissOffer();
+        context.read<RiderDeliverySessionProvider>().clearPendingOffer();
       }
 
       await OnboardingService.setLastKnownDeliveryRegStatus(

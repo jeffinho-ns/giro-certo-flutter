@@ -7,6 +7,7 @@ import '../models/delivery_offer_payload.dart';
 import '../models/delivery_order.dart';
 import '../services/api_service.dart';
 import '../services/realtime_service.dart';
+import '../services/rejected_delivery_offers_store.dart';
 import '../utils/delivery_status_utils.dart';
 
 /// Ofertas em tempo real e corrida ativa do entregador (global no app).
@@ -21,9 +22,14 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
   String? _attachedRiderId;
   bool _isDeliveryPilot = false;
   bool _isDeliveryApproved = true;
+  String? _pendingDeepLinkOrderId;
 
   DeliveryOfferPayload? get pendingOffer => _pendingOffer;
   DeliveryOrder? get activeTripOrder => _activeTripOrder;
+
+  /// Recusas explícitas (persistidas) + supressão de sessão (ex.: corrida perdida).
+  bool isOrderHiddenFromRiderLists(String orderId) =>
+      _dismissedOfferOrderIds.contains(orderId);
 
   bool get hasActiveTrip => _activeTripOrder != null;
 
@@ -39,6 +45,9 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
         _isDeliveryPilot == isDeliveryPilot &&
         _isDeliveryApproved == isDeliveryApproved &&
         _offerSubscription != null) {
+      if (_pendingDeepLinkOrderId != null) {
+        unawaited(_flushDeepLinkOffer());
+      }
       return;
     }
 
@@ -59,8 +68,61 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
       (_) => unawaited(_syncPendingOffersFromApi()),
     );
 
-    unawaited(refreshActiveTrip(riderId));
-    unawaited(_syncPendingOffersFromApi());
+    unawaited(_bootstrapAfterAttach(riderId));
+  }
+
+  Future<void> _bootstrapAfterAttach(String riderId) async {
+    await _hydrateRejectedIdsFromStorage(riderId);
+    await refreshActiveTrip(riderId);
+    if (_pendingDeepLinkOrderId != null) {
+      await _flushDeepLinkOffer();
+    }
+    await _syncPendingOffersFromApi();
+  }
+
+  Future<void> _hydrateRejectedIdsFromStorage(String riderId) async {
+    final fromDisk = await RejectedDeliveryOffersStore.loadForUser(riderId);
+    _dismissedOfferOrderIds
+      ..clear()
+      ..addAll(fromDisk);
+    notifyListeners();
+  }
+
+  /// Abrir oferta após toque em notificação (antes do attach pode ficar em fila).
+  void scheduleDeepLinkOffer(String orderId) {
+    if (orderId.isEmpty) return;
+    _pendingDeepLinkOrderId = orderId;
+    if (_attachedRiderId != null && _offerSubscription != null) {
+      unawaited(_flushDeepLinkOffer());
+    }
+  }
+
+  Future<void> _flushDeepLinkOffer() async {
+    final id = _pendingDeepLinkOrderId;
+    if (id == null) return;
+    _pendingDeepLinkOrderId = null;
+    await presentOfferFromPush(id);
+  }
+
+  /// Carrega o pedido e mostra o modal de aceitar (ex.: push em background).
+  Future<void> presentOfferFromPush(String orderId) async {
+    if (_attachedRiderId == null) return;
+    if (!_canReceiveOffers) return;
+    if (TripNavigationExperiment.activeSessionOpen) return;
+    if (_activeTripOrder != null) return;
+    if (_dismissedOfferOrderIds.contains(orderId)) return;
+    try {
+      final order = await ApiService.getDeliveryOrder(
+        orderId,
+        hidePickupCode: true,
+      );
+      if (!DeliveryStatusUtils.isPending(order.status)) return;
+      if (order.riderId != null) return;
+      if (_dismissedOfferOrderIds.contains(order.id)) return;
+      _presentOfferFromOrder(order);
+    } catch (e) {
+      debugPrint('presentOfferFromPush: $e');
+    }
   }
 
   void detach() {
@@ -73,6 +135,7 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
     _deliveryStatusSubscription = null;
     _pendingOfferPollTimer = null;
     _attachedRiderId = null;
+    _pendingDeepLinkOrderId = null;
     _pendingOffer = null;
     _activeTripOrder = null;
     _dismissedOfferOrderIds.clear();
@@ -89,14 +152,33 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void dismissOffer() {
-    final current = _pendingOffer;
-    if (current != null) {
-      _dismissedOfferOrderIds.add(current.order.id);
-    }
+  /// Fecha o modal sem marcar como recusada (aceitar, limpezas internas).
+  void clearPendingOffer() {
     if (_pendingOffer == null) return;
     _pendingOffer = null;
     notifyListeners();
+  }
+
+  /// Motociclista recusou: não mostrar mais este pedido (lista + modal).
+  Future<void> rejectOffer() async {
+    final riderId = _attachedRiderId;
+    final current = _pendingOffer;
+    if (current != null && riderId != null) {
+      try {
+        await RejectedDeliveryOffersStore.add(riderId, current.order.id);
+      } catch (e) {
+        debugPrint('rejectOffer persist: $e');
+      }
+      _dismissedOfferOrderIds.add(current.order.id);
+    }
+    _pendingOffer = null;
+    notifyListeners();
+  }
+
+  /// Outro aceitou / perdeu a corrida: esconder só na sessão atual (não persiste).
+  void suppressOfferForSession(String orderId) {
+    if (orderId.isEmpty) return;
+    _dismissedOfferOrderIds.add(orderId);
   }
 
   void setActiveTrip(DeliveryOrder order) {
@@ -152,7 +234,8 @@ class RiderDeliverySessionProvider extends ChangeNotifier {
     if (payload['type'] != 'delivery_race_lost') return;
     final orderId = payload['orderId'] as String?;
     if (orderId == null || _pendingOffer?.order.id != orderId) return;
-    dismissOffer();
+    suppressOfferForSession(orderId);
+    clearPendingOffer();
   }
 
   void _onDeliveryStatus(Map<String, dynamic> payload) {

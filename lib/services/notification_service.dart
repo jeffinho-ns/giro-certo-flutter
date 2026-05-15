@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../app_navigator_key.dart';
 import '../models/chat_conversation.dart';
 import '../screens/chat/chat_screen.dart';
 import '../screens/social/notifications_screen.dart';
+import '../utils/delivery_offer_navigation.dart';
 
 /// Serviço centralizado para notificações locais.
 ///
@@ -27,6 +30,14 @@ const AndroidNotificationChannel highImportanceChannel = AndroidNotificationChan
 /// - 'chat:<chatId>' → abre o ecrã de chat
 /// - 'notification'  → abre o ecrã de notificações gerais
 void _handleLocalNotificationPayload(String payload) {
+  if (payload.startsWith('delivery_offer:')) {
+    final orderId = payload.substring('delivery_offer:'.length).trim();
+    if (orderId.isNotEmpty) {
+      unawaited(openDeliveryOfferFromNotificationTap(orderId));
+    }
+    return;
+  }
+
   final navigator = appNavigatorKey.currentState;
   if (navigator == null) return;
 

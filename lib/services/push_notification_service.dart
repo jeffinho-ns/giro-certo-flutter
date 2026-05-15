@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
@@ -8,6 +9,7 @@ import '../app_navigator_key.dart';
 import '../models/chat_conversation.dart';
 import '../screens/chat/chat_screen.dart';
 import '../screens/social/notifications_screen.dart';
+import '../utils/delivery_offer_navigation.dart';
 import 'api_service.dart';
 
 bool _firebaseReady = false;
@@ -100,9 +102,17 @@ Future<void> requestPermissionAndRegisterToken() async {
 }
 
 void _navigateFromNotification(Map<String, dynamic> data) {
+  final type = data['type'] as String?;
+  if (type == 'delivery_offer') {
+    final orderId = data['orderId'] as String?;
+    if (orderId != null && orderId.isNotEmpty) {
+      unawaited(openDeliveryOfferFromNotificationTap(orderId));
+    }
+    return;
+  }
+
   final navigator = appNavigatorKey.currentState;
   if (navigator == null) return;
-  final type = data['type'] as String?;
   if (type == 'chat') {
     final chatId = data['chatId'] as String?;
     if (chatId != null && chatId.isNotEmpty) {
@@ -119,10 +129,6 @@ void _navigateFromNotification(Map<String, dynamic> data) {
         ),
       ));
     }
-  } else if (type == 'delivery_offer') {
-    // Para corrida nova, apenas abrir a app e manter no fluxo principal.
-    // A Home irá puxar pendências e mostrar o card de corrida automaticamente.
-    return;
   } else {
     navigator.push(MaterialPageRoute<void>(
       builder: (_) => const NotificationsScreen(),
@@ -156,9 +162,19 @@ Future<void> _showForegroundNotification(String title, String body, Map<String, 
 /// Configura handlers para quando o utilizador toca na notificação (abrir chat ou notificações).
 void setupPushNotificationHandlers() {
   if (!_firebaseReady) return;
-  // App em primeiro plano: FCM envia aqui; mostramos notificação local para o telemóvel apitar
+  // App em primeiro plano: notificação local para chat/alertas. Oferta de corrida = só modal + som.
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    final data = message.data.isNotEmpty ? Map<String, dynamic>.from(message.data) : <String, dynamic>{};
+    final data = message.data.isNotEmpty
+        ? Map<String, dynamic>.from(message.data)
+        : <String, dynamic>{};
+    final type = data['type'] as String?;
+    if (type == 'delivery_offer') {
+      final orderId = data['orderId'] as String?;
+      if (orderId != null && orderId.isNotEmpty) {
+        unawaited(presentDeliveryOfferWhileAppForeground(orderId));
+      }
+      return;
+    }
     final title = message.notification?.title ?? 'Giro Certo';
     final body = message.notification?.body ?? '';
     _showForegroundNotification(title, body, data);
