@@ -11,6 +11,22 @@ import '../models/vehicle_type.dart';
 import '../utils/geo_coordinates_brazil.dart';
 import '../utils/delivery_proof_pin.dart';
 
+/// Erro estruturado da API (ex.: cobrança pré-pago obrigatória).
+class ApiStructuredException implements Exception {
+  ApiStructuredException(
+    this.message, {
+    this.code,
+    this.statusCode,
+  });
+
+  final String message;
+  final String? code;
+  final int? statusCode;
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   // TODO: Configurar via variável de ambiente
   static const String baseUrl = 'https://giro-certo-api.onrender.com/api';
@@ -116,9 +132,24 @@ class ApiService {
   static void _handleError(http.Response response) {
     if (response.statusCode >= 400) {
       try {
-        final error = json.decode(response.body);
-        throw Exception(error['error'] ?? 'Erro na requisição');
+        final decoded = json.decode(response.body);
+        final error =
+            decoded is Map<String, dynamic> ? decoded : null;
+        final rawMsg =
+            error?['error']?.toString() ?? error?['message']?.toString();
+        final msg = rawMsg ?? 'Erro na requisição';
+        final code = error?['code']?.toString();
+        if (response.statusCode == 402 ||
+            code == 'PAYMENT_REQUIRED_PREPAID') {
+          throw ApiStructuredException(
+            msg,
+            code: code ?? 'PAYMENT_REQUIRED_PREPAID',
+            statusCode: response.statusCode,
+          );
+        }
+        throw Exception(msg);
       } catch (e) {
+        if (e is ApiStructuredException) rethrow;
         throw Exception('Erro ${response.statusCode}: ${response.body}');
       }
     }
@@ -740,6 +771,20 @@ class ApiService {
       throw Exception(message);
     }
 
+    if (response.statusCode == 402) {
+      final data = json.decode(response.body);
+      if (data is Map<String, dynamic>) {
+        final msg = (data['error'] as String?) ??
+            'Pagamento obrigatório antes de aceitar esta corrida.';
+        final code = data['code']?.toString();
+        throw ApiStructuredException(
+          msg,
+          code: code ?? 'PAYMENT_REQUIRED_PREPAID',
+          statusCode: 402,
+        );
+      }
+    }
+
     _handleError(response);
 
     final data = json.decode(response.body);
@@ -766,6 +811,130 @@ class ApiService {
         ? (data['order'] as Map<String, dynamic>? ?? data)
         : <String, dynamic>{};
     return _deliveryOrderFromJson(orderJson);
+  }
+
+  /// Asaas checkout (lojista autenticado). [billingType] ex.: PIX, UNDEFINED.
+  static Future<Map<String, dynamic>> initiateDeliveryPayment(
+    String orderId, {
+    String? billingType,
+  }) async {
+    final response = await _requestWithRetry(
+      (headers) => http.post(
+        Uri.parse('$baseUrl/delivery/$orderId/payments/initiate'),
+        headers: headers,
+        body: json.encode(<String, dynamic>{
+          if (billingType != null && billingType.trim().isNotEmpty)
+            'billingType': billingType.trim(),
+        }),
+      ),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final payment = data['payment'];
+    return payment is Map<String, dynamic> ? payment : data;
+  }
+
+  static Future<void> patchPartnerDeliveryPaymentCollectionMode(String mode) async {
+    final response = await _requestWithRetry(
+      (headers) => http.patch(
+        Uri.parse('$baseUrl/partners/me/delivery-payment-collection-mode'),
+        headers: headers,
+        body: json.encode({'mode': mode}),
+      ),
+    );
+
+    _handleError(response);
+  }
+
+  /// Perfil JSON da conta beneficiária (repasse admin / Asaas transfers).
+  static Future<Map<String, dynamic>?> getPartnerPayoutBankProfile() async {
+    final response = await _requestWithRetry(
+      (headers) => http.get(
+        Uri.parse('$baseUrl/partners/me/payout-bank-profile'),
+        headers: headers,
+      ),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final raw = data['payout_bank_account'];
+    return raw is Map<String, dynamic> ? raw : null;
+  }
+
+  static Future<Map<String, dynamic>?> patchPartnerPayoutBankProfile(
+    Map<String, dynamic>? account,
+  ) async {
+    final response = await _requestWithRetry(
+      (headers) => http.patch(
+        Uri.parse('$baseUrl/partners/me/payout-bank-profile'),
+        headers: headers,
+        body: json.encode(<String, dynamic>{'payout_bank_account': account}),
+      ),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final raw = data['payout_bank_account'];
+    return raw is Map<String, dynamic> ? raw : null;
+  }
+
+  static Future<Map<String, dynamic>?> getUserPayoutBankProfile() async {
+    final response = await _requestWithRetry(
+      (headers) => http.get(
+        Uri.parse('$baseUrl/users/me/payout-bank-profile'),
+        headers: headers,
+      ),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final raw = data['payout_bank_account'];
+    return raw is Map<String, dynamic> ? raw : null;
+  }
+
+  static Future<Map<String, dynamic>?> patchUserPayoutBankProfile(
+    Map<String, dynamic>? account,
+  ) async {
+    final response = await _requestWithRetry(
+      (headers) => http.patch(
+        Uri.parse('$baseUrl/users/me/payout-bank-profile'),
+        headers: headers,
+        body: json.encode(<String, dynamic>{'payout_bank_account': account}),
+      ),
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final raw = data['payout_bank_account'];
+    return raw is Map<String, dynamic> ? raw : null;
+  }
+
+  /// Última cobrança do pedido, ou null se não existir.
+  static Future<Map<String, dynamic>?> getLatestDeliveryPayment(
+    String orderId,
+  ) async {
+    final response = await _requestWithRetry(
+      (headers) => http.get(
+        Uri.parse('$baseUrl/delivery/$orderId/payments/latest'),
+        headers: headers,
+      ),
+    );
+
+    if (response.statusCode == 404) {
+      return null;
+    }
+
+    _handleError(response);
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final payment = data['payment'];
+    return payment is Map<String, dynamic> ? payment : data;
   }
 
   /// Confirmar chegada ao cliente.
@@ -889,6 +1058,24 @@ class ApiService {
   }
 
   static DeliveryOrder _deliveryOrderFromJson(Map<String, dynamic> json) {
+    String jsonString(dynamic v, {String fallback = ''}) {
+      if (v == null) return fallback;
+      final s = v.toString();
+      return s.isEmpty ? fallback : s;
+    }
+
+    String? jsonStringOrNull(dynamic v) {
+      if (v == null) return null;
+      final s = v.toString();
+      return s.isEmpty ? null : s;
+    }
+
+    DateTime? jsonDateTimeOrNull(dynamic v) {
+      if (v == null) return null;
+      if (v is DateTime) return v;
+      return DateTime.tryParse(v.toString());
+    }
+
     double jsonDouble(dynamic v, [double fallback = 0]) {
       if (v == null) return fallback;
       if (v is num) return v.toDouble();
@@ -904,19 +1091,25 @@ class ApiService {
     final delivery =
         GeoCoordinatesBrazil.normalizeRoutingPair(rawDelLat, rawDelLng);
 
+    final id = jsonString(json['id']);
+    final storeId = jsonString(json['storeId']);
+    if (id.isEmpty || storeId.isEmpty) {
+      throw FormatException('Pedido sem id ou storeId validos');
+    }
+
     return DeliveryOrder(
-      id: json['id'] as String,
-      storeId: json['storeId'] as String,
-      storeName: json['storeName'] as String,
-      storeAddress: json['storeAddress'] as String,
+      id: id,
+      storeId: storeId,
+      storeName: jsonString(json['storeName'], fallback: '—'),
+      storeAddress: jsonString(json['storeAddress'], fallback: '—'),
       storeLatitude: store.lat,
       storeLongitude: store.lng,
-      deliveryAddress: json['deliveryAddress'] as String,
+      deliveryAddress: jsonString(json['deliveryAddress'], fallback: '—'),
       deliveryLatitude: delivery.lat,
       deliveryLongitude: delivery.lng,
-      recipientName: json['recipientName'] as String?,
-      recipientPhone: json['recipientPhone'] as String?,
-      notes: json['notes'] as String?,
+      recipientName: jsonStringOrNull(json['recipientName']),
+      recipientPhone: jsonStringOrNull(json['recipientPhone']),
+      notes: jsonStringOrNull(json['notes']),
       value: jsonDouble(json['value']),
       deliveryFee: jsonDouble(json['deliveryFee']),
       status: _parseDeliveryStatus(
@@ -925,24 +1118,18 @@ class ApiService {
       priority: _parseDeliveryPriority(
         (json['priority'] as String?) ?? json['priority']?.toString() ?? 'normal',
       ),
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      acceptedAt: json['acceptedAt'] != null
-          ? DateTime.parse(json['acceptedAt'] as String)
-          : null,
-      completedAt: json['completedAt'] != null
-          ? DateTime.parse(json['completedAt'] as String)
-          : null,
-      riderId: json['riderId'] as String?,
-      riderName: json['riderName'] as String?,
-      riderEmail: json['riderEmail'] as String?,
-      riderPhone: json['riderPhone'] as String?,
-      riderPhotoUrl: json['riderPhotoUrl'] as String?,
-      riderBikePlate: json['riderBikePlate'] as String?,
-      riderBikeModel: json['riderBikeModel'] as String?,
-      riderBikeVehicleType: json['riderBikeVehicleType'] as String?,
-      internalCode: json['internalCode'] as String?,
+      createdAt: jsonDateTimeOrNull(json['createdAt']) ?? DateTime.now(),
+      acceptedAt: jsonDateTimeOrNull(json['acceptedAt']),
+      completedAt: jsonDateTimeOrNull(json['completedAt']),
+      riderId: jsonStringOrNull(json['riderId']),
+      riderName: jsonStringOrNull(json['riderName']),
+      riderEmail: jsonStringOrNull(json['riderEmail']),
+      riderPhone: jsonStringOrNull(json['riderPhone']),
+      riderPhotoUrl: jsonStringOrNull(json['riderPhotoUrl']),
+      riderBikePlate: jsonStringOrNull(json['riderBikePlate']),
+      riderBikeModel: jsonStringOrNull(json['riderBikeModel']),
+      riderBikeVehicleType: jsonStringOrNull(json['riderBikeVehicleType']),
+      internalCode: jsonStringOrNull(json['internalCode']),
       distance: json['distance'] != null
           ? jsonDouble(json['distance'])
           : null,
@@ -1088,6 +1275,8 @@ class ApiService {
               .toList() ??
           [],
       activePromotions: [], // TODO: Implementar quando a API retornar
+      deliveryPaymentCollectionMode:
+          json['delivery_payment_collection_mode'] as String?,
     );
   }
 

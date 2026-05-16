@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/app_state_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import 'image_diagnostic_screen.dart';
 import 'offline_maps_screen.dart';
+import 'delivery_partner_payment_screen.dart';
+import 'delivery_rider_payout_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -320,7 +323,77 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     
                     const SizedBox(height: 32),
-                    
+
+                    Consumer<AppStateProvider>(
+                      builder: (context, app, _) {
+                        final user = app.user;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Pagamentos na entrega',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (user != null && user.isPartner) ...[
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  LucideIcons.store,
+                                  color: themeProvider.primaryColor,
+                                ),
+                                title: const Text(
+                                  'Loja: cobrança e repasse',
+                                ),
+                                subtitle: const Text(
+                                  'Modo pré/pós-pago e conta beneficiária',
+                                ),
+                                trailing: const Icon(LucideIcons.chevronRight),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          const DeliveryPartnerPaymentScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                            if (user != null &&
+                                (user.partnerId == null || app.isDeliveryPilot)) ...[
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  LucideIcons.wallet,
+                                  color: themeProvider.primaryColor,
+                                ),
+                                title: const Text('Entregador: conta de repasse'),
+                                subtitle: const Text(
+                                  'Dados bancários para liquidações',
+                                ),
+                                trailing: const Icon(LucideIcons.chevronRight),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          const DeliveryRiderPayoutScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                          ],
+                        );
+                      },
+                    ),
+
                     // Informações adicionais
                     Container(
                       padding: const EdgeInsets.all(20),

@@ -57,6 +57,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   List<DeliveryOrder> _completedOrders = []; // Corridas concluídas
   List<Partner> _partners = [];
   RiderStats? _riderStats;
+  String? _partnerCollectionMode;
   DeliveryMapInsightMode _mapInsightMode = DeliveryMapInsightMode.demand;
   ZoneTimeWindow _timeWindow = ZoneTimeWindow.now;
   bool _showOrderPins = true;
@@ -75,6 +76,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     _requestLocationAndListen();
     _subscribeDeliveryRealtime();
     _loadOrders();
+    _maybeLoadPartnerPaySettings();
     _marketPulseTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       _loadOrders(silent: true);
     });
@@ -158,6 +160,21 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         if (mounted) _loadOrders(silent: true);
       });
     });
+  }
+
+  Future<void> _maybeLoadPartnerPaySettings() async {
+    if (_isRiderMode) return;
+    try {
+      final p = await ApiService.getMyPartner();
+      if (!mounted) return;
+      final m = p.deliveryPaymentCollectionMode;
+      if (!mounted) return;
+      setState(() => _partnerCollectionMode = m);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _partnerCollectionMode = null);
+      }
+    }
   }
 
   Future<void> _loadOrders({bool silent = false}) async {
@@ -1327,6 +1344,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         order: order,
         userLat: _userLatitude,
         userLng: _userLongitude,
+        partnerCollectionMode: _partnerCollectionMode,
         onAccept: () {
           Navigator.pop(context);
           _acceptOrder(order);

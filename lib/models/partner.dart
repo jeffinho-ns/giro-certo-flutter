@@ -32,6 +32,8 @@ class Partner {
   final bool isTrusted; // Parceiro verificado/confiável
   final List<String> specialties; // Ex: Óleo, Pneus, Travões
   final List<Promotion> activePromotions;
+  /// `prepaid` | `postpaid_pix` | `authorize_capture` — da API (`delivery_payment_collection_mode`).
+  final String? deliveryPaymentCollectionMode;
 
   Partner({
     required this.id,
@@ -44,6 +46,7 @@ class Partner {
     required this.isTrusted,
     required this.specialties,
     required this.activePromotions,
+    this.deliveryPaymentCollectionMode,
   });
 
   // Calcula a distância em km (fórmula de Haversine)

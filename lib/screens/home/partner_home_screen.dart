@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../../providers/app_state_provider.dart';
-import '../../providers/navigation_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
+import '../../models/partner.dart';
 import '../../models/delivery_order.dart';
 import '../../utils/colors.dart';
 import '../../utils/delivery_status_utils.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/api_image.dart';
 import '../../widgets/partner_delivery_status_tracker.dart';
+import '../../widgets/partner_rider_detail_sheet.dart';
 import '../delivery/create_delivery_modal.dart';
 import '../delivery/delivery_detail_modal.dart';
 import '../delivery/delivery_screen.dart';
 
-/// Home do lojista (parceiro): dashboard com mapa, Novo Pedido, resumo e listas de pedidos.
+/// Home do lojista: painel de pedidos em tempo real (sem mapa).
 class PartnerHomeScreen extends StatefulWidget {
   const PartnerHomeScreen({super.key});
 
@@ -28,7 +28,6 @@ class PartnerHomeScreen extends StatefulWidget {
 
 class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     with WidgetsBindingObserver {
-  GoogleMapController? _mapController;
   bool _isLoading = false;
   bool _hasLoadedOnce = false;
   List<DeliveryOrder> _allOrders = [];
@@ -38,6 +37,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   final Set<String> _dispatchingOrderIds = <String>{};
   final Set<String> _knownOrderIds = <String>{};
   final Set<String> _riderArrivedDialogOrderIds = <String>{};
+  Partner? _myPartner;
   int _totalOrders = 0;
   int _completedOrders = 0;
   double _totalRevenue = 0.0;
@@ -110,13 +110,21 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     final partnerId = appState.user?.partnerId;
     if (partnerId == null) return;
 
+    if (payload['_storeRefresh'] == true) {
+      final sid = payload['storeId']?.toString();
+      if (sid != null && sid == partnerId.toString()) {
+        _loadPartnerData(silent: true);
+      }
+      return;
+    }
+
     final orderRaw = payload['order'];
     if (orderRaw is Map<String, dynamic>) {
       try {
         final order = ApiService.deliveryOrderFromJson(
           Map<String, dynamic>.from(orderRaw),
         );
-        if (order.storeId != partnerId) return;
+        if (order.storeId.toString() != partnerId.toString()) return;
 
         _maybeShowRiderArrivedDialog(order);
 
@@ -156,66 +164,25 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     _riderArrivedDialogOrderIds.add(order.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final theme = Theme.of(context);
-      final bikeParts = <String>[
-        if ((order.riderBikeModel ?? '').trim().isNotEmpty) order.riderBikeModel!.trim(),
-        if ((order.riderBikePlate ?? '').trim().isNotEmpty) order.riderBikePlate!.trim(),
-      ];
-      final bikeLine = bikeParts.isEmpty ? 'Veículo não cadastrado no app.' : bikeParts.join(' · ');
       showDialog<void>(
         context: context,
         builder: (ctx) {
           return AlertDialog(
-            title: Text(
-              '${order.riderName ?? 'Motociclista'} chegou na loja',
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (order.riderPhotoUrl != null && order.riderPhotoUrl!.isNotEmpty)
-                    Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: SizedBox(
-                          width: 120,
-                          height: 120,
-                          child: ApiImage(url: order.riderPhotoUrl!, fit: BoxFit.cover),
-                        ),
-                      ),
-                    ),
-                  if (order.riderPhotoUrl != null && order.riderPhotoUrl!.isNotEmpty)
-                    const SizedBox(height: 12),
-                  Text('Moto', style: theme.textTheme.labelLarge),
-                  const SizedBox(height: 4),
-                  Text(bikeLine, style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 14),
-                  Text('Código para o entregador retirar o pedido', style: theme.textTheme.labelLarge),
-                  const SizedBox(height: 4),
-                  Text(
-                    order.internalCode ?? '—',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2,
-                      color: AppColors.neonGreen,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'São 4 dígitos — leia em voz alta ou mostre no ecrã.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.textTheme.bodySmall?.color?.withOpacity(0.75),
-                    ),
-                  ),
-                ],
-              ),
+            title: Text('${order.riderName ?? 'Motociclista'} chegou'),
+            content: const Text(
+              'O entregador está na loja. Toque no card do pedido para ver foto, moto e código de retirada.',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('OK'),
+                child: const Text('Ver depois'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  PartnerRiderDetailSheet.show(context, order);
+                },
+                child: const Text('Ver entregador'),
               ),
             ],
           );
@@ -307,8 +274,17 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
       setState(() => _isLoading = true);
     }
     try {
-      final allOrders = await ApiService.getDeliveryOrders(storeId: user.partnerId);
+      Partner? nextPartner = _myPartner;
+      try {
+        nextPartner = await ApiService.getMyPartner();
+      } catch (_) {}
+
+      final allOrders =
+          await ApiService.getDeliveryOrders(storeId: user.partnerId);
       if (!mounted) return;
+      setState(() {
+        _myPartner = nextPartner;
+      });
       _syncFromOrderList(allOrders);
       if (showBlockingLoader) {
         setState(() => _isLoading = false);
@@ -321,6 +297,53 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     }
   }
 
+  bool get _partnerStoresPrepaid {
+    final m = _myPartner?.deliveryPaymentCollectionMode;
+    if (m == null || m.isEmpty) return true;
+    return m == 'prepaid';
+  }
+
+  String? get _billingTypeForPartnerInitiate {
+    final m = _myPartner?.deliveryPaymentCollectionMode;
+    if (m == 'postpaid_pix') return 'PIX';
+    if (m == 'authorize_capture') return 'CREDIT_CARD';
+    return null;
+  }
+
+  Future<void> _openPaymentCheckout(DeliveryOrder order) async {
+    try {
+      final payment = await ApiService.initiateDeliveryPayment(
+        order.id,
+        billingType: _billingTypeForPartnerInitiate,
+      );
+      final url = payment['invoiceUrl'] as String?;
+      if (url == null || url.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Link da cobrança indisponível. Tente de novo.'),
+          ),
+        );
+        return;
+      }
+      final uri = Uri.parse(url);
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível abrir o link de pagamento.'),
+          ),
+        );
+      }
+      await _loadPartnerData(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao gerar cobrança: $e')),
+      );
+    }
+  }
+
   Future<void> _dispatchOrder(DeliveryOrder order) async {
     if (_dispatchingOrderIds.contains(order.id)) return;
     setState(() => _dispatchingOrderIds.add(order.id));
@@ -330,15 +353,28 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Pedido liberado. O app esta notificando motociclistas na regiao.',
+            'Pedido liberado. O app está notificando motociclistas na região.',
           ),
         ),
       );
       await _loadPartnerData(silent: true);
     } catch (e) {
       if (!mounted) return;
+      if (e is ApiStructuredException &&
+          e.code == 'PAYMENT_REQUIRED_PREPAID') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            action: SnackBarAction(
+              label: 'Cobrar',
+              onPressed: () => _openPaymentCheckout(order),
+            ),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel chamar motociclista: $e')),
+        SnackBar(content: Text('Não foi possível chamar motociclista: $e')),
       );
     } finally {
       if (mounted) {
@@ -347,353 +383,197 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      children: [
-        const ModernHeader(title: 'Minha Loja'),
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: _buildPartnerContent(theme),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPartnerContent(ThemeData theme) {
-    final isDark = theme.brightness == Brightness.dark;
-    final appState = Provider.of<AppStateProvider>(context);
+  void _openCreateOrder() {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
     final user = appState.user;
     final userLat = user?.currentLat ?? -23.5505;
     final userLng = user?.currentLng ?? -46.6333;
-    final mapMarkers = <Marker>{
-      Marker(
-        markerId: const MarkerId('partner_store'),
-        position: LatLng(userLat, userLng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-          BitmapDescriptor.hueOrange,
-        ),
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => CreateDeliveryModal(
+        userLat: userLat,
+        userLng: userLng,
+        onOrderCreated: _loadPartnerData,
       ),
-      ..._activeOrders
-          .where((o) => o.deliveryLatitude != 0 && o.deliveryLongitude != 0)
-          .take(20)
-          .map(
-            (o) => Marker(
-              markerId: MarkerId('partner_delivery_${o.id}'),
-              position: LatLng(o.deliveryLatitude, o.deliveryLongitude),
-              infoWindow: InfoWindow(
-                title: o.recipientName ?? 'Destino',
-                snippet: o.internalCode ?? o.id.substring(0, 8),
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueGreen,
-              ),
-            ),
-          ),
-    };
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          height: 220,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.racingOrange.withOpacity(0.2)),
-            boxShadow: AppColors.raisedPanelShadows(isDark),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: LatLng(userLat, userLng),
-              zoom: 14,
-            ),
-            onMapCreated: (controller) => _mapController = controller,
-            mapType: MapType.normal,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            markers: mapMarkers,
-          ),
-        ),
-        const SizedBox(height: 20),
-        _buildChamadosDeEntregaSection(theme),
-        const SizedBox(height: 20),
-        GestureDetector(
-          onTap: () {
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) => CreateDeliveryModal(
-                userLat: userLat,
-                userLng: userLng,
-                onOrderCreated: _loadPartnerData,
-              ),
-            ).then((_) => _loadPartnerData());
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppColors.racingOrange,
-                  AppColors.racingOrangeLight,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.22)),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.racingOrange.withOpacity(0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(LucideIcons.plus, color: Colors.white, size: 32),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Novo Pedido',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Criar uma nova entrega',
-                  style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: _buildSummaryCard(
-                theme: theme,
-                number: '$_totalOrders',
-                label: 'Total',
-                icon: LucideIcons.package,
-                color: AppColors.racingOrange,
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildSummaryCard(
-                theme: theme,
-                number: '${_pendingOrders.length}',
-                label: 'Pendentes',
-                icon: LucideIcons.clock,
-                color: AppColors.statusWarning,
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildSummaryCard(
-                theme: theme,
-                number: '$_completedOrders',
-                label: 'Concluídos',
-                icon: LucideIcons.checkCircle,
-                color: AppColors.statusOk,
-                isDark: isDark,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.neonGreen.withOpacity(0.15),
-                AppColors.neonGreen.withOpacity(0.05),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.neonGreen.withOpacity(0.3), width: 1.5),
-            boxShadow: AppColors.raisedPanelShadows(isDark),
-          ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(LucideIcons.dollarSign, color: AppColors.neonGreen, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Receita Total (Hoje)',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontSize: 14,
-                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'R\$ ${_totalRevenue.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
-                style: TextStyle(
-                  color: AppColors.neonGreen,
-                  fontSize: 52,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -1,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (_activeOrders.isNotEmpty) ...[
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Em Andamento',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  Provider.of<NavigationProvider>(context, listen: false).navigateTo(5);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const DeliveryScreen()),
-                  );
-                },
-                child: Text(
-                  'Ver todos',
-                  style: TextStyle(color: AppColors.racingOrange, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ..._activeOrders.take(3).map((order) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildOrderCard(context, theme, order, isActive: true),
-              )),
-        ],
-        const SizedBox(height: 100),
-      ],
-    );
+    ).then((_) => _loadPartnerData());
   }
 
-  Widget _buildChamadosDeEntregaSection(ThemeData theme) {
-    if (_pendingOrders.isEmpty && _awaitingDispatchOrders.isEmpty) {
-      return const SizedBox.shrink();
-    }
+  void _openOrderDetail(DeliveryOrder order) {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final user = appState.user;
+    final userLat = user?.currentLat ?? -23.5505;
+    final userLng = user?.currentLng ?? -46.6333;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+        builder: (context) => DeliveryDetailModal(
+        order: order,
+        userLat: userLat,
+        userLng: userLng,
+        partnerCollectionMode: _myPartner?.deliveryPaymentCollectionMode,
+        onOrderUpdated: _loadPartnerData,
+      ),
+    ).then((_) => _loadPartnerData());
+  }
+
+  String _formatCurrency(double value) {
+    return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final appState = Provider.of<AppStateProvider>(context);
+    final storeName = appState.user?.name ?? 'Minha Loja';
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                'Chamados de entrega',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const DeliveryScreen()),
-                );
-              },
-              child: Text(
-                'Ver todos',
-                style: TextStyle(
+        ModernHeader(
+          title: storeName,
+          hideClockAndKm: true,
+        ),
+        Expanded(
+          child: _isLoading && !_hasLoadedOnce
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
                   color: AppColors.racingOrange,
-                  fontWeight: FontWeight.w600,
+                  onRefresh: () => _loadPartnerData(silent: true),
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                        sliver: SliverList(
+                          delegate: SliverChildListDelegate([
+                            _buildGreeting(theme, storeName),
+                            const SizedBox(height: 20),
+                            _buildQuickStats(theme, isDark),
+                            const SizedBox(height: 16),
+                            _buildRevenueCard(theme, isDark),
+                            const SizedBox(height: 20),
+                            _buildNewOrderCta(theme),
+                            if (_activeOrders.isNotEmpty) ...[
+                              const SizedBox(height: 28),
+                              _sectionHeader(
+                                theme,
+                                title: 'Em andamento',
+                                count: _activeOrders.length,
+                                accent: AppColors.statusOk,
+                                onSeeAll: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const DeliveryScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              ..._activeOrders.take(8).map(
+                                    (o) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: _buildOrderCard(
+                                        theme,
+                                        o,
+                                        variant: _OrderCardVariant.active,
+                                      ),
+                                    ),
+                                  ),
+                            ],
+                            if (_pendingOrders.isNotEmpty ||
+                                _awaitingDispatchOrders.isNotEmpty) ...[
+                              const SizedBox(height: 28),
+                              _buildChamadosSection(theme, isDark),
+                            ],
+                            if (_activeOrders.isEmpty &&
+                                _pendingOrders.isEmpty &&
+                                _awaitingDispatchOrders.isEmpty) ...[
+                              const SizedBox(height: 32),
+                              _buildEmptyState(theme, isDark),
+                            ],
+                          ]),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Pedidos pelo WhatsApp entram já chamando motociclistas — não precisa de aprovação. '
-          'Pedidos criados aqui na loja: use «Confirmar e chamar» para enviar aos motos.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.textTheme.bodyMedium?.color?.withOpacity(0.72),
-            height: 1.35,
-          ),
-        ),
-        const SizedBox(height: 16),
-        ..._pendingOrders.take(6).map(
-              (order) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildOrderCard(
-                  context,
-                  theme,
-                  order,
-                  isActive: false,
-                  showDispatchButton: false,
-                  showMotoSearchBanner: true,
-                ),
-              ),
-            ),
-        ..._awaitingDispatchOrders.take(6).map(
-              (order) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildOrderCard(
-                  context,
-                  theme,
-                  order,
-                  isActive: false,
-                  showDispatchButton: true,
-                  showMotoSearchBanner: false,
-                ),
-              ),
-            ),
       ],
     );
   }
 
-  Widget _buildSummaryCard({
-    required ThemeData theme,
-    required String number,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required bool isDark,
-  }) {
+  Widget _buildGreeting(ThemeData theme, String storeName) {
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'Bom dia'
+        : hour < 18
+            ? 'Boa tarde'
+            : 'Boa noite';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          greeting,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          storeName,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickStats(ThemeData theme, bool isDark) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatChip(
+            label: 'Total',
+            value: '$_totalOrders',
+            icon: LucideIcons.package,
+            color: AppColors.racingOrange,
+            isDark: isDark,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatChip(
+            label: 'Aguardando',
+            value: '${_pendingOrders.length + _awaitingDispatchOrders.length}',
+            icon: LucideIcons.clock,
+            color: AppColors.statusWarning,
+            isDark: isDark,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatChip(
+            label: 'Ativos',
+            value: '${_activeOrders.length}',
+            icon: LucideIcons.truck,
+            color: AppColors.statusOk,
+            isDark: isDark,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRevenueCard(ThemeData theme, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -701,36 +581,272 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
-            isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+            AppColors.neonGreen.withValues(alpha: isDark ? 0.12 : 0.18),
+            AppColors.neonGreen.withValues(alpha: 0.04),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+        border: Border.all(
+          color: AppColors.neonGreen.withValues(alpha: 0.35),
+        ),
         boxShadow: AppColors.raisedPanelShadows(isDark),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.neonGreen.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              LucideIcons.trendingUp,
+              color: AppColors.neonGreen,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Receita de hoje',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatCurrency(_totalRevenue),
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.neonGreen,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                Text(
+                  '$_completedOrders entregas concluídas no total',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.65),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewOrderCta(ThemeData theme) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openCreateOrder,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.racingOrange, AppColors.racingOrangeLight],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.racingOrange.withValues(alpha: 0.28),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(LucideIcons.plus, color: Colors.white, size: 26),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Novo pedido',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        'Criar entrega e chamar motociclistas',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  LucideIcons.chevronRight,
+                  color: Colors.white,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionHeader(
+    ThemeData theme, {
+    required String title,
+    required int count,
+    required Color accent,
+    VoidCallback? onSeeAll,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 22,
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            title,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.4,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '$count',
+            style: TextStyle(
+              color: accent,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        if (onSeeAll != null)
+          TextButton(
+            onPressed: onSeeAll,
+            child: Text(
+              'Ver todos',
+              style: TextStyle(
+                color: AppColors.racingOrange,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildChamadosSection(ThemeData theme, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader(
+          theme,
+          title: 'Chamados',
+          count: _pendingOrders.length + _awaitingDispatchOrders.length,
+          accent: AppColors.statusWarning,
+          onSeeAll: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DeliveryScreen()),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'WhatsApp: inclua «Valor do item» no texto. Pedidos da loja: use «Confirmar e chamar».',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.65),
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ..._pendingOrders.take(6).map(
+              (o) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildOrderCard(
+                  theme,
+                  o,
+                  variant: _OrderCardVariant.pending,
+                  showMotoSearchBanner: true,
+                ),
+              ),
+            ),
+        ..._awaitingDispatchOrders.take(6).map(
+              (o) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildOrderCard(
+                  theme,
+                  o,
+                  variant: _OrderCardVariant.awaitingDispatch,
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(ThemeData theme, bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         children: [
+          Icon(
+            LucideIcons.packageOpen,
+            size: 48,
+            color: AppColors.racingOrange.withValues(alpha: 0.7),
+          ),
+          const SizedBox(height: 16),
           Text(
-            number,
-            style: TextStyle(color: color, fontSize: 32, fontWeight: FontWeight.bold),
+            'Nenhum pedido no momento',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color, size: 14),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  label,
-                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          Text(
+            'Crie um novo pedido ou aguarde chamados pelo WhatsApp.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),
@@ -738,223 +854,140 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   }
 
   Widget _buildOrderCard(
-    BuildContext context,
     ThemeData theme,
     DeliveryOrder order, {
-    required bool isActive,
-    bool showDispatchButton = false,
+    required _OrderCardVariant variant,
     bool showMotoSearchBanner = false,
   }) {
     final isDark = theme.brightness == Brightness.dark;
     final isDispatching = _dispatchingOrderIds.contains(order.id);
-    final appState = Provider.of<AppStateProvider>(context, listen: false);
-    final user = appState.user;
-    final userLat = user?.currentLat ?? -23.5505;
-    final userLng = user?.currentLng ?? -46.6333;
+    final accent = switch (variant) {
+      _OrderCardVariant.active => AppColors.statusOk,
+      _OrderCardVariant.pending => AppColors.statusWarning,
+      _OrderCardVariant.awaitingDispatch => AppColors.racingOrange,
+    };
+    final statusLabel = PartnerDeliveryStatusTracker.shortTitle(order.status);
+    final hasRider = (order.riderName ?? '').isNotEmpty;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (context) => DeliveryDetailModal(
-                  order: order,
-                  userLat: userLat,
-                  userLng: userLng,
-                  onOrderUpdated: _loadPartnerData,
-                ),
-              ).then((_) => _loadPartnerData());
-            },
-            child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
-              isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
-            ],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive
-                ? AppColors.statusOk.withOpacity(0.3)
-                : AppColors.statusWarning.withOpacity(0.3),
-            width: 1.5,
-          ),
-          boxShadow: AppColors.raisedPanelShadows(isDark),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: (isActive ? AppColors.statusOk : AppColors.statusWarning).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    isActive ? LucideIcons.truck : LucideIcons.clock,
-                    color: isActive ? AppColors.statusOk : AppColors.statusWarning,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        order.recipientName ?? 'Sem nome',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        order.deliveryAddress,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontSize: 12,
-                          color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  'R\$ ${order.totalValue.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    color: AppColors.neonGreen,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            PartnerDeliveryStatusTracker(status: order.status, compact: false),
-            if (showMotoSearchBanner &&
-                DeliveryStatusUtils.isPending(order.status)) ...[
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(LucideIcons.bell, size: 14, color: AppColors.statusOk),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Motociclistas estão sendo notificados neste momento.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.statusOk,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            if (isActive && order.riderName != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.cardColor.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.racingOrange.withOpacity(0.2),
-                  ),
-                ),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _openOrderDetail(order),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          width: 40,
-                          height: 40,
+                          padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.racingOrange.withOpacity(0.5)),
+                            color: accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: ClipOval(
-                            child: (order.riderPhotoUrl != null && order.riderPhotoUrl!.isNotEmpty)
-                                ? ApiImage(url: order.riderPhotoUrl!, fit: BoxFit.cover)
-                                : Center(
-                                    child: Text(
-                                      order.riderName![0].toUpperCase(),
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
+                          child: Icon(
+                            variant == _OrderCardVariant.active
+                                ? LucideIcons.navigation
+                                : LucideIcons.package,
+                            color: accent,
+                            size: 20,
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                order.riderName!,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                                order.recipientName ?? 'Cliente',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
-                              if (order.riderEmail != null && order.riderEmail!.isNotEmpty)
-                                Text(
-                                  order.riderEmail!,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
-                                  ),
+                              const SizedBox(height: 4),
+                              Text(
+                                order.deliveryAddress,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.textTheme.bodySmall?.color
+                                      ?.withValues(alpha: 0.7),
+                                  height: 1.3,
                                 ),
-                              if (order.riderPhone != null && order.riderPhone!.isNotEmpty)
-                                Text(
-                                  order.riderPhone!,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
-                                  ),
-                                ),
-                              if ((order.riderBikeModel ?? '').isNotEmpty ||
-                                  (order.riderBikePlate ?? '').isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    [
-                                      if ((order.riderBikeModel ?? '').isNotEmpty)
-                                        order.riderBikeModel!,
-                                      if ((order.riderBikePlate ?? '').isNotEmpty)
-                                        order.riderBikePlate!,
-                                    ].join(' · '),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.racingOrange,
-                                    ),
-                                  ),
-                                ),
+                              ),
                             ],
                           ),
                         ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _formatCurrency(order.totalValue),
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.neonGreen,
+                              ),
+                            ),
+                            if (order.value > 0)
+                              Text(
+                                'Itens ${_formatCurrency(order.value)}',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.textTheme.bodySmall?.color
+                                      ?.withValues(alpha: 0.55),
+                                ),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
-                    if (order.internalCode != null && order.internalCode!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (showMotoSearchBanner) ...[
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Icon(LucideIcons.hash, size: 14, color: AppColors.neonGreen),
+                          const Icon(
+                            LucideIcons.radio,
+                            size: 14,
+                            color: AppColors.statusOk,
+                          ),
                           const SizedBox(width: 6),
-                          Text(
-                            'Código para o entregador (4 dígitos): ${order.internalCode}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.neonGreen,
-                              fontWeight: FontWeight.w700,
+                          Expanded(
+                            child: Text(
+                              'Notificando motociclistas…',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppColors.statusOk,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
@@ -963,18 +996,83 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                   ],
                 ),
               ),
-            ],
-            if (showDispatchButton &&
-                DeliveryStatusUtils.isAwaitingDispatch(order.status)) ...[
-              const SizedBox(height: 14),
-              SizedBox(
+            ),
+          ),
+          if (hasRider && variant == _OrderCardVariant.active)
+            _buildRiderStrip(theme, order),
+          if (!_partnerStoresPrepaid &&
+              variant == _OrderCardVariant.active &&
+              DeliveryStatusUtils.isActive(order.status))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: OutlinedButton.icon(
+                  onPressed: () => _openPaymentCheckout(order),
+                  icon: const Icon(LucideIcons.smartphone, size: 17),
+                  label: Text(
+                    _myPartner?.deliveryPaymentCollectionMode == 'postpaid_pix'
+                        ? 'PIX na corrida · cobrar agora'
+                        : 'Gerar cobrança ao cliente',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor:
+                        AppColors.statusOk.withValues(alpha: 0.95),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(
+                      color: AppColors.statusOk.withValues(alpha: 0.45),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (variant == _OrderCardVariant.awaitingDispatch) ...[
+            if (DeliveryStatusUtils.allowsStorePaymentCheckout(
+              order.status,
+              _myPartner?.deliveryPaymentCollectionMode,
+            )) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openPaymentCheckout(order),
+                    icon: const Icon(LucideIcons.banknote, size: 18),
+                    label: Text(
+                      _partnerStoresPrepaid
+                          ? 'Gerar link de pagamento (PIX/cartão)'
+                          : (_myPartner?.deliveryPaymentCollectionMode ==
+                                  'postpaid_pix'
+                              ? 'Gerar PIX antes de despachar (opcional)'
+                              : 'Gerar cobrança ao cliente'),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.racingOrange,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: BorderSide(
+                        color: AppColors.racingOrange.withValues(alpha: 0.55),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
                   onPressed: isDispatching ? null : () => _dispatchOrder(order),
                   icon: isDispatching
                       ? const SizedBox(
-                          width: 16,
-                          height: 16,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: Colors.white,
@@ -983,40 +1081,159 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                       : const Icon(LucideIcons.bike, size: 18),
                   label: Text(
                     isDispatching
-                        ? 'Chamando motociclistas...'
-                        : 'Confirmar e Chamar Motociclista',
+                        ? 'Chamando motos…'
+                        : 'Confirmar e chamar motociclista',
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.racingOrangeDark,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.racingOrange,
                     foregroundColor: Colors.white,
-                    elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Colors.white.withOpacity(0.18)),
                     ),
                   ),
                 ),
               ),
-            ],
+            ),
           ],
-        ),
-      ),
-        ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 2, right: 2),
-          child: Align(
+          Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.2)),
+          Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: () => unawaited(_openDeliveryIssueReport(order)),
-              icon: Icon(LucideIcons.flag, size: 16, color: theme.colorScheme.error),
-              label: const Text('Reportar problema'),
+              icon: Icon(
+                LucideIcons.flag,
+                size: 15,
+                color: theme.colorScheme.error.withValues(alpha: 0.85),
+              ),
+              label: const Text('Reportar'),
               style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRiderStrip(ThemeData theme, DeliveryOrder order) {
+    final name = order.riderName ?? 'Entregador';
+    final photoUrl = order.riderPhotoUrl;
+    final hasPhoto = photoUrl != null && photoUrl.isNotEmpty;
+
+    return Material(
+      color: AppColors.racingOrange.withValues(alpha: 0.06),
+      child: InkWell(
+        onTap: () => PartnerRiderDetailSheet.show(context, order),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.racingOrange.withValues(alpha: 0.5),
+                    width: 2,
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: hasPhoto
+                    ? ApiImage(url: photoUrl, fit: BoxFit.cover)
+                    : Center(
+                        child: Text(
+                          name[0].toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Toque para ver foto, moto e código',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.racingOrange,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                LucideIcons.chevronRight,
+                color: AppColors.racingOrange.withValues(alpha: 0.8),
+                size: 20,
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+enum _OrderCardVariant { active, pending, awaitingDispatch }
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    required this.isDark,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: color,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
