@@ -175,6 +175,12 @@ class RealtimeService {
         _deliveryStatusController.add(Map<String, dynamic>.from(data));
       }
     });
+    _socket!.on('delivery:store_refresh', (data) {
+      if (data is! Map) return;
+      final map = Map<String, dynamic>.from(data);
+      map['_storeRefresh'] = true;
+      _deliveryStatusController.add(map);
+    });
     _socket!.on('delivery:new_order_offer', (data) {
       if (data is! Map) return;
       final map = Map<String, dynamic>.from(data);

@@ -263,7 +263,8 @@ class DeliveryTripController extends ChangeNotifier {
       _order = updated.withoutInternalCode();
       _phase = DeliveryTripPhase.awaitingDeliveryProof;
       _errorMessage = null;
-      await _endNavigationGuidance();
+      // finishNavigation nativo pode não completar — nunca bloquear o fluxo nem o `finally` do loading.
+      unawaited(_endNavigationGuidance());
       return true;
     } catch (e) {
       _errorMessage = _humanizeError(e);

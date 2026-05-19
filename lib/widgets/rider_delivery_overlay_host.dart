@@ -6,12 +6,14 @@ import 'package:provider/provider.dart';
 
 import '../app_navigator_key.dart';
 import '../features/trip_navigation/trip_navigation_launcher.dart';
+import '../features/trip_navigation/trip_navigation_experiment.dart';
 import '../models/delivery_offer_payload.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
 import '../models/delivery_order.dart';
 import '../models/pilot_profile.dart';
 import '../providers/app_state_provider.dart';
+import '../providers/navigation_provider.dart';
 import '../providers/rider_delivery_session_provider.dart';
 import '../utils/colors.dart';
 import 'delivery_pipcar_modal.dart';
@@ -211,7 +213,14 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
         }
 
         final activeTrip = session.activeTripOrder;
-        final showResume = session.shouldShowResumeTrip && activeTrip != null;
+        /// Hub mapa/menu (índice 2): não cobrir o FAB — o banner só ajuda ao sair para outras abas.
+        final hubIndex = 2;
+        final navIndex =
+            context.select<NavigationProvider, int>((n) => n.currentIndex);
+        final showResume = session.shouldShowResumeTrip &&
+            activeTrip != null &&
+            !TripNavigationExperiment.activeSessionOpen &&
+            navIndex != hubIndex;
 
         return Stack(
           clipBehavior: Clip.none,
@@ -221,7 +230,7 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
               Positioned(
                 left: 16,
                 right: 16,
-                bottom: 96,
+                bottom: 24,
                 child: _ActiveTripResumeBanner(
                   order: activeTrip,
                   onResume: _resumeTrip,

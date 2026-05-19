@@ -150,6 +150,17 @@ class _MainNavigationState extends State<MainNavigation> {
       });
     }
 
+    // Lojista: dashboard dedicado sem mapa social nem menu inferior.
+    if (isPartner) {
+      return Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: const PartnerHomeScreen(),
+        endDrawer: const ProfileSidebar(),
+        endDrawerEnableOpenDragGesture: true,
+      );
+    }
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: theme.scaffoldBackgroundColor,
