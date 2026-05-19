@@ -7,8 +7,9 @@ import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
+import '../../widgets/payout_profile_fields.dart';
 
-/// Dados bancários do entregador para repasse (Asaas).
+/// Dados para repasse do entregador (Asaas).
 class DeliveryRiderPayoutScreen extends StatefulWidget {
   const DeliveryRiderPayoutScreen({super.key});
 
@@ -18,26 +19,11 @@ class DeliveryRiderPayoutScreen extends StatefulWidget {
 }
 
 class _DeliveryRiderPayoutScreenState extends State<DeliveryRiderPayoutScreen> {
-  final _owner = TextEditingController();
-  final _cpf = TextEditingController();
-  final _agency = TextEditingController();
-  final _account = TextEditingController();
-  final _accountDigit = TextEditingController();
-  final _bankCode = TextEditingController();
+  final _payoutFieldsKey = GlobalKey<PayoutProfileFieldsState>();
 
+  Map<String, dynamic>? _initialPayout;
   bool _loading = true;
   bool _saving = false;
-
-  @override
-  void dispose() {
-    _owner.dispose();
-    _cpf.dispose();
-    _agency.dispose();
-    _account.dispose();
-    _accountDigit.dispose();
-    _bankCode.dispose();
-    super.dispose();
-  }
 
   @override
   void initState() {
@@ -50,18 +36,10 @@ class _DeliveryRiderPayoutScreenState extends State<DeliveryRiderPayoutScreen> {
     try {
       final pay = await ApiService.getUserPayoutBankProfile();
       if (!mounted) return;
-      setState(() => _loading = false);
-      if (pay != null) {
-        _owner.text = '${pay['ownerName'] ?? ''}';
-        _cpf.text = '${pay['cpfCnpj'] ?? ''}';
-        _agency.text = '${pay['agency'] ?? ''}';
-        _account.text = '${pay['account'] ?? ''}';
-        _accountDigit.text = '${pay['accountDigit'] ?? ''}';
-        final bank = pay['bank'];
-        if (bank is Map && bank['code'] != null) {
-          _bankCode.text = '${bank['code']}';
-        }
-      }
+      setState(() {
+        _initialPayout = pay;
+        _loading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -71,25 +49,18 @@ class _DeliveryRiderPayoutScreenState extends State<DeliveryRiderPayoutScreen> {
     }
   }
 
-  Map<String, dynamic> _buildPayload() {
-    return <String, dynamic>{
-      'ownerName': _owner.text.trim(),
-      'cpfCnpj': _cpf.text.replaceAll(RegExp(r'\D'), ''),
-      'agency': _agency.text.trim(),
-      'account': _account.text.trim(),
-      'accountDigit': _accountDigit.text.trim(),
-      'bank': <String, dynamic>{'code': _bankCode.text.trim()},
-    };
-  }
-
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await ApiService.patchUserPayoutBankProfile(_buildPayload());
+      final payload = _payoutFieldsKey.currentState?.buildPayload();
+      if (payload == null) {
+        throw Exception('Formulário indisponível');
+      }
+      await ApiService.patchUserPayoutBankProfile(payload);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Conta de repasse guardada.'),
+          content: Text('Dados de repasse guardados.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -123,8 +94,8 @@ class _DeliveryRiderPayoutScreenState extends State<DeliveryRiderPayoutScreen> {
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'Este ecrã destina-se a quem faz entregas. Podes mesmo assim '
-                  'registar uma conta caso venhas a usar o modo entregador.',
+                  'Este ecrã destina-se a quem faz entregas. Podes registar '
+                  'conta bancária ou chave PIX para receber liquidações.',
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
@@ -146,7 +117,7 @@ class _DeliveryRiderPayoutScreenState extends State<DeliveryRiderPayoutScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Os teus dados para PIX/TED',
+                                  'Onde receber o repasse',
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -156,20 +127,19 @@ class _DeliveryRiderPayoutScreenState extends State<DeliveryRiderPayoutScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'A plataforma usa estes dados ao liquidar corridas '
-                            '(quando configurado no servidor). Confirma no Asaas o formato exato da tua instituição.',
+                            'Valor líquido das corridas após taxas da plataforma. '
+                            'Podes usar a tua chave PIX pessoal para testar.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.textTheme.bodySmall?.color
                                   ?.withValues(alpha: 0.75),
                             ),
                           ),
                           const SizedBox(height: 16),
-                          _field(_owner, 'Titular (nome completo)'),
-                          _field(_cpf, 'CPF ou CNPJ (só números)'),
-                          _field(_bankCode, 'Código do banco'),
-                          _field(_agency, 'Agência'),
-                          _field(_account, 'Conta'),
-                          _field(_accountDigit, 'Dígito da conta'),
+                          PayoutProfileFields(
+                            key: _payoutFieldsKey,
+                            initial: _initialPayout,
+                            onChanged: (_) {},
+                          ),
                           const SizedBox(height: 20),
                           FilledButton.icon(
                             onPressed: _saving ? null : () => unawaited(_save()),
@@ -184,7 +154,7 @@ class _DeliveryRiderPayoutScreenState extends State<DeliveryRiderPayoutScreen> {
                                   )
                                 : const Icon(Icons.save, size: 20),
                             label:
-                                Text(_saving ? 'A guardar…' : 'Guardar conta'),
+                                Text(_saving ? 'A guardar…' : 'Guardar'),
                             style: FilledButton.styleFrom(
                               padding:
                                   const EdgeInsets.symmetric(vertical: 14),
@@ -196,19 +166,6 @@ class _DeliveryRiderPayoutScreenState extends State<DeliveryRiderPayoutScreen> {
                     ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _field(TextEditingController c, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: c,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
         ),
       ),
     );

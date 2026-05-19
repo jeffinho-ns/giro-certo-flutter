@@ -7,8 +7,9 @@ import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
+import '../../widgets/payout_profile_fields.dart';
 
-/// Definições da loja: modo de cobrança + dados bancários para repasse (Asaas).
+/// Definições da loja: modo de cobrança + dados para repasse (Asaas).
 class DeliveryPartnerPaymentScreen extends StatefulWidget {
   const DeliveryPartnerPaymentScreen({super.key});
 
@@ -19,27 +20,12 @@ class DeliveryPartnerPaymentScreen extends StatefulWidget {
 
 class _DeliveryPartnerPaymentScreenState
     extends State<DeliveryPartnerPaymentScreen> {
-  final _owner = TextEditingController();
-  final _cpf = TextEditingController();
-  final _agency = TextEditingController();
-  final _account = TextEditingController();
-  final _accountDigit = TextEditingController();
-  final _bankCode = TextEditingController();
+  final _payoutFieldsKey = GlobalKey<PayoutProfileFieldsState>();
 
   String _collectionMode = 'prepaid';
+  Map<String, dynamic>? _initialPayout;
   bool _loading = true;
   bool _saving = false;
-
-  @override
-  void dispose() {
-    _owner.dispose();
-    _cpf.dispose();
-    _agency.dispose();
-    _account.dispose();
-    _accountDigit.dispose();
-    _bankCode.dispose();
-    super.dispose();
-  }
 
   @override
   void initState() {
@@ -57,9 +43,9 @@ class _DeliveryPartnerPaymentScreenState
       setState(() {
         _collectionMode =
             (m == 'postpaid_pix' || m == 'authorize_capture') ? m! : 'prepaid';
+        _initialPayout = pay;
         _loading = false;
       });
-      _fillFromMap(pay);
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -69,37 +55,16 @@ class _DeliveryPartnerPaymentScreenState
     }
   }
 
-  void _fillFromMap(Map<String, dynamic>? map) {
-    if (map == null) return;
-    _owner.text = '${map['ownerName'] ?? ''}';
-    _cpf.text = '${map['cpfCnpj'] ?? ''}';
-    _agency.text = '${map['agency'] ?? ''}';
-    _account.text = '${map['account'] ?? ''}';
-    _accountDigit.text = '${map['accountDigit'] ?? ''}';
-    final bank = map['bank'];
-    if (bank is Map && bank['code'] != null) {
-      _bankCode.text = '${bank['code']}';
-    }
-  }
-
-  Map<String, dynamic> _buildPayload() {
-    return <String, dynamic>{
-      'ownerName': _owner.text.trim(),
-      'cpfCnpj': _cpf.text.replaceAll(RegExp(r'\D'), ''),
-      'agency': _agency.text.trim(),
-      'account': _account.text.trim(),
-      'accountDigit': _accountDigit.text.trim(),
-      'bank': <String, dynamic>{'code': _bankCode.text.trim()},
-    };
-  }
-
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
       await ApiService.patchPartnerDeliveryPaymentCollectionMode(
         _collectionMode,
       );
-      await ApiService.patchPartnerPayoutBankProfile(_buildPayload());
+      final payload = _payoutFieldsKey.currentState?.buildPayload();
+      if (payload != null) {
+        await ApiService.patchPartnerPayoutBankProfile(payload);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -162,6 +127,16 @@ class _DeliveryPartnerPaymentScreenState
                             ),
                           ),
                           const SizedBox(height: 8),
+                          Text(
+                            'Pré-pago: o cliente paga antes do motoqueiro. '
+                            '“PIX na entrega”: o cliente paga via PIX gerado pelo Asaas '
+                            '(não é a chave PIX do repasse abaixo).',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.textTheme.bodySmall?.color
+                                  ?.withValues(alpha: 0.75),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
                             value: _collectionMode,
                             decoration: const InputDecoration(
@@ -205,7 +180,7 @@ class _DeliveryPartnerPaymentScreenState
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Conta para repasse (Asaas)',
+                                  'Onde receber o repasse',
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -215,19 +190,19 @@ class _DeliveryPartnerPaymentScreenState
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Usado nos repasses da plataforma para esta loja.',
+                            'Depois que o cliente paga, a plataforma retém as taxas e '
+                            'repassa o líquido para esta conta ou chave PIX.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.textTheme.bodySmall?.color
                                   ?.withValues(alpha: 0.75),
                             ),
                           ),
                           const SizedBox(height: 16),
-                          _field(theme, _owner, 'Titular (nome completo)'),
-                          _field(theme, _cpf, 'CPF ou CNPJ (só números)'),
-                          _field(theme, _bankCode, 'Código do banco (ex.: 237)'),
-                          _field(theme, _agency, 'Agência'),
-                          _field(theme, _account, 'Conta'),
-                          _field(theme, _accountDigit, 'Dígito da conta'),
+                          PayoutProfileFields(
+                            key: _payoutFieldsKey,
+                            initial: _initialPayout,
+                            onChanged: (_) {},
+                          ),
                           const SizedBox(height: 24),
                           FilledButton.icon(
                             onPressed: _saving ? null : () => unawaited(_save()),
@@ -252,19 +227,6 @@ class _DeliveryPartnerPaymentScreenState
                     ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _field(ThemeData theme, TextEditingController c, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: c,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
         ),
       ),
     );
