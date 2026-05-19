@@ -787,15 +787,16 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                             if (_selectedStore != null)
                               TextButton.icon(
                                 onPressed: () async {
+                                  final store = _selectedStore!;
+                                  final addr = store.address.trim();
                                   setState(() {
-                                    _deliveryAddressController.text =
-                                        _selectedStore!.address;
-                                    _deliveryLatitude =
-                                        _selectedStore!.latitude;
-                                    _deliveryLongitude =
-                                        _selectedStore!.longitude;
-                                    _selectedPlaceId = 'store-address';
+                                    _deliveryAddressController.text = addr;
+                                    _deliveryLatitude = store.latitude;
+                                    _deliveryLongitude = store.longitude;
+                                    _selectedPlaceId =
+                                        'coords:${store.latitude},${store.longitude}|${Uri.encodeComponent(addr.isEmpty ? 'Endereço da loja' : addr)}';
                                     _addressPredictions.clear();
+                                    _addressSearchError = null;
                                   });
                                   await _fetchQuote();
                                 },
@@ -855,6 +856,17 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                               ),
                             ),
                           ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Toque numa sugestão da lista para fixar o endereço. '
+                            'Só digitar rua e número sem escolher não cria o pedido.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.textTheme.bodyMedium?.color
+                                  ?.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
                         if (_addressPredictions.isNotEmpty)
                           Container(
                             margin: const EdgeInsets.only(top: 8),
