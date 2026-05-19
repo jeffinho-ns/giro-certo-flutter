@@ -14,6 +14,7 @@ import '../../widgets/modern_header.dart';
 import '../../widgets/api_image.dart';
 import '../../widgets/partner_delivery_status_tracker.dart';
 import '../../widgets/partner_rider_detail_sheet.dart';
+import '../../widgets/order_value_summary.dart';
 import '../delivery/create_delivery_modal.dart';
 import '../delivery/delivery_detail_modal.dart';
 import '../delivery/delivery_screen.dart';
@@ -413,6 +414,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
         order: order,
         userLat: userLat,
         userLng: userLng,
+        isRider: false,
         partnerCollectionMode: _myPartner?.deliveryPaymentCollectionMode,
         onOrderUpdated: _loadPartnerData,
       ),
@@ -931,25 +933,10 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                             ],
                           ),
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              _formatCurrency(order.totalValue),
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.neonGreen,
-                              ),
-                            ),
-                            if (order.value > 0)
-                              Text(
-                                'Itens ${_formatCurrency(order.value)}',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: theme.textTheme.bodySmall?.color
-                                      ?.withValues(alpha: 0.55),
-                                ),
-                              ),
-                          ],
+                        OrderValueSummary(
+                          orderValue: order.value,
+                          deliveryFee: order.deliveryFee,
+                          compact: true,
                         ),
                       ],
                     ),

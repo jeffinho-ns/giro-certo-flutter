@@ -9,6 +9,7 @@ import '../../models/delivery_order.dart';
 import '../../services/api_service.dart';
 import '../../utils/colors.dart';
 import '../../utils/delivery_status_utils.dart';
+import '../../widgets/order_value_summary.dart';
 
 class DeliveryDetailModal extends StatefulWidget {
   final DeliveryOrder order;
@@ -324,28 +325,48 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.45),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color:
-                                  AppColors.neonGreen.withOpacity(0.35),
-                            ),
-                          ),
-                          child: Text(
-                            'R\$ ${order.deliveryFee.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: AppColors.neonGreen,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ),
+                        widget.isRider
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.45),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppColors.neonGreen.withOpacity(0.35),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      OrderValueSummary.formatBrl(
+                                        order.deliveryFee,
+                                      ),
+                                      style: const TextStyle(
+                                        color: AppColors.neonGreen,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Seu frete',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.75),
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : OrderValueSummary(
+                                orderValue: order.value,
+                                deliveryFee: order.deliveryFee,
+                                compact: true,
+                              ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -515,7 +536,7 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                           _buildDetailRow(theme, 'Valor do pedido',
                               'R\$ ${order.value.toStringAsFixed(2)}'),
                           const SizedBox(height: 8),
-                          _buildDetailRow(theme, 'Taxa de entrega',
+                          _buildDetailRow(theme, 'Frete',
                               'R\$ ${order.deliveryFee.toStringAsFixed(2)}'),
                           const Divider(height: 24),
                           _buildDetailRow(

@@ -7,6 +7,7 @@ import '../../models/partner.dart';
 import '../../services/api_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../utils/colors.dart';
+import '../../widgets/order_value_summary.dart';
 
 class CreateDeliveryModal extends StatefulWidget {
   final double userLat;
@@ -289,7 +290,18 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   void initState() {
     super.initState();
     _sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
+    _valueController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadStores();
+  }
+
+  double? get _parsedOrderValue {
+    final t = _valueController.text.trim().replaceAll(',', '.');
+    if (t.isEmpty) return null;
+    final v = double.tryParse(t);
+    if (v == null || v <= 0) return null;
+    return v;
   }
 
   Future<void> _loadStores() async {
@@ -1094,50 +1106,36 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
 
                         const SizedBox(height: 24),
 
-                        // Taxa de entrega calculada
                         if (_isLoadingQuote)
                           const Padding(
                             padding: EdgeInsets.only(bottom: 10),
                             child: LinearProgressIndicator(minHeight: 2),
                           ),
-                        if (_deliveryFee != null)
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  AppColors.neonGreen.withOpacity(0.18),
-                                  AppColors.neonGreen.withOpacity(0.08),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: AppColors.neonGreen.withOpacity(0.3),
-                                width: 1,
-                              ),
-                              boxShadow: AppColors.insetPanelShadows(isDark),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Taxa de Entrega',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  'R\$ ${_deliveryFee!.toStringAsFixed(2)}',
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    color: AppColors.neonGreen,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                        if (_deliveryFee != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Resumo do pedido',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          OrderValueSummary(
+                            orderValue: _parsedOrderValue ?? 0,
+                            deliveryFee: _deliveryFee!,
+                          ),
+                          if (_parsedOrderValue == null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Informe o valor do pedido acima para ver o total ao cliente.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.textTheme.bodySmall?.color
+                                      ?.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                        ],
 
                         const SizedBox(height: 24),
 
