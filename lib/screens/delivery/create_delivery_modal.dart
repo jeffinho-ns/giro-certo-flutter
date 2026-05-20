@@ -8,6 +8,7 @@ import '../../services/api_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/order_value_summary.dart';
+import '../../utils/validators.dart';
 
 class CreateDeliveryModal extends StatefulWidget {
   final double userLat;
@@ -30,6 +31,7 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   final _deliveryAddressController = TextEditingController();
   final _recipientNameController = TextEditingController();
   final _recipientPhoneController = TextEditingController();
+  final _recipientCpfController = TextEditingController();
   final _notesController = TextEditingController();
   final _valueController = TextEditingController();
 
@@ -54,6 +56,7 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
     _deliveryAddressController.dispose();
     _recipientNameController.dispose();
     _recipientPhoneController.dispose();
+    _recipientCpfController.dispose();
     _notesController.dispose();
     _valueController.dispose();
     _addressDebounce?.cancel();
@@ -243,6 +246,9 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
         recipientPhone: _recipientPhoneController.text.trim().isNotEmpty
             ? _recipientPhoneController.text.trim()
             : null,
+        recipientCpf: DocumentValidators.normalizeDigits(
+          _recipientCpfController.text,
+        ),
         notes: _notesController.text.trim().isNotEmpty
             ? _notesController.text.trim()
             : null,
@@ -976,6 +982,24 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                             }
                             return null;
                           },
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        TextFormField(
+                          controller: _recipientCpfController,
+                          decoration: InputDecoration(
+                            labelText: 'CPF do cliente (pagamento)',
+                            prefixIcon: Icon(LucideIcons.badgeCheck),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            helperText:
+                                'Obrigatório para gerar link de cobrança Asaas',
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [CpfCnhInputFormatter()],
+                          validator: DocumentValidators.validateCpf,
                         ),
 
                         const SizedBox(height: 16),

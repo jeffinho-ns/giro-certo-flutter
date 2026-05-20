@@ -690,6 +690,7 @@ class ApiService {
     required double deliveryLongitude,
     String? recipientName,
     String? recipientPhone,
+    String? recipientCpf,
     String? notes,
     required double value,
     required double deliveryFee,
@@ -719,6 +720,7 @@ class ApiService {
         'deliveryLongitude': delivery.lng,
         if (recipientName != null) 'recipientName': recipientName,
         if (recipientPhone != null) 'recipientPhone': recipientPhone,
+        if (recipientCpf != null) 'recipientCpf': recipientCpf,
         if (notes != null) 'notes': notes,
         'value': value,
         'deliveryFee': deliveryFee,
@@ -817,6 +819,7 @@ class ApiService {
   static Future<Map<String, dynamic>> initiateDeliveryPayment(
     String orderId, {
     String? billingType,
+    String? recipientCpf,
   }) async {
     final response = await _requestWithRetry(
       (headers) => http.post(
@@ -825,6 +828,8 @@ class ApiService {
         body: json.encode(<String, dynamic>{
           if (billingType != null && billingType.trim().isNotEmpty)
             'billingType': billingType.trim(),
+          if (recipientCpf != null && recipientCpf.trim().isNotEmpty)
+            'recipientCpf': recipientCpf.trim(),
         }),
       ),
     );
@@ -1109,6 +1114,7 @@ class ApiService {
       deliveryLongitude: delivery.lng,
       recipientName: jsonStringOrNull(json['recipientName']),
       recipientPhone: jsonStringOrNull(json['recipientPhone']),
+      recipientCpf: jsonStringOrNull(json['recipientCpf']),
       notes: jsonStringOrNull(json['notes']),
       value: jsonDouble(json['value']),
       deliveryFee: jsonDouble(json['deliveryFee']),

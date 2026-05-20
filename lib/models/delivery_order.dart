@@ -31,6 +31,7 @@ class DeliveryOrder {
   final double deliveryLongitude;
   final String? recipientName;
   final String? recipientPhone;
+  final String? recipientCpf;
   final String? notes; // Observações do pedido
   final double value; // Valor do pedido
   final double deliveryFee; // Taxa de entrega
@@ -63,6 +64,7 @@ class DeliveryOrder {
     required this.deliveryLongitude,
     this.recipientName,
     this.recipientPhone,
+    this.recipientCpf,
     this.notes,
     required this.value,
     required this.deliveryFee,
@@ -156,6 +158,7 @@ class DeliveryOrder {
       deliveryLongitude: deliveryLongitude,
       recipientName: recipientName,
       recipientPhone: recipientPhone,
+      recipientCpf: recipientCpf,
       notes: notes,
       value: value,
       deliveryFee: deliveryFee,
@@ -192,6 +195,7 @@ class DeliveryOrder {
       deliveryLongitude: deliveryLongitude,
       recipientName: recipientName,
       recipientPhone: recipientPhone,
+      recipientCpf: recipientCpf,
       notes: notes,
       value: value,
       deliveryFee: deliveryFee,

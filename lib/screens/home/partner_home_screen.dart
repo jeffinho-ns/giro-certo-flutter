@@ -18,6 +18,7 @@ import '../../widgets/order_value_summary.dart';
 import '../delivery/create_delivery_modal.dart';
 import '../delivery/delivery_detail_modal.dart';
 import '../delivery/delivery_screen.dart';
+import '../../utils/payer_cpf_prompt.dart';
 
 /// Home do lojista: painel de pedidos em tempo real (sem mapa).
 class PartnerHomeScreen extends StatefulWidget {
@@ -312,10 +313,17 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   }
 
   Future<void> _openPaymentCheckout(DeliveryOrder order) async {
+    final cpf = await promptPayerCpfIfNeeded(
+      context,
+      existing: order.recipientCpf,
+    );
+    if (cpf == null) return;
+
     try {
       final payment = await ApiService.initiateDeliveryPayment(
         order.id,
         billingType: _billingTypeForPartnerInitiate,
+        recipientCpf: cpf,
       );
       final url = payment['invoiceUrl'] as String?;
       if (url == null || url.isEmpty) {

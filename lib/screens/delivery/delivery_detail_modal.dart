@@ -10,6 +10,7 @@ import '../../services/api_service.dart';
 import '../../utils/colors.dart';
 import '../../utils/delivery_status_utils.dart';
 import '../../widgets/order_value_summary.dart';
+import '../../utils/payer_cpf_prompt.dart';
 
 class DeliveryDetailModal extends StatefulWidget {
   final DeliveryOrder order;
@@ -121,10 +122,17 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
 
   Future<void> _generateAndOpenCheckout() async {
     final messenger = ScaffoldMessenger.of(context);
+    final cpf = await promptPayerCpfIfNeeded(
+      context,
+      existing: widget.order.recipientCpf,
+    );
+    if (cpf == null) return;
+
     try {
       final payment = await ApiService.initiateDeliveryPayment(
         widget.order.id,
         billingType: _billingTypeForInitiate,
+        recipientCpf: cpf,
       );
       final url = payment['invoiceUrl'] as String?;
       if (url == null || url.isEmpty) {
