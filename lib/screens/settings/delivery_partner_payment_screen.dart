@@ -8,6 +8,7 @@ import '../../services/api_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/payout_profile_fields.dart';
+import '../../widgets/whatsapp_order_template_card.dart';
 
 /// Definições da loja: modo de cobrança + dados para repasse (Asaas).
 class DeliveryPartnerPaymentScreen extends StatefulWidget {
@@ -169,6 +170,8 @@ class _DeliveryPartnerPaymentScreenState
                               }
                             },
                           ),
+                          const SizedBox(height: 24),
+                          const WhatsAppOrderTemplateCard(),
                           const SizedBox(height: 28),
                           Row(
                             children: [

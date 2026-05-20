@@ -841,6 +841,19 @@ class ApiService {
     return payment is Map<String, dynamic> ? payment : data;
   }
 
+  /// Modelo de mensagem WhatsApp + status da integração Cloud API.
+  static Future<Map<String, dynamic>> getWhatsAppOrderTemplate() async {
+    final response = await _requestWithRetry(
+      (headers) => http.get(
+        Uri.parse('$baseUrl/partners/me/whatsapp-order-template'),
+        headers: headers,
+      ),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return data is Map<String, dynamic> ? data : <String, dynamic>{};
+  }
+
   static Future<void> patchPartnerDeliveryPaymentCollectionMode(String mode) async {
     final response = await _requestWithRetry(
       (headers) => http.patch(
