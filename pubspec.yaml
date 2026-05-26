@@ -38,6 +38,8 @@ dependencies:
   flutter_map_mbtiles: ^1.0.4
   flutter_mapbox_navigation:
     path: packages/flutter_mapbox_navigation
+  video_player: ^2.9.1
+  video_thumbnail: ^0.5.3
 
 dev_dependencies:
   flutter_test:

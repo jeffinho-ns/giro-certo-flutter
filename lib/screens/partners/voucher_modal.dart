@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../models/partner.dart';
 import '../../utils/colors.dart';
@@ -159,11 +160,15 @@ class VoucherModal extends StatelessWidget {
                             ),
                             const SizedBox(width: 12),
                             GestureDetector(
-                              onTap: () {
-                                // Copiar código para clipboard
+                              onTap: () async {
+                                await Clipboard.setData(
+                                  ClipboardData(text: promotion.code),
+                                );
+                                if (!context.mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('Código ${promotion.code} copiado!'),
+                                    content: Text(
+                                        'Código ${promotion.code} copiado!'),
                                     backgroundColor: AppColors.racingOrange,
                                   ),
                                 );

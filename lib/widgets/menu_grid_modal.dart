@@ -8,13 +8,22 @@ import '../utils/colors.dart';
 import '../screens/maintenance/maintenance_detail_screen.dart';
 import '../screens/partners/partners_screen.dart';
 import '../screens/delivery/delivery_screen.dart';
-import '../screens/social/social_home_screen.dart';
 import '../screens/social/user_search_screen.dart';
 import '../screens/chat/chat_screen.dart';
 import '../screens/social/create_post_modal.dart';
 import '../screens/social/create_action_sheet.dart';
 import '../screens/social/create_community_modal.dart';
 import '../screens/social/send_notification_sheet.dart';
+import '../screens/help/help_screen.dart';
+import '../screens/momentos/momentos_screen.dart';
+import '../screens/rotas/rotas_screen.dart';
+import '../screens/ranking/ranking_screen.dart';
+import '../screens/manual/manual_screen.dart';
+import '../screens/social/events_screen.dart';
+import '../screens/achievements/achievements_screen.dart';
+import '../screens/drive/drive_mode_screen.dart';
+import '../screens/communities/communities_list_screen.dart';
+import '../screens/delivery/delivery_history_screen.dart';
 
 class MenuGridModal extends StatefulWidget {
   final VoidCallback? onClose;
@@ -88,7 +97,7 @@ class _MenuGridModalState extends State<MenuGridModal> {
           id: 'qa_new_order',
           label: 'Novo Pedido',
           icon: LucideIcons.plusCircle,
-          routeIndex: 105,
+          routeIndex: 115,
           highlight: true,
         ),
         MenuQuickAction(
@@ -116,10 +125,10 @@ class _MenuGridModalState extends State<MenuGridModal> {
           highlight: true,
         ),
         MenuQuickAction(
-          id: 'qa_garage',
-          label: 'Minha Garagem',
-          icon: LucideIcons.bike,
-          routeIndex: 4,
+          id: 'qa_history',
+          label: 'Histórico',
+          icon: LucideIcons.history,
+          routeIndex: 117,
         ),
         MenuQuickAction(
           id: 'qa_messages',
@@ -157,76 +166,37 @@ class _MenuGridModalState extends State<MenuGridModal> {
     if (_isPartner) {
       return const [
         MenuGridItem(
-            id: 'maintenance',
-            icon: LucideIcons.wrench,
-            label: 'Manutenção',
-            routeIndex: 101),
-        MenuGridItem(
-            id: 'partners',
-            icon: LucideIcons.store,
-            label: 'Parceiros',
-            routeIndex: 102),
-        MenuGridItem(
             id: 'orders',
             icon: LucideIcons.package,
             label: 'Pedidos',
             routeIndex: 105,
             highlight: true),
         MenuGridItem(
-            id: 'photo',
-            icon: LucideIcons.camera,
-            label: 'Foto Sport',
-            routeIndex: 109),
+            id: 'new_order',
+            icon: LucideIcons.plusCircle,
+            label: 'Novo Pedido',
+            routeIndex: 115,
+            highlight: true),
         MenuGridItem(
-            id: 'routes',
-            icon: LucideIcons.mapPin,
-            label: 'Rotas',
-            routeIndex: 111),
+            id: 'events',
+            icon: LucideIcons.calendarDays,
+            label: 'Eventos',
+            routeIndex: 116),
         MenuGridItem(
             id: 'help',
             icon: LucideIcons.helpCircle,
-            label: 'Help',
+            label: 'Ajuda',
             routeIndex: 112),
-        MenuGridItem(
-            id: 'news',
-            icon: LucideIcons.newspaper,
-            label: 'News',
-            routeIndex: 106),
-        MenuGridItem(
-            id: 'drive',
-            icon: LucideIcons.car,
-            label: 'Modo Drive',
-            routeIndex: 113),
-        MenuGridItem(
-            id: 'vehicles',
-            icon: LucideIcons.bike,
-            label: 'Veículos',
-            routeIndex: 4),
-        MenuGridItem(
-            id: 'communities',
-            icon: LucideIcons.users,
-            label: 'Comunidades',
-            routeIndex: 0),
-        MenuGridItem(
-            id: 'search',
-            icon: LucideIcons.search,
-            label: 'Pesquisa',
-            routeIndex: 107),
-        MenuGridItem(
-            id: 'friends',
-            icon: LucideIcons.userPlus,
-            label: 'Amigos',
-            routeIndex: 107),
-        MenuGridItem(
-            id: 'publish',
-            icon: LucideIcons.edit2,
-            label: 'Publicar',
-            routeIndex: 109),
         MenuGridItem(
             id: 'messages',
             icon: LucideIcons.messageCircle,
             label: 'Mensagens',
             routeIndex: 110),
+        MenuGridItem(
+            id: 'partners',
+            icon: LucideIcons.store,
+            label: 'Parceiros',
+            routeIndex: 102),
         MenuGridItem(
             id: 'profile',
             icon: LucideIcons.userCircle2,
@@ -255,26 +225,47 @@ class _MenuGridModalState extends State<MenuGridModal> {
         enabled: _isDelivery,
         badgeText: _isDelivery ? null : 'Delivery',
       ),
-      const MenuGridItem(
-          id: 'photo',
-          icon: LucideIcons.camera,
-          label: 'Foto Sport',
-          routeIndex: 109),
+      if (_isDelivery)
+        const MenuGridItem(
+            id: 'delivery_history',
+            icon: LucideIcons.history,
+            label: 'Histórico',
+            routeIndex: 117),
       const MenuGridItem(
           id: 'routes',
           icon: LucideIcons.mapPin,
           label: 'Rotas',
           routeIndex: 111),
       const MenuGridItem(
-          id: 'help',
-          icon: LucideIcons.helpCircle,
-          label: 'Help',
-          routeIndex: 112),
+          id: 'moments',
+          icon: LucideIcons.sparkles,
+          label: 'Momentos',
+          routeIndex: 114),
       const MenuGridItem(
-          id: 'news',
-          icon: LucideIcons.newspaper,
-          label: 'News',
+          id: 'communities',
+          icon: LucideIcons.users,
+          label: 'Comunidades',
+          routeIndex: 118),
+      const MenuGridItem(
+          id: 'events',
+          icon: LucideIcons.calendarDays,
+          label: 'Eventos',
+          routeIndex: 116),
+      const MenuGridItem(
+          id: 'ranking',
+          icon: LucideIcons.trophy,
+          label: 'Ranking',
           routeIndex: 106),
+      const MenuGridItem(
+          id: 'achievements',
+          icon: LucideIcons.award,
+          label: 'Conquistas',
+          routeIndex: 119),
+      const MenuGridItem(
+          id: 'manual',
+          icon: LucideIcons.bookOpen,
+          label: 'Manual',
+          routeIndex: 120),
       const MenuGridItem(
           id: 'drive',
           icon: LucideIcons.car,
@@ -283,22 +274,12 @@ class _MenuGridModalState extends State<MenuGridModal> {
       const MenuGridItem(
           id: 'vehicles',
           icon: LucideIcons.bike,
-          label: 'Veículos',
+          label: 'Garagem',
           routeIndex: 4),
-      const MenuGridItem(
-          id: 'communities',
-          icon: LucideIcons.users,
-          label: 'Comunidades',
-          routeIndex: 0),
       const MenuGridItem(
           id: 'search',
           icon: LucideIcons.search,
           label: 'Pesquisa',
-          routeIndex: 107),
-      const MenuGridItem(
-          id: 'friends',
-          icon: LucideIcons.userPlus,
-          label: 'Amigos',
           routeIndex: 107),
       const MenuGridItem(
           id: 'publish',
@@ -310,6 +291,11 @@ class _MenuGridModalState extends State<MenuGridModal> {
           icon: LucideIcons.messageCircle,
           label: 'Mensagens',
           routeIndex: 110),
+      const MenuGridItem(
+          id: 'help',
+          icon: LucideIcons.helpCircle,
+          label: 'Ajuda',
+          routeIndex: 112),
       const MenuGridItem(
           id: 'profile',
           icon: LucideIcons.userCircle2,
@@ -360,13 +346,6 @@ class _MenuGridModalState extends State<MenuGridModal> {
     if (!mounted) return;
     Navigator.of(context).pop();
 
-    if (item.id == 'communities') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ChatScreen()),
-      );
-      return;
-    }
-
     if (item.routeIndex >= 0 &&
         item.routeIndex <= 4 &&
         widget.onNavigateToIndex != null) {
@@ -390,12 +369,6 @@ class _MenuGridModalState extends State<MenuGridModal> {
           MaterialPageRoute(builder: (_) => const DeliveryScreen()),
         );
         break;
-      case 106:
-        Navigator.of(context).push(
-          MaterialPageRoute(
-              builder: (_) => const SocialHomeScreen(fromMenu: true)),
-        );
-        break;
       case 109:
         await _openCreateActionModal();
         break;
@@ -412,16 +385,63 @@ class _MenuGridModalState extends State<MenuGridModal> {
           MaterialPageRoute(builder: (_) => const ChatScreen()),
         );
         break;
+      case 106:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const RankingScreen()),
+        );
+        break;
       case 111:
-      case 113:
-        widget.onNavigateToIndex?.call(2);
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const RotasScreen()),
+        );
         break;
       case 112:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('Central de ajuda em evolução. Em breve, FAQ e suporte.'),
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const HelpScreen()),
+        );
+        break;
+      case 113:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const DriveModeScreen()),
+        );
+        break;
+      case 114:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const MomentosScreen()),
+        );
+        break;
+      case 115:
+        // Novo pedido (lojista): vai para DeliveryScreen com flag para abrir o
+        // CreateDeliveryModal automaticamente.
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const DeliveryScreen(autoOpenCreate: true),
           ),
+        );
+        break;
+      case 116:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const EventsScreen()),
+        );
+        break;
+      case 117:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const DeliveryHistoryScreen()),
+        );
+        break;
+      case 118:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CommunitiesListScreen()),
+        );
+        break;
+      case 119:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AchievementsScreen()),
+        );
+        break;
+      case 120:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ManualScreen()),
         );
         break;
       default:

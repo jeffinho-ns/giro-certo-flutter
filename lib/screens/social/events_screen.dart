@@ -4,6 +4,7 @@ import '../../models/social_event.dart';
 import '../../services/api_service.dart';
 import '../../utils/colors.dart';
 import '../../utils/social_formatters.dart';
+import 'event_detail_screen.dart';
 
 /// Ecrã de eventos da rede social (para pins no mapa e lista).
 class EventsScreen extends StatefulWidget {
@@ -147,6 +148,14 @@ class _EventsScreenState extends State<EventsScreen> {
                                 ],
                               ),
                               isThreeLine: true,
+                              trailing: const Icon(LucideIcons.chevronRight),
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => EventDetailScreen(event: e),
+                                  ),
+                                );
+                              },
                             ),
                           );
                         },

@@ -27,7 +27,7 @@ import 'notifications_screen.dart';
 import 'profile_page.dart';
 import 'user_profile_screen.dart';
 import 'user_search_screen.dart';
-import '../ranking/ranking_screen.dart';
+import 'events_screen.dart';
 import '../momentos/momentos_screen.dart';
 import '../garage/garage_screen.dart';
 import '../chat/chat_screen.dart';
@@ -204,7 +204,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
     }
     if (index == 1) {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const RankingScreen()),
+        MaterialPageRoute(builder: (_) => const EventsScreen()),
       );
       return;
     }
@@ -238,7 +238,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
             }
             if (routeIndex == 1) {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const RankingScreen()),
+                MaterialPageRoute(builder: (_) => const EventsScreen()),
               );
               return;
             }

@@ -19,7 +19,10 @@ import '../garage/garage_screen.dart';
 import '../../services/api_service.dart';
 import '../../utils/image_url.dart';
 import '../../models/achievement.dart';
+import '../../models/moment.dart';
 import '../../widgets/api_image.dart';
+import '../../services/moments_service.dart';
+import '../momentos/momentos_screen.dart';
 import 'follow_list_screen.dart';
 
 const String _coverKeyPrefix = 'profile_cover_';
@@ -544,7 +547,7 @@ class _ProfilePageState extends State<ProfilePage>
           controller: _tabController,
           children: [
             _StorysTab(stories: userStories, profileUserId: userId),
-            _MomentosTab(posts: userPosts),
+            _MomentosTab(posts: userPosts, profileUserId: userId),
             _GaragemTab(bike: bike, bikeModel: bikeModel, isOwnProfile: isOwnProfile),
           ],
         ),
@@ -978,56 +981,254 @@ class _StorysTab extends StatelessWidget {
   }
 }
 
-class _MomentosTab extends StatelessWidget {
+class _MomentosTab extends StatefulWidget {
   final List<Post> posts;
+  final String profileUserId;
 
-  const _MomentosTab({required this.posts});
+  const _MomentosTab({required this.posts, required this.profileUserId});
+
+  @override
+  State<_MomentosTab> createState() => _MomentosTabState();
+}
+
+class _MomentosTabState extends State<_MomentosTab> {
+  List<Moment> _moments = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final list = await MomentsService.getByUserId(
+      widget.profileUserId,
+      currentUserId: appState.user?.id,
+    );
+    if (!mounted) return;
+    setState(() {
+      _moments = list;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    if (posts.isEmpty) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final postsWithImages =
+        widget.posts.where((p) => p.images != null && p.images!.isNotEmpty).toList();
+
+    if (_moments.isEmpty && postsWithImages.isEmpty) {
       return _EmptyState(
         icon: LucideIcons.sparkles,
         title: 'Ainda sem momentos',
-        subtitle: 'As tuas publicações aparecerão aqui.',
+        subtitle: 'Publique vídeos ou fotos para preencher esta área.',
       );
     }
 
-    final postsWithImages = posts.where((p) => p.images != null && p.images!.isNotEmpty).toList();
-    if (postsWithImages.isEmpty) {
-      return _EmptyState(
-        icon: LucideIcons.sparkles,
-        title: 'Sem fotos ainda',
-        subtitle: 'Publica algo com imagem para ver aqui.',
-      );
-    }
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-        childAspectRatio: 1,
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: CustomScrollView(
+        slivers: [
+          if (_moments.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.video,
+                        size: 16, color: AppColors.racingOrange),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Vídeos',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${_moments.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.textTheme.bodyMedium?.color
+                            ?.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (_moments.isNotEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              sliver: SliverGrid(
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 4,
+                  mainAxisSpacing: 4,
+                  childAspectRatio: 9 / 16,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) {
+                    final m = _moments[i];
+                    return _MomentTile(moment: m);
+                  },
+                  childCount: _moments.length,
+                ),
+              ),
+            ),
+          if (postsWithImages.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.image,
+                        size: 16, color: AppColors.racingOrange),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Posts',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+              sliver: SliverGrid(
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 4,
+                  mainAxisSpacing: 4,
+                  childAspectRatio: 1,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) {
+                    final p = postsWithImages[i];
+                    final img = p.images!.first;
+                    final isUrl = img.startsWith('http');
+                    return Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        color: theme.cardColor,
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: isUrl
+                          ? ApiImage(url: img, fit: BoxFit.cover)
+                          : Image.asset(img, fit: BoxFit.cover),
+                    );
+                  },
+                  childCount: postsWithImages.length,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
-      itemCount: postsWithImages.length,
-      itemBuilder: (context, i) {
-        final p = postsWithImages[i];
-        final img = p.images!.first;
-        final isUrl = img.startsWith('http');
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: theme.cardColor,
+    );
+  }
+}
+
+class _MomentTile extends StatelessWidget {
+  final Moment moment;
+  const _MomentTile({required this.moment});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final thumb = moment.thumbnailUrl;
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => MomentosScreen(initialMomentId: moment.id),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: isUrl
-              ? ApiImage(url: img, fit: BoxFit.cover)
-              : Image.asset(img, fit: BoxFit.cover),
         );
       },
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: theme.cardColor,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (thumb != null && thumb.isNotEmpty)
+              thumb.startsWith('http')
+                  ? ApiImage(url: thumb, fit: BoxFit.cover)
+                  : Image.file(File(thumb), fit: BoxFit.cover)
+            else
+              Container(color: Colors.black87),
+            Positioned(
+              right: 6,
+              top: 6,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  LucideIcons.play,
+                  color: Colors.white,
+                  size: 12,
+                ),
+              ),
+            ),
+            if (moment.originalAuthorName != null)
+              Positioned(
+                left: 6,
+                top: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(LucideIcons.repeat2,
+                          color: Colors.white, size: 10),
+                    ],
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 6,
+              bottom: 6,
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.heart,
+                      color: Colors.white, size: 12),
+                  const SizedBox(width: 2),
+                  Text(
+                    '${moment.likes}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

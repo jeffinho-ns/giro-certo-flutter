@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'home/home_screen.dart';
 import 'home/partner_home_screen.dart';
 import 'garage/garage_screen.dart';
-import 'ranking/ranking_screen.dart';
+import 'social/events_screen.dart';
 import 'chat/chat_screen.dart';
 import 'momentos/momentos_screen.dart';
 import '../widgets/floating_bottom_nav.dart';
@@ -35,7 +35,7 @@ class _MainNavigationState extends State<MainNavigation> {
   List<Widget> _buildScreens(bool isPartner) {
     return [
       const ChatScreen(),        // 0 Mensagens (Comunidade/Grupos/Particular)
-      const RankingScreen(),     // 1 Eventos
+      const EventsScreen(),      // 1 Eventos
       isPartner ? const PartnerHomeScreen() : const HomeScreen(), // 2: Lojista = dashboard; Motociclista = mapa
       const MomentosScreen(),    // 3 Momentos
       const GarageScreen(),      // 4 Garagem

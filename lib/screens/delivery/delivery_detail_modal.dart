@@ -120,6 +120,65 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
     }
   }
 
+  Future<void> _confirmCancel() async {
+    final reason = await showDialog<String?>(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController();
+        return AlertDialog(
+          title: const Text('Cancelar pedido?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Esta ação não pode ser desfeita. O motoboy será notificado.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  hintText: 'Motivo (opcional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Manter'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.alertRed,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+              child: const Text('Cancelar pedido'),
+            ),
+          ],
+        );
+      },
+    );
+    if (reason == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ApiService.cancelOrder(widget.order.id, reason: reason);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Pedido cancelado.')),
+      );
+      widget.onOrderUpdated?.call();
+      if (mounted) Navigator.of(context).maybePop();
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Falha ao cancelar: $e')),
+      );
+    }
+  }
+
   Future<void> _generateAndOpenCheckout() async {
     final messenger = ScaffoldMessenger.of(context);
     final cpf = await promptPayerCpfIfNeeded(
@@ -727,6 +786,29 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                             side: BorderSide(
                               color: AppColors.racingOrangeDark
                                   .withValues(alpha: 0.65),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (!widget.isRider &&
+                        (order.status == DeliveryStatus.pending ||
+                            order.status == DeliveryStatus.accepted)) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => unawaited(_confirmCancel()),
+                          icon: const Icon(LucideIcons.xCircle, size: 18),
+                          label: const Text('Cancelar pedido'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.alertRed,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(
+                              color: AppColors.alertRed.withOpacity(0.6),
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),

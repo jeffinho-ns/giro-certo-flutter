@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/chat_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import '../chat/chat_screen.dart';
+import 'faq_screen.dart';
 
 /// Tela de Ajuda / Central de suporte.
 class HelpScreen extends StatelessWidget {
@@ -45,6 +47,11 @@ class HelpScreen extends StatelessWidget {
                       icon: LucideIcons.helpCircle,
                       title: 'Perguntas frequentes',
                       subtitle: 'Respostas às dúvidas mais comuns',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const FaqScreen()),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                     _buildCard(
@@ -53,6 +60,7 @@ class HelpScreen extends StatelessWidget {
                       icon: LucideIcons.mail,
                       title: 'Contactar suporte',
                       subtitle: 'suporte@girocerto.com',
+                      onTap: () => _openEmail(context),
                     ),
                     const SizedBox(height: 12),
                     _buildCard(
@@ -174,5 +182,33 @@ class HelpScreen extends StatelessWidget {
       context,
       MaterialPageRoute(builder: (_) => ChatScreen(initialConversation: conv)),
     );
+  }
+
+  Future<void> _openEmail(BuildContext context) async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'suporte@girocerto.com',
+      queryParameters: {
+        'subject': 'Suporte Giro Certo',
+      },
+    );
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível abrir o app de e-mail.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível abrir o app de e-mail.'),
+          ),
+        );
+      }
+    }
   }
 }

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../services/mock_data_service.dart';
 import '../../models/part.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
+import 'part_detail_screen.dart';
 
 class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});
@@ -115,8 +115,19 @@ class _RankingScreenState extends State<RankingScreen> {
 
   Widget _buildModernPartCard(Part part, int rank, ThemeData theme) {
     final isTopRank = rank <= 3;
-    
-    return Container(
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PartDetailScreen(part: part, rank: rank),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         gradient: isTopRank
@@ -278,6 +289,8 @@ class _RankingScreenState extends State<RankingScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ],
+        ),
+      ),
         ),
       ),
     );

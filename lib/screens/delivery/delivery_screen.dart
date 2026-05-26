@@ -26,7 +26,11 @@ import 'create_delivery_modal.dart';
 import 'delivery_detail_modal.dart';
 
 class DeliveryScreen extends StatefulWidget {
-  const DeliveryScreen({super.key});
+  /// Quando `true` e o usuário for lojista, abre o modal de criar pedido
+  /// automaticamente ao entrar na tela.
+  final bool autoOpenCreate;
+
+  const DeliveryScreen({super.key, this.autoOpenCreate = false});
 
   @override
   State<DeliveryScreen> createState() => _DeliveryScreenState();
@@ -80,6 +84,29 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     _marketPulseTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       _loadOrders(silent: true);
     });
+    if (widget.autoOpenCreate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maybeOpenCreateOrder();
+      });
+    }
+  }
+
+  void _maybeOpenCreateOrder() {
+    if (!mounted) return;
+    if (_isRiderMode) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => CreateDeliveryModal(
+        userLat: _userLatitude,
+        userLng: _userLongitude,
+        onOrderCreated: () {
+          _loadOrders();
+          Navigator.pop(context);
+        },
+      ),
+    );
   }
 
   void _initializeTabController() {
@@ -92,6 +119,92 @@ class _DeliveryScreenState extends State<DeliveryScreen>
       vsync: this,
       initialIndex: 0,
     );
+  }
+
+  /// Toggle online/offline para o motoboy. Quando offline, o backend para de
+  /// enviar ofertas e o app pausa o polling de market pulse.
+  bool _isRiderOnline = true;
+  bool _togglingOnline = false;
+
+  Widget _buildOnlineToggle() {
+    final theme = Theme.of(context);
+    final color = _isRiderOnline ? AppColors.statusOk : Colors.grey;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.6),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _isRiderOnline
+                  ? 'Online — recebendo ofertas'
+                  : 'Offline — pausa receber ofertas',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (_togglingOnline)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Switch.adaptive(
+              value: _isRiderOnline,
+              activeColor: AppColors.statusOk,
+              onChanged: (v) => _toggleRiderOnline(v),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleRiderOnline(bool online) async {
+    setState(() {
+      _togglingOnline = true;
+      _isRiderOnline = online;
+    });
+    try {
+      await ApiService.updateUserLocation(
+        latitude: _userLatitude,
+        longitude: _userLongitude,
+        isOnline: online,
+      );
+      if (online) {
+        _loadOrders();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Falha ao atualizar status: $e')),
+        );
+        setState(() => _isRiderOnline = !online);
+      }
+    } finally {
+      if (mounted) setState(() => _togglingOnline = false);
+    }
   }
 
   @override
@@ -400,6 +513,8 @@ class _DeliveryScreenState extends State<DeliveryScreen>
             showBackButton: true,
             onBackPressed: () => Navigator.of(context).maybePop(),
           ),
+
+          if (_isRiderMode) _buildOnlineToggle(),
 
           // Tabs - Verificar que TabController existe e tem o tamanho correto
           if (_tabController != null &&

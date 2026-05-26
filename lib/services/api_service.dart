@@ -1003,6 +1003,36 @@ class ApiService {
     return _deliveryOrderFromJson(orderJson).withoutInternalCode();
   }
 
+  /// Cancela um pedido. Backend espera PATCH `/delivery/:id/status` com
+  /// `{ status: 'cancelled', reason? }`. Usado pelo lojista (antes da aceitação
+  /// ou em casos excepcionais).
+  static Future<DeliveryOrder> cancelOrder(
+    String orderId, {
+    String? reason,
+  }) async {
+    final idempotencyKey =
+        'status:$orderId:cancelled:${DateTime.now().millisecondsSinceEpoch}';
+    final response = await _requestWithRetry(
+      (headers) => http.patch(
+        Uri.parse('$baseUrl/delivery/$orderId/status'),
+        headers: headers,
+        body: json.encode({
+          'status': 'cancelled',
+          if (reason != null && reason.trim().isNotEmpty) 'reason': reason,
+        }),
+      ),
+      extraHeaders: {'x-idempotency-key': idempotencyKey},
+    );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final orderJson = data is Map<String, dynamic>
+        ? (data['order'] as Map<String, dynamic>? ?? data)
+        : <String, dynamic>{};
+    return _deliveryOrderFromJson(orderJson).withoutInternalCode();
+  }
+
   /// Confirmar chegada ao estabelecimento
   static Future<DeliveryOrder> markArrivedAtStore(String orderId) async {
     final idempotencyKey = 'status:$orderId:arrivedAtStore';
