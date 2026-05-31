@@ -9,7 +9,6 @@ import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import '../../services/api_service.dart';
-import '../../services/onboarding_service.dart';
 import '../../models/pilot_profile.dart';
 import '../../models/bike.dart';
 import '../../models/vehicle_type.dart';
@@ -188,19 +187,18 @@ class _GarageScreenState extends State<GarageScreen> {
   Future<void> _loadDeliveryRegistrationIfNeeded() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final user = appState.user;
-    if (user == null || parseUserType(user.pilotProfile) != UserType.delivery) return;
+    if (user == null || !appState.isDeliveryPilot) return;
     try {
-      final reg = await ApiService.getDeliveryRegistrationStatus();
+      final reg = await ApiService.getDeliveryRegistrationStatus(
+        forceRefresh: true,
+      );
       if (!mounted) return;
       setState(() => _deliveryRegistration = reg);
       if (reg != null) {
-        final s = DeliveryModerationStatusExtension.fromRegistrationApiStatus(
-          reg['status'] as String?,
+        await appState.syncDeliveryModerationFromNetwork(
+          forceRefreshRegistration: false,
+          refreshUser: true,
         );
-        if (appState.deliveryModerationStatus != s) {
-          appState.setDeliveryModerationStatus(s);
-          await OnboardingService.saveDeliveryStatus(s);
-        }
 
         // Fallback robusto: se a bike não veio de /me/bikes, usa dados do cadastro delivery.
         if (appState.bike == null) {
@@ -314,7 +312,7 @@ class _GarageScreenState extends State<GarageScreen> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
     final themeProv = Provider.of<ThemeProvider>(context);
-    final bike = appState.bike;
+    final bike = appState.bike ?? _bikeFromDeliveryRegistration();
     final theme = Theme.of(context);
     final pilotType = appState.pilotProfileType;
     final pilotLabel = _pilotTypeLabel(pilotType);
@@ -868,6 +866,30 @@ class _GarageScreenState extends State<GarageScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Bike? _bikeFromDeliveryRegistration() {
+    final reg = _deliveryRegistration;
+    if (reg == null) return null;
+    final regVt = (reg['vehicleType'] as String? ?? 'MOTORCYCLE').toUpperCase();
+    final plateRaw =
+        reg['plateLicense'] as String? ?? reg['plate_license'] as String? ?? '';
+    final currentKm =
+        ((reg['currentKilometers'] as num?) ?? (reg['current_kilometers'] as num?) ?? 0)
+            .toInt();
+    return Bike(
+      id: 'delivery-registration-fallback',
+      model: 'Delivery',
+      brand: regVt == 'BICYCLE' ? 'Bicicleta' : 'Moto',
+      plate: plateRaw.trim().isEmpty ? 'S/N' : plateRaw.trim(),
+      currentKm: currentKm,
+      oilType: regVt == 'BICYCLE' ? '—' : '10W-40',
+      frontTirePressure: regVt == 'BICYCLE' ? 0 : 2.5,
+      rearTirePressure: regVt == 'BICYCLE' ? 0 : 2.8,
+      vehicleType: regVt == 'BICYCLE'
+          ? AppVehicleType.bicycle
+          : AppVehicleType.motorcycle,
     );
   }
 

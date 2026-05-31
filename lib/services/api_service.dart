@@ -10,6 +10,7 @@ import '../models/bike.dart';
 import '../models/vehicle_type.dart';
 import '../utils/geo_coordinates_brazil.dart';
 import '../utils/delivery_proof_pin.dart';
+import 'delivery_registration_cache.dart';
 
 /// Erro estruturado da API (ex.: cobrança pré-pago obrigatória).
 class ApiStructuredException implements Exception {
@@ -33,6 +34,9 @@ class ApiService {
 
   /// Timeout para requisições HTTP (evita travamentos em rede instável)
   static const Duration _requestTimeout = Duration(seconds: 25);
+
+  /// Exposto para serviços auxiliares (ex.: cache de cadastro delivery).
+  static Duration get requestTimeout => _requestTimeout;
 
   // Cache do token
   static String? _cachedToken;
@@ -62,6 +66,8 @@ class ApiService {
   // Salvar token
   static Future<void> _saveToken(String token) async {
     _cachedToken = token;
+    // Troca de sessão pode reaproveitar cache do utilizador anterior.
+    await DeliveryRegistrationCache.instance.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
   }
@@ -133,14 +139,12 @@ class ApiService {
     if (response.statusCode >= 400) {
       try {
         final decoded = json.decode(response.body);
-        final error =
-            decoded is Map<String, dynamic> ? decoded : null;
+        final error = decoded is Map<String, dynamic> ? decoded : null;
         final rawMsg =
             error?['error']?.toString() ?? error?['message']?.toString();
         final msg = rawMsg ?? 'Erro na requisição';
         final code = error?['code']?.toString();
-        if (response.statusCode == 402 ||
-            code == 'PAYMENT_REQUIRED_PREPAID') {
+        if (response.statusCode == 402 || code == 'PAYMENT_REQUIRED_PREPAID') {
           throw ApiStructuredException(
             msg,
             code: code ?? 'PAYMENT_REQUIRED_PREPAID',
@@ -163,7 +167,8 @@ class ApiService {
   }
 
   static Future<http.Response> _requestWithRetry(
-    Future<http.Response> Function(Map<String, String> headers) requestBuilder, {
+    Future<http.Response> Function(Map<String, String> headers)
+        requestBuilder, {
     int maxAttempts = 3,
     Map<String, String>? extraHeaders,
   }) async {
@@ -171,11 +176,12 @@ class ApiService {
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         final headers = await _getHeaders(extraHeaders: extraHeaders);
-        final response =
-            await requestBuilder(headers).timeout(_requestTimeout, onTimeout: () {
+        final response = await requestBuilder(headers).timeout(_requestTimeout,
+            onTimeout: () {
           throw Exception('Tempo esgotado. Verifique sua conexão.');
         });
-        if (!_isRetryableStatus(response.statusCode) || attempt == maxAttempts) {
+        if (!_isRetryableStatus(response.statusCode) ||
+            attempt == maxAttempts) {
           return response;
         }
       } catch (e) {
@@ -184,7 +190,8 @@ class ApiService {
       }
       await Future.delayed(Duration(milliseconds: 350 * attempt));
     }
-    throw Exception(lastError?.toString() ?? 'Falha de rede em tentativa de retry');
+    throw Exception(
+        lastError?.toString() ?? 'Falha de rede em tentativa de retry');
   }
 
   // ============================================
@@ -263,6 +270,7 @@ class ApiService {
     } catch (e) {
       // Ignorar erro, mas remover token localmente
     } finally {
+      await DeliveryRegistrationCache.instance.clear();
       await _removeToken();
     }
   }
@@ -854,7 +862,8 @@ class ApiService {
     return data is Map<String, dynamic> ? data : <String, dynamic>{};
   }
 
-  static Future<void> patchPartnerDeliveryPaymentCollectionMode(String mode) async {
+  static Future<void> patchPartnerDeliveryPaymentCollectionMode(
+      String mode) async {
     final response = await _requestWithRetry(
       (headers) => http.patch(
         Uri.parse('$baseUrl/partners/me/delivery-payment-collection-mode'),
@@ -981,7 +990,8 @@ class ApiService {
     String orderId, {
     required String deliveryPin,
   }) async {
-    final idempotencyKey = 'status:$orderId:completed:${DateTime.now().millisecondsSinceEpoch}';
+    final idempotencyKey =
+        'status:$orderId:completed:${DateTime.now().millisecondsSinceEpoch}';
     final response = await _requestWithRetry(
       (headers) => http.patch(
         Uri.parse('$baseUrl/delivery/$orderId/status'),
@@ -1165,7 +1175,9 @@ class ApiService {
         (json['status'] as String?) ?? json['status']?.toString() ?? 'pending',
       ),
       priority: _parseDeliveryPriority(
-        (json['priority'] as String?) ?? json['priority']?.toString() ?? 'normal',
+        (json['priority'] as String?) ??
+            json['priority']?.toString() ??
+            'normal',
       ),
       createdAt: jsonDateTimeOrNull(json['createdAt']) ?? DateTime.now(),
       acceptedAt: jsonDateTimeOrNull(json['acceptedAt']),
@@ -1179,9 +1191,7 @@ class ApiService {
       riderBikeModel: jsonStringOrNull(json['riderBikeModel']),
       riderBikeVehicleType: jsonStringOrNull(json['riderBikeVehicleType']),
       internalCode: jsonStringOrNull(json['internalCode']),
-      distance: json['distance'] != null
-          ? jsonDouble(json['distance'])
-          : null,
+      distance: json['distance'] != null ? jsonDouble(json['distance']) : null,
       estimatedTime: json['estimatedTime'] != null
           ? (json['estimatedTime'] is num
               ? (json['estimatedTime'] as num).toInt()
@@ -1351,8 +1361,15 @@ class ApiService {
         headers: await _getHeaders(),
       );
       _handleError(response);
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      final list = data['bikes'] as List<dynamic>? ?? [];
+      final raw = json.decode(response.body);
+      final list = raw is List
+          ? raw
+          : raw is Map<String, dynamic>
+              ? ((raw['bikes'] as List<dynamic>?) ??
+                  (raw['items'] as List<dynamic>?) ??
+                  (raw['data'] as List<dynamic>?) ??
+                  const [])
+              : const [];
       return list.isNotEmpty;
     } catch (_) {
       return false;
@@ -1380,27 +1397,38 @@ class ApiService {
       ...gallery,
     ].toSet().toList();
 
-    final vt = AppVehicleTypeApi.fromApi(json['vehicleType'] as String?) ??
+    final vt = AppVehicleTypeApi.fromApi(
+          (json['vehicleType'] as String?) ?? (json['vehicle_type'] as String?),
+        ) ??
         AppVehicleType.motorcycle;
     return Bike(
       id: (json['id'] as String?) ?? 'bike-1',
       model: (json['model'] as String?) ?? 'Moto',
       brand: (json['brand'] as String?) ?? '',
-      plate: (json['plate'] as String?) ?? '',
-      currentKm: (json['currentKm'] as num?)?.toInt() ?? 0,
-      oilType: (json['oilType'] as String?) ?? '',
-      frontTirePressure: (json['frontTirePressure'] as num?)?.toDouble() ?? 2.5,
-      rearTirePressure: (json['rearTirePressure'] as num?)?.toDouble() ?? 2.8,
-      photoUrl: json['photoUrl'] as String?,
-      vehiclePhotoUrl: json['vehiclePhotoUrl'] as String?,
+      plate: (json['plate'] as String?) ?? (json['plate_license'] as String?) ?? '',
+      currentKm: ((json['currentKm'] as num?) ?? (json['current_km'] as num?) ?? 0)
+          .toInt(),
+      oilType: (json['oilType'] as String?) ?? (json['oil_type'] as String?) ?? '',
+      frontTirePressure: ((json['frontTirePressure'] as num?) ??
+              (json['front_tire_pressure'] as num?) ??
+              2.5)
+          .toDouble(),
+      rearTirePressure: ((json['rearTirePressure'] as num?) ??
+              (json['rear_tire_pressure'] as num?) ??
+              2.8)
+          .toDouble(),
+      photoUrl: (json['photoUrl'] as String?) ?? (json['photo_url'] as String?),
+      vehiclePhotoUrl:
+          (json['vehiclePhotoUrl'] as String?) ?? (json['vehicle_photo_url'] as String?),
       nickname: json['nickname'] as String?,
-      ridingStyle: json['ridingStyle'] as String?,
+      ridingStyle: (json['ridingStyle'] as String?) ?? (json['riding_style'] as String?),
       accessories: (json['accessories'] as List<dynamic>?)
               ?.whereType<String>()
               .toList() ??
           const [],
-      nextUpgrade: json['nextUpgrade'] as String?,
-      preferredColor: json['preferredColor'] as String?,
+      nextUpgrade: (json['nextUpgrade'] as String?) ?? (json['next_upgrade'] as String?),
+      preferredColor:
+          (json['preferredColor'] as String?) ?? (json['preferred_color'] as String?),
       additionalPhotos: extras,
       vehicleType: vt,
     );
@@ -1412,8 +1440,15 @@ class ApiService {
       headers: await _getHeaders(),
     );
     _handleError(response);
-    final data = json.decode(response.body) as Map<String, dynamic>;
-    final rows = data['bikes'] as List<dynamic>? ?? [];
+    final raw = json.decode(response.body);
+    final rows = raw is List
+        ? raw
+        : raw is Map<String, dynamic>
+            ? ((raw['bikes'] as List<dynamic>?) ??
+                (raw['items'] as List<dynamic>?) ??
+                (raw['data'] as List<dynamic>?) ??
+                const [])
+            : const [];
     return rows.whereType<Map<String, dynamic>>().map(_bikeFromJson).toList();
   }
 
@@ -1844,26 +1879,16 @@ class ApiService {
     }
   }
 
-  /// Obter status do registro de delivery do usuário
-  static Future<Map<String, dynamic>?> getDeliveryRegistrationStatus() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/delivery-registration/user/mine'),
-      headers: await _getHeaders(),
+  /// Status do cadastro de entregador (sem fotos — endpoint summary + cache).
+  ///
+  /// Use [forceRefresh] após enviar documentos ou na tela de aprovação ao
+  /// puxar para atualizar.
+  static Future<Map<String, dynamic>?> getDeliveryRegistrationStatus({
+    bool forceRefresh = false,
+  }) {
+    return DeliveryRegistrationCache.instance.get(
+      forceRefresh: forceRefresh,
     );
-
-    if (response.statusCode == 404) {
-      return null; // Sem registro
-    }
-
-    _handleError(response);
-
-    final data = json.decode(response.body);
-    final registrations = data['registrations'] as List?;
-
-    if (registrations?.isNotEmpty == true) {
-      return registrations?.first as Map<String, dynamic>;
-    }
-    return null;
   }
 
   // ============================================

@@ -5,6 +5,7 @@ import 'package:local_auth/local_auth.dart';
 import '../../utils/colors.dart';
 import '../../services/api_service.dart';
 import '../../services/onboarding_service.dart';
+import '../../services/delivery_approval_resolver.dart';
 import '../../services/credentials_service.dart';
 import '../../providers/app_state_provider.dart';
 import '../../models/user.dart';
@@ -141,20 +142,35 @@ class _LoginScreenState extends State<LoginScreen> {
       if (pilotType != null) {
         appState.setPilotProfileType(pilotType);
       }
-      var deliveryMod = user.hasVerifiedDocuments
-          ? DeliveryModerationStatus.approved
-          : DeliveryModerationStatus.pending;
-      if (user.userType == UserType.delivery) {
-        final cached = await OnboardingService.getDeliveryStatus();
-        if (user.hasVerifiedDocuments) {
-          deliveryMod = DeliveryModerationStatus.approved;
-        } else if (cached == DeliveryModerationStatus.approved) {
-          deliveryMod = DeliveryModerationStatus.approved;
-        } else if (cached != null) {
-          deliveryMod = cached;
-        }
+      Map<String, dynamic>? reg;
+      try {
+        reg = await ApiService.getDeliveryRegistrationStatus(
+          forceRefresh: true,
+        );
+      } catch (_) {}
+      final hasDeliveryRegistration = reg != null;
+      if (hasDeliveryRegistration) {
+        appState.setPilotProfileType(PilotProfileType.delivery);
       }
-      appState.setDeliveryModerationStatus(deliveryMod);
+      if (appState.isDeliveryPilot ||
+          hasDeliveryRegistration ||
+          user.userType == UserType.delivery ||
+          parseUserType(user.pilotProfile) == UserType.delivery) {
+        final cached = await OnboardingService.getDeliveryStatus();
+        final deliveryMod = DeliveryApprovalResolver.resolve(
+          user: user,
+          registrationStatusRaw: reg?['status'] as String?,
+          locallyPersisted: cached,
+        );
+        appState.setDeliveryModerationStatus(deliveryMod);
+        if (deliveryMod == DeliveryModerationStatus.approved) {
+          await OnboardingService.saveDeliveryStatus(
+            DeliveryModerationStatus.approved,
+          );
+        }
+      } else {
+        appState.setDeliveryModerationStatus(DeliveryModerationStatus.approved);
+      }
 
       // Debug: verificar após salvar
       if (kDebugMode) print('🔍 Login - User salvo no AppState: ${appState.user?.email}, partnerId: ${appState.user?.partnerId}');
@@ -277,18 +293,27 @@ class _LoginScreenState extends State<LoginScreen> {
       if (pilotType != null) {
         appState.setPilotProfileType(pilotType);
       }
-      var deliveryModBio = user.hasVerifiedDocuments
-          ? DeliveryModerationStatus.approved
-          : DeliveryModerationStatus.pending;
-      if (user.userType == UserType.delivery) {
+      Map<String, dynamic>? reg;
+      try {
+        reg = await ApiService.getDeliveryRegistrationStatus(
+          forceRefresh: true,
+        );
+      } catch (_) {}
+      final hasDeliveryRegistration = reg != null;
+      if (hasDeliveryRegistration) {
+        appState.setPilotProfileType(PilotProfileType.delivery);
+      }
+      var deliveryModBio = DeliveryModerationStatus.approved;
+      if (appState.isDeliveryPilot ||
+          hasDeliveryRegistration ||
+          user.userType == UserType.delivery ||
+          parseUserType(user.pilotProfile) == UserType.delivery) {
         final cached = await OnboardingService.getDeliveryStatus();
-        if (user.hasVerifiedDocuments) {
-          deliveryModBio = DeliveryModerationStatus.approved;
-        } else if (cached == DeliveryModerationStatus.approved) {
-          deliveryModBio = DeliveryModerationStatus.approved;
-        } else if (cached != null) {
-          deliveryModBio = cached;
-        }
+        deliveryModBio = DeliveryApprovalResolver.resolve(
+          user: user,
+          registrationStatusRaw: reg?['status'] as String?,
+          locallyPersisted: cached,
+        );
       }
       appState.setDeliveryModerationStatus(deliveryModBio);
       widget.onLogin();

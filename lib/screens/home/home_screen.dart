@@ -9,8 +9,8 @@ import '../../providers/notifications_count_provider.dart';
 import '../../providers/rider_delivery_session_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
-import '../../services/onboarding_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/delivery_registration_cache.dart';
 import '../../models/delivery_order.dart';
 import '../../models/partner.dart';
 import '../../models/pilot_profile.dart';
@@ -149,13 +149,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ).listen((Position pos) {
         if (!mounted) return;
-          setState(() {
+        setState(() {
           _currentPosition = LatLng(pos.latitude, pos.longitude);
-          });
+        });
         _updateUserLocation(
           pos.latitude,
           pos.longitude,
-          );
+        );
       });
     } catch (e) {
       debugPrint('Falha ao obter localizacao atual: $e');
@@ -228,10 +228,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _startDeliveryModerationSync() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
-    if (appState.user?.isRider != true) return;
+    if (!appState.isDeliveryPilot) return;
+    // Uma vez aprovado, não fica em loop — só revalida se ainda em análise.
+    if (appState.isDeliveryApproved) return;
+
     while (mounted) {
       await _syncDeliveryModerationStatus();
       if (!mounted) break;
+      final stillWaiting = Provider.of<AppStateProvider>(context, listen: false)
+          .deliveryModerationStatus
+          .isAwaitingModeration;
+      if (!stillWaiting) break;
       await Future.delayed(const Duration(seconds: 60));
     }
   }
@@ -239,58 +246,41 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _syncDeliveryModerationStatus() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     if (!appState.isDeliveryPilot) return;
+    if (appState.isDeliveryApproved) return;
 
     try {
-      final reg = await ApiService.getDeliveryRegistrationStatus();
-      if (!mounted) return;
-      final rawStatus = (reg?['status'] as String?)?.toUpperCase() ?? '';
-      final previous = (await OnboardingService.getLastKnownDeliveryRegStatus())
-              ?.toUpperCase() ??
-          '';
-
-      final nextStatus =
-          DeliveryModerationStatusExtension.fromRegistrationApiStatus(
-        reg?['status'] as String?,
+      final result = await appState.syncDeliveryModerationFromNetwork(
+        forceRefreshRegistration: true,
+        refreshUser: true,
       );
+      if (!mounted || result == null) return;
 
-      final justApproved = rawStatus == 'APPROVED' &&
-          previous != 'APPROVED' &&
-          (previous == 'PENDING' ||
-              previous == 'UNDER_REVIEW' ||
-              previous.isEmpty);
-
-      if (justApproved) {
+      if (result.justApproved) {
+        await DeliveryRegistrationCache.instance.invalidate();
         await showLocalNotification(
           id: 91001,
-          title: 'Cadastro aprovado',
-          body: 'Pode aceitar corridas de delivery. Boa jornada!',
+          title: 'Perfil aprovado',
+          body:
+              'A sua documentação foi aprovada. Já pode começar a fazer entregas!',
           payload: 'notification',
         );
-        try {
-          final fresh = await ApiService.getCurrentUser();
-          if (mounted) {
-            appState.setUser(fresh);
-          }
-        } catch (e) {
-          debugPrint('Falha ao atualizar utilizador após aprovação: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Perfil aprovado! Já pode começar a fazer entregas.',
+              ),
+              duration: Duration(seconds: 5),
+            ),
+          );
         }
       }
 
-      await OnboardingService.saveDeliveryStatus(nextStatus);
-
-      if (appState.deliveryModerationStatus != nextStatus) {
-        appState.setDeliveryModerationStatus(nextStatus);
-      }
-
       if (appState.isDeliveryPilot &&
-          appState.deliveryModerationStatus != DeliveryModerationStatus.approved &&
+          !appState.isDeliveryApproved &&
           mounted) {
         context.read<RiderDeliverySessionProvider>().clearPendingOffer();
       }
-
-      await OnboardingService.setLastKnownDeliveryRegStatus(
-        rawStatus.isEmpty ? null : rawStatus,
-      );
     } catch (e) {
       debugPrint('Falha ao sincronizar aprovacao de delivery: $e');
     }
@@ -710,13 +700,43 @@ class _HomeScreenState extends State<HomeScreen> {
 ''';
 
   void _recenterMap() {
-    if (_currentPosition == null) return;
-    _googleMapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-        _currentZoom,
-      ),
-    );
+    final controller = _googleMapController;
+    if (controller == null) return;
+    // Requisita posição atual no momento do clique para evitar ficar preso em
+    // coordenada antiga quando o stream de GPS ainda não atualizou.
+    unawaited(() async {
+      LatLng? target = _currentPosition;
+      try {
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Permissão de localização não concedida.'),
+              ),
+            );
+          }
+          return;
+        }
+        final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.best,
+        );
+        target = LatLng(pos.latitude, pos.longitude);
+        if (mounted) {
+          setState(() => _currentPosition = target);
+        }
+      } catch (_) {
+        // fallback para última posição conhecida
+      }
+      if (target == null) return;
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(target, _currentZoom),
+      );
+    }());
   }
 
   void _zoomIn() {
@@ -763,8 +783,8 @@ class _HomeScreenState extends State<HomeScreen> {
         Positioned.fill(
           child: GoogleMap(
             initialCameraPosition: CameraPosition(
-              target: LatLng(
-                  initialPosition.latitude, initialPosition.longitude),
+              target:
+                  LatLng(initialPosition.latitude, initialPosition.longitude),
               zoom: _currentZoom,
             ),
             onMapCreated: _onMapCreated,
@@ -813,22 +833,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
         // 3. Mensagens Rápidas – canto inferior esquerdo (acima do menu)
         Positioned(
-            left: 16,
-            bottom: 100,
-            child: QuickMessagesCard(
-              items: _quickMessages,
-              maxVisible: 3,
-              onSeeAll: () async {
-                await showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (context) => const _NotificationsFullSheet(),
-                );
-                _loadQuickMessages();
-              },
-            ),
+          left: 16,
+          bottom: 100,
+          child: QuickMessagesCard(
+            items: _quickMessages,
+            maxVisible: 3,
+            onSeeAll: () async {
+              await showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => const _NotificationsFullSheet(),
+              );
+              _loadQuickMessages();
+            },
           ),
+        ),
 
         // 4. Coluna FAB – centro-direito
         Positioned(
@@ -1102,7 +1122,6 @@ class _MapTypeChip extends StatelessWidget {
     );
   }
 }
-
 
 class _NotificationsFullSheet extends StatelessWidget {
   const _NotificationsFullSheet();

@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/moment.dart';
 import 'api_service.dart';
 
@@ -80,6 +82,17 @@ class MomentsService {
       // if (thumbnailPath != null) thumbnailUrl = await ApiService.uploadImage(...);
     } catch (_) {
       // mantém o caminho local
+    }
+    // Persistir cópia local evita perder vídeo gravado em path temporário.
+    videoUrl = await _persistLocalMedia(
+      videoUrl,
+      fallbackPrefix: 'moment_video',
+    );
+    if (thumbnailUrl != null && thumbnailUrl.isNotEmpty) {
+      thumbnailUrl = await _persistLocalMedia(
+        thumbnailUrl,
+        fallbackPrefix: 'moment_thumb',
+      );
     }
 
     final moment = Moment(
@@ -245,9 +258,16 @@ class MomentsService {
     final raw = prefs.getString(_localStoreKey);
     if (raw == null) return const [];
     try {
-      final list = (jsonDecode(raw) as List<dynamic>)
-          .map((j) => Moment.fromJson(j as Map<String, dynamic>))
-          .toList();
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      final list = <Moment>[];
+      for (final item in decoded) {
+        if (item is! Map<String, dynamic>) continue;
+        try {
+          list.add(Moment.fromJson(item));
+        } catch (_) {
+          // Ignora item corrompido e mantém o restante do feed.
+        }
+      }
       return list;
     } catch (_) {
       return const [];
@@ -258,5 +278,26 @@ class MomentsService {
     final prefs = await SharedPreferences.getInstance();
     final raw = jsonEncode(list.map((m) => m.toJson()).toList());
     await prefs.setString(_localStoreKey, raw);
+  }
+
+  static Future<String> _persistLocalMedia(
+    String inputPath, {
+    required String fallbackPrefix,
+  }) async {
+    final normalized = inputPath.replaceFirst(RegExp(r'^file://'), '');
+    final src = File(normalized);
+    if (!src.existsSync()) return inputPath;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final ext = normalized.contains('.')
+          ? normalized.substring(normalized.lastIndexOf('.'))
+          : '';
+      final dstPath =
+          '${dir.path}/${fallbackPrefix}_${DateTime.now().millisecondsSinceEpoch}$ext';
+      final dst = await src.copy(dstPath);
+      return dst.path;
+    } catch (_) {
+      return inputPath;
+    }
   }
 }

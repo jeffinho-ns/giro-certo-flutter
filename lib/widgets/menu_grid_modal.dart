@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../app_navigator_key.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/drawer_provider.dart';
 import '../utils/colors.dart';
@@ -24,6 +25,7 @@ import '../screens/achievements/achievements_screen.dart';
 import '../screens/drive/drive_mode_screen.dart';
 import '../screens/communities/communities_list_screen.dart';
 import '../screens/delivery/delivery_history_screen.dart';
+import '../screens/social/social_home_screen.dart';
 
 class MenuGridModal extends StatefulWidget {
   final VoidCallback? onClose;
@@ -252,6 +254,11 @@ class _MenuGridModalState extends State<MenuGridModal> {
           label: 'Eventos',
           routeIndex: 116),
       const MenuGridItem(
+          id: 'news',
+          icon: LucideIcons.newspaper,
+          label: 'News',
+          routeIndex: 121),
+      const MenuGridItem(
           id: 'ranking',
           icon: LucideIcons.trophy,
           label: 'Ranking',
@@ -343,6 +350,17 @@ class _MenuGridModalState extends State<MenuGridModal> {
 
     await _markUsed(item.id);
     widget.onClose?.call();
+
+    if (item.routeIndex == 109) {
+      final rootContext = appNavigatorKey.currentContext;
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      if (rootContext != null) {
+        await _openCreateActionModal(rootContext);
+      }
+      return;
+    }
+
     if (!mounted) return;
     Navigator.of(context).pop();
 
@@ -370,7 +388,6 @@ class _MenuGridModalState extends State<MenuGridModal> {
         );
         break;
       case 109:
-        await _openCreateActionModal();
         break;
       case 107:
         Navigator.of(context).push(
@@ -444,24 +461,34 @@ class _MenuGridModalState extends State<MenuGridModal> {
           MaterialPageRoute(builder: (_) => const ManualScreen()),
         );
         break;
+      case 121:
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const SocialHomeScreen(fromMenu: true),
+          ),
+        );
+        break;
       default:
         break;
     }
   }
 
-  Future<void> _openCreateActionModal() async {
-    final appState = Provider.of<AppStateProvider>(context, listen: false);
+  Future<void> _openCreateActionModal(BuildContext presentationContext) async {
+    final appState = Provider.of<AppStateProvider>(
+      presentationContext,
+      listen: false,
+    );
     final user = appState.user;
     if (user == null) return;
 
-    final action = await CreateActionSheet.show(context);
-    if (action == null || !mounted) return;
+    final action = await CreateActionSheet.show(presentationContext);
+    if (action == null) return;
 
     switch (action) {
       case CreateActionType.post:
         final bikeModel = appState.bike?.model ?? 'Moto';
         final post = await showModalBottomSheet<dynamic>(
-          context: context,
+          context: presentationContext,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
           builder: (_) => CreatePostModal(
@@ -469,29 +496,27 @@ class _MenuGridModalState extends State<MenuGridModal> {
             userBikeModel: bikeModel,
           ),
         );
-        if (!mounted) return;
         if (post != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(presentationContext).showSnackBar(
             const SnackBar(content: Text('Publicação enviada com sucesso!')),
           );
         }
         break;
       case CreateActionType.community:
         final community = await showModalBottomSheet<dynamic>(
-          context: context,
+          context: presentationContext,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
           builder: (_) => const CreateCommunityModal(),
         );
-        if (!mounted) return;
         if (community != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(presentationContext).showSnackBar(
             const SnackBar(content: Text('Comunidade criada com sucesso!')),
           );
         }
         break;
       case CreateActionType.notification:
-        await SendNotificationSheet.show(context);
+        await SendNotificationSheet.show(presentationContext);
         break;
     }
   }
@@ -638,7 +663,8 @@ class _QuickActionsRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                     onTap: () => onTap(a),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 8),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
@@ -649,22 +675,29 @@ class _QuickActionsRow extends StatelessWidget {
                                   AppColors.racingOrangeDark.withOpacity(0.9),
                                 ]
                               : [
-                                  theme.brightness == Brightness.dark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
-                                  theme.brightness == Brightness.dark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                                  theme.brightness == Brightness.dark
+                                      ? AppColors.panelDarkHigh
+                                      : AppColors.panelLightHigh,
+                                  theme.brightness == Brightness.dark
+                                      ? AppColors.panelDarkLow
+                                      : AppColors.panelLightLow,
                                 ],
                         ),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: Colors.white.withOpacity(0.16),
                         ),
-                        boxShadow: AppColors.insetPanelShadows(theme.brightness == Brightness.dark),
+                        boxShadow: AppColors.insetPanelShadows(
+                            theme.brightness == Brightness.dark),
                       ),
                       child: Column(
                         children: [
                           Icon(
                             a.icon,
                             size: 18,
-                            color: a.highlight ? Colors.white : theme.colorScheme.primary.withOpacity(0.85),
+                            color: a.highlight
+                                ? Colors.white
+                                : theme.colorScheme.primary.withOpacity(0.85),
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -673,7 +706,9 @@ class _QuickActionsRow extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: a.highlight ? Colors.white : null,
-                              fontWeight: a.highlight ? FontWeight.w700 : FontWeight.w600,
+                              fontWeight: a.highlight
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
                             ),
                           ),
                         ],
@@ -742,8 +777,12 @@ class _GridTile extends StatelessWidget {
                       AppColors.racingOrangeDark.withOpacity(0.88),
                     ]
                   : [
-                      theme.brightness == Brightness.dark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
-                      theme.brightness == Brightness.dark ? AppColors.panelDarkLow : AppColors.panelLightLow,
+                      theme.brightness == Brightness.dark
+                          ? AppColors.panelDarkHigh
+                          : AppColors.panelLightHigh,
+                      theme.brightness == Brightness.dark
+                          ? AppColors.panelDarkLow
+                          : AppColors.panelLightLow,
                     ],
             ),
             borderRadius: BorderRadius.circular(18),
@@ -753,7 +792,8 @@ class _GridTile extends StatelessWidget {
                   : theme.dividerColor.withOpacity(isEnabled ? 0.6 : 0.35),
               width: 1,
             ),
-            boxShadow: AppColors.raisedPanelShadows(theme.brightness == Brightness.dark),
+            boxShadow: AppColors.raisedPanelShadows(
+                theme.brightness == Brightness.dark),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

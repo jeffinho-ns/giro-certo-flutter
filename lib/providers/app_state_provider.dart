@@ -6,6 +6,7 @@ import '../models/vehicle_type.dart';
 import '../services/mock_data_service.dart';
 import '../services/api_service.dart';
 import '../services/onboarding_service.dart';
+import '../services/delivery_approval_resolver.dart';
 
 class AppStateProvider extends ChangeNotifier {
   User? _user;
@@ -42,6 +43,9 @@ class AppStateProvider extends ChangeNotifier {
     if (_pilotProfileType == PilotProfileType.delivery) return true;
     return false;
   }
+
+  bool get isDeliveryApproved =>
+      _deliveryModerationStatus == DeliveryModerationStatus.approved;
 
   bool get shouldShowSocialHome {
     final u = _user;
@@ -100,6 +104,69 @@ class AppStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Atualiza status de moderação delivery a partir da API (perfil + cadastro).
+  Future<DeliveryModerationSyncResult?> syncDeliveryModerationFromNetwork({
+    bool forceRefreshRegistration = true,
+    bool refreshUser = true,
+  }) async {
+    if (!isDeliveryPilot) return null;
+
+    final previous = _deliveryModerationStatus;
+    User? user = _user;
+
+    if (refreshUser) {
+      try {
+        user = await ApiService.getCurrentUser();
+        _user = user;
+      } catch (e) {
+        debugPrint('Falha ao atualizar perfil para moderação delivery: $e');
+      }
+    }
+
+    Map<String, dynamic>? registration;
+    try {
+      registration = await ApiService.getDeliveryRegistrationStatus(
+        forceRefresh: forceRefreshRegistration,
+      );
+      if (registration != null) {
+        _pilotProfileType = PilotProfileType.delivery;
+      }
+    } catch (e) {
+      debugPrint('Falha ao carregar cadastro delivery: $e');
+    }
+
+    final cached = await OnboardingService.getDeliveryStatus();
+    final next = DeliveryApprovalResolver.resolve(
+      user: user,
+      registrationStatusRaw: registration?['status'] as String?,
+      locallyPersisted: cached,
+    );
+
+    if (next == DeliveryModerationStatus.approved) {
+      await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.approved);
+      await OnboardingService.setLastKnownDeliveryRegStatus('APPROVED');
+    } else if (next == DeliveryModerationStatus.rejected) {
+      await OnboardingService.saveDeliveryStatus(DeliveryModerationStatus.rejected);
+      await OnboardingService.setLastKnownDeliveryRegStatus('REJECTED');
+    } else {
+      final raw = (registration?['status'] as String?)?.toUpperCase();
+      if (raw != null && raw.isNotEmpty) {
+        await OnboardingService.setLastKnownDeliveryRegStatus(raw);
+      }
+    }
+
+    if (_deliveryModerationStatus != next) {
+      _deliveryModerationStatus = next;
+      notifyListeners();
+    }
+
+    return DeliveryApprovalResolver.compare(
+      previous: previous,
+      next: next,
+      registrationStatusRaw: registration?['status'] as String?,
+    );
+  }
+
   void initializeMockData() {
     _user = MockDataService.getMockUser();
     _bike = MockDataService.getMockBike();
@@ -144,7 +211,9 @@ class AppStateProvider extends ChangeNotifier {
       var sessionIsDelivery = sessionUser.userType == UserType.delivery ||
           parseUserType(sessionUser.pilotProfile) == UserType.delivery;
       try {
-        deliveryRegistration = await ApiService.getDeliveryRegistrationStatus();
+        deliveryRegistration = await ApiService.getDeliveryRegistrationStatus(
+          forceRefresh: true,
+        );
         if (deliveryRegistration != null) {
           sessionIsDelivery = true;
           _pilotProfileType = PilotProfileType.delivery;
@@ -180,19 +249,18 @@ class AppStateProvider extends ChangeNotifier {
       }
       if (sessionIsDelivery) {
         final cached = await OnboardingService.getDeliveryStatus();
-        if (cached == DeliveryModerationStatus.approved) {
-          _deliveryModerationStatus = DeliveryModerationStatus.approved;
-        } else if (sessionUser.hasVerifiedDocuments) {
-          _deliveryModerationStatus = DeliveryModerationStatus.approved;
-        } else if (cached != null) {
-          _deliveryModerationStatus = cached;
-        } else {
-          _deliveryModerationStatus = DeliveryModerationStatus.pending;
+        _deliveryModerationStatus = DeliveryApprovalResolver.resolve(
+          user: sessionUser,
+          registrationStatusRaw: deliveryRegistration?['status'] as String?,
+          locallyPersisted: cached,
+        );
+        if (_deliveryModerationStatus == DeliveryModerationStatus.approved) {
+          await OnboardingService.saveDeliveryStatus(
+            DeliveryModerationStatus.approved,
+          );
         }
       } else {
-        _deliveryModerationStatus = sessionUser.hasVerifiedDocuments
-            ? DeliveryModerationStatus.approved
-            : DeliveryModerationStatus.pending;
+        _deliveryModerationStatus = DeliveryModerationStatus.approved;
       }
 
       // Regra de produto: usuário já existente que conseguiu autenticar

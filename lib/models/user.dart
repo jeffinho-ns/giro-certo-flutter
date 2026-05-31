@@ -140,6 +140,20 @@ class User {
 
   // Factory para criar User a partir de JSON (da API)
   factory User.fromJson(Map<String, dynamic> json) {
+    bool readBool(List<String> keys, {bool fallback = false}) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value is bool) return value;
+        if (value is num) return value != 0;
+        if (value is String) {
+          final normalized = value.trim().toLowerCase();
+          if (normalized == 'true' || normalized == '1') return true;
+          if (normalized == 'false' || normalized == '0') return false;
+        }
+      }
+      return fallback;
+    }
+
     double? curLat;
     double? curLng;
     if (json['currentLat'] != null && json['currentLng'] != null) {
@@ -173,11 +187,13 @@ class User {
           ? UserRoleExtension.fromString(json['role'] as String)
           : UserRole.user,
       partnerId: json['partnerId'] as String?,
-      isSubscriber: json['isSubscriber'] as bool? ?? false,
-      hasVerifiedDocuments: json['hasVerifiedDocuments'] as bool? ?? false,
-      verificationBadge: json['verificationBadge'] as bool? ?? false,
-      isOnline: json['isOnline'] as bool? ?? false,
-      onboardingCompleted: json['onboardingCompleted'] as bool? ?? false,
+      isSubscriber: readBool(['isSubscriber', 'is_subscriber']),
+      hasVerifiedDocuments:
+          readBool(['hasVerifiedDocuments', 'has_verified_documents']),
+      verificationBadge: readBool(['verificationBadge', 'verification_badge']),
+      isOnline: readBool(['isOnline', 'is_online']),
+      onboardingCompleted:
+          readBool(['onboardingCompleted', 'onboarding_completed']),
       onboardingStep: json['onboardingStep'] as int? ?? 0,
       currentLat: curLat,
       currentLng: curLng,

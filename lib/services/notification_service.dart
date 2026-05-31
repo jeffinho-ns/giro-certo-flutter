@@ -99,7 +99,19 @@ Future<void> initializeLocalNotifications() async {
       flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
   if (androidImplementation != null) {
+    await androidImplementation.requestNotificationsPermission();
     await androidImplementation.createNotificationChannel(highImportanceChannel);
+  }
+
+  final iosImplementation =
+      flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+  if (iosImplementation != null) {
+    await iosImplementation.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
   }
 }
 

@@ -2,7 +2,35 @@ import '../models/community.dart';
 
 /// Serviço de comunidades (mock; preparado para API).
 class CommunityService {
-  static final List<Community> _communities = [];
+  static final List<Community> _communities = [
+    Community(
+      id: 'c_delivery_sp',
+      name: 'Delivery SP Centro',
+      description: 'Troca de rotas, segurança e pontos quentes no centro.',
+      createdByUserId: 'system',
+      createdAt: DateTime.now(),
+      memberCount: 142,
+      zone: 'Centro',
+    ),
+    Community(
+      id: 'c_moto_urbano',
+      name: 'Pilotos Urbanos',
+      description: 'Dicas de mobilidade urbana para uso diário da moto.',
+      createdByUserId: 'system',
+      createdAt: DateTime.now(),
+      memberCount: 88,
+      zone: 'Zona Sul',
+    ),
+    Community(
+      id: 'c_manutencao',
+      name: 'Oficina & Manutenção',
+      description: 'Discussões sobre revisão, peças e manutenção preventiva.',
+      createdByUserId: 'system',
+      createdAt: DateTime.now(),
+      memberCount: 63,
+      zone: 'Todas',
+    ),
+  ];
 
   /// Lista comunidades do utilizador / disponíveis.
   static Future<List<Community>> getCommunities({String? userId}) async {

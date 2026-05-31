@@ -37,6 +37,7 @@ android {
     namespace = "com.example.giro_certo"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+    useLibrary("org.apache.http.legacy")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

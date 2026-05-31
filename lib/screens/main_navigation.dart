@@ -16,7 +16,6 @@ import '../models/bike.dart';
 import '../models/vehicle_type.dart';
 import '../models/pilot_profile.dart';
 import '../services/api_service.dart';
-import '../services/onboarding_service.dart';
 
 /// Navegação principal com 5 destinos:
 /// 0 = Chat (CommunityScreen), 1 = Eventos (RankingScreen), 2 = Menu/Mapa (HomeScreen),
@@ -35,7 +34,7 @@ class _MainNavigationState extends State<MainNavigation> {
   List<Widget> _buildScreens(bool isPartner) {
     return [
       const ChatScreen(),        // 0 Mensagens (Comunidade/Grupos/Particular)
-      const EventsScreen(),      // 1 Eventos
+      const EventsScreen(embeddedInMainNav: true), // 1 Eventos
       isPartner ? const PartnerHomeScreen() : const HomeScreen(), // 2: Lojista = dashboard; Motociclista = mapa
       const MomentosScreen(),    // 3 Momentos
       const GarageScreen(),      // 4 Garagem
@@ -59,15 +58,14 @@ class _MainNavigationState extends State<MainNavigation> {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     if (!appState.isDeliveryPilot) return;
     try {
-      final reg = await ApiService.getDeliveryRegistrationStatus();
+      final reg = await ApiService.getDeliveryRegistrationStatus(
+        forceRefresh: true,
+      );
       if (reg == null || !mounted) return;
-      final status = reg['status'] as String?;
-      final moderationStatus =
-          DeliveryModerationStatusExtension.fromRegistrationApiStatus(status);
-      await OnboardingService.saveDeliveryStatus(moderationStatus);
-      if (appState.deliveryModerationStatus != moderationStatus) {
-        appState.setDeliveryModerationStatus(moderationStatus);
-      }
+      await appState.syncDeliveryModerationFromNetwork(
+        forceRefreshRegistration: false,
+        refreshUser: true,
+      );
       if (appState.bike == null && mounted) {
         final plateRaw =
             reg['plateLicense'] as String? ?? reg['plate_license'] as String? ?? '';

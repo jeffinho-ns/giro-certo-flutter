@@ -50,9 +50,13 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>O Giro Certo usa Face ID para entrar na sua conta de forma rápida e segura.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>O Giro Certo precisa da câmera para fotografar documentos.</string>
+	<string>O Giro Certo usa a câmera para gravar momentos e enviar documentos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Giro Certo usa o microfone para gravar vídeos nos seus momentos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>O Giro Certo precisa acessar a galeria para enviar documentos.</string>
+	<string>O Giro Certo precisa acessar a galeria para escolher vídeos e fotos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O Giro Certo pode guardar conteúdos na sua galeria quando você publicar.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

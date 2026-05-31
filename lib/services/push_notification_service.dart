@@ -64,10 +64,15 @@ Future<void> _initLocalNotifications() async {
     },
   );
   if (Platform.isAndroid) {
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
+    final androidImpl = _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidImpl?.requestNotificationsPermission();
+    await androidImpl?.createNotificationChannel(_channel);
   }
+  final iosImpl = _localNotifications
+      .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+  await iosImpl?.requestPermissions(alert: true, badge: true, sound: true);
 }
 
 /// Pedir permissão e obter token FCM; envia o token para a API.

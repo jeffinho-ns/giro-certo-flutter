@@ -29,6 +29,7 @@ import 'services/onboarding_service.dart';
 import 'services/motorcycle_data_service.dart';
 import 'app_navigator_key.dart';
 import 'services/api_service.dart';
+import 'services/delivery_approval_resolver.dart';
 import 'services/push_notification_service.dart' as push;
 import 'services/notification_service.dart' as local_notifications;
 import 'widgets/realtime_connection.dart';
@@ -292,8 +293,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     final savedDeliveryStatus = await OnboardingService.getDeliveryStatus();
-    if (savedDeliveryStatus != null) {
-      appState.setDeliveryModerationStatus(savedDeliveryStatus);
+    if (savedDeliveryStatus != null && appState.isDeliveryPilot) {
+      final resolved = DeliveryApprovalResolver.resolve(
+        user: appState.user,
+        registrationStatusRaw: null,
+        locallyPersisted: savedDeliveryStatus,
+      );
+      if (!appState.isDeliveryApproved ||
+          resolved != DeliveryModerationStatus.approved) {
+        appState.setDeliveryModerationStatus(resolved);
+      }
     }
   }
 
@@ -562,10 +571,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
       appState.setBike(bike);
     }
     try {
-      final persistedUser = await ApiService.updateUserProfile(
-        pilotProfile: resolvedProfile.postgresPilotProfileValue,
-      );
-      appState.setUser(persistedUser);
+      User? persistedUser;
+      final candidateProfiles = <String>[
+        resolvedProfile.postgresPilotProfileValue,
+        resolvedProfile.apiValue,
+      ].toSet();
+      Object? lastError;
+      for (final profileValue in candidateProfiles) {
+        try {
+          persistedUser = await ApiService.updateUserProfile(
+            pilotProfile: profileValue,
+          );
+          break;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (persistedUser != null) {
+        appState.setUser(persistedUser);
+      } else if (lastError != null) {
+        debugPrint('Falha ao persistir pilotProfile no servidor: $lastError');
+      }
     } catch (e) {
       debugPrint('Falha ao persistir pilotProfile no servidor: $e');
     }

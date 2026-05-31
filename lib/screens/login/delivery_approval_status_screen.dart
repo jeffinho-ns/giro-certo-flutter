@@ -25,7 +25,9 @@ class _DeliveryApprovalStatusScreenState
   @override
   void initState() {
     super.initState();
-    _statusFuture = ApiService.getDeliveryRegistrationStatus();
+    _statusFuture = ApiService.getDeliveryRegistrationStatus(
+      forceRefresh: true,
+    );
   }
 
   @override
@@ -99,7 +101,7 @@ class _DeliveryApprovalStatusScreenState
               'Envio Pendente',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-              ),
+                  ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -166,7 +168,7 @@ class _DeliveryApprovalStatusScreenState
               'Sob Análise',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-              ),
+                  ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -218,7 +220,9 @@ class _DeliveryApprovalStatusScreenState
                 ),
                 onPressed: () {
                   setState(() {
-                    _statusFuture = ApiService.getDeliveryRegistrationStatus();
+                    _statusFuture = ApiService.getDeliveryRegistrationStatus(
+                      forceRefresh: true,
+                    );
                   });
                 },
                 child: const Text(
@@ -485,7 +489,7 @@ class _DeliveryApprovalStatusScreenState
               'Erro ao Carregar',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
-              ),
+                  ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -509,7 +513,9 @@ class _DeliveryApprovalStatusScreenState
                 ),
                 onPressed: () {
                   setState(() {
-                    _statusFuture = ApiService.getDeliveryRegistrationStatus();
+                    _statusFuture = ApiService.getDeliveryRegistrationStatus(
+                      forceRefresh: true,
+                    );
                   });
                 },
                 child: const Text(
