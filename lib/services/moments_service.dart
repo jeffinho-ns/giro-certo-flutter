@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/moment.dart';
 import 'api_service.dart';
+import '../utils/image_url.dart';
 
 /// Serviço responsável pelos vídeos "Momentos" (Reels do Giro Certo).
 ///
@@ -19,6 +18,8 @@ class MomentsService {
 
   static List<Moment> _memCache = const [];
   static final Map<String, List<MomentComment>> _commentsCache = {};
+
+  static const String _momentHashtag = 'momento';
 
   /// Carrega o feed global de Momentos.
   static Future<List<Moment>> getFeed({String? currentUserId}) async {
@@ -45,11 +46,15 @@ class MomentsService {
   static Future<List<Moment>> _tryFetchRemoteFeed(
       {String? currentUserId}) async {
     try {
-      // O backend ainda não expõe endpoint `/moments`. Quando expuser,
-      // basta trocar este bloco por uma chamada real.
-      // ignore: unused_local_variable
-      final headers = await ApiService.jsonHeadersWithAuth();
-      return const <Moment>[];
+      final posts = await ApiService.getPosts(
+        limit: 80,
+        offset: 0,
+        hashtag: _momentHashtag,
+      );
+      return posts
+          .map((raw) => _momentFromPost(raw, currentUserId: currentUserId))
+          .whereType<Moment>()
+          .toList();
     } catch (_) {
       return const <Moment>[];
     }
@@ -57,7 +62,6 @@ class MomentsService {
 
   /// Publica um novo Moment.
   /// [videoPath] aponta para um ficheiro local (vídeo gravado/escolhido).
-  /// Caso o backend ainda não suporte upload de vídeos, persistimos local.
   static Future<Moment> publishMoment({
     required String userId,
     required String userName,
@@ -74,40 +78,45 @@ class MomentsService {
           'O vídeo precisa ter no máximo ${maxDuration.inMinutes} minutos.');
     }
 
+    final normalizedCaption = caption.trim();
+    final captionWithTag = normalizedCaption.isEmpty
+        ? '#$_momentHashtag'
+        : (normalizedCaption.contains('#$_momentHashtag')
+            ? normalizedCaption
+            : '$normalizedCaption #$_momentHashtag');
+
     String videoUrl = videoPath;
-    String? thumbnailUrl = thumbnailPath;
-    try {
-      // Quando houver endpoint, faria upload aqui.
-      // videoUrl = await ApiService.uploadMomentVideo(videoPath, userId);
-      // if (thumbnailPath != null) thumbnailUrl = await ApiService.uploadImage(...);
-    } catch (_) {
-      // mantém o caminho local
-    }
-    // Persistir cópia local evita perder vídeo gravado em path temporário.
-    videoUrl = await _persistLocalMedia(
-      videoUrl,
-      fallbackPrefix: 'moment_video',
-    );
-    if (thumbnailUrl != null && thumbnailUrl.isNotEmpty) {
-      thumbnailUrl = await _persistLocalMedia(
-        thumbnailUrl,
-        fallbackPrefix: 'moment_thumb',
-      );
+    if (!videoPath.startsWith('http')) {
+      videoUrl = await ApiService.uploadPostImage(videoPath, userId);
     }
 
-    final moment = Moment(
-      id: 'mm_${DateTime.now().millisecondsSinceEpoch}',
-      userId: userId,
-      userName: userName,
-      userAvatarUrl: userAvatarUrl,
-      userPilotProfile: userPilotProfile,
-      videoUrl: videoUrl,
-      thumbnailUrl: thumbnailUrl,
-      caption: caption,
-      hashtags: hashtags,
-      createdAt: DateTime.now(),
-      duration: duration,
+    final serverHashtags = <String>{
+      _momentHashtag,
+      ...hashtags
+          .map((h) => h.replaceFirst('#', '').trim())
+          .where((h) => h.isNotEmpty),
+    }.toList();
+
+    final created = await ApiService.createPost(
+      content: captionWithTag,
+      images: [videoUrl],
+      hashtags: serverHashtags,
     );
+
+    final moment = _momentFromPost(created, currentUserId: userId) ??
+        Moment(
+          id: 'mm_${DateTime.now().millisecondsSinceEpoch}',
+          userId: userId,
+          userName: userName,
+          userAvatarUrl: userAvatarUrl,
+          userPilotProfile: userPilotProfile,
+          videoUrl: resolveImageUrl(videoUrl),
+          thumbnailUrl: thumbnailPath,
+          caption: normalizedCaption,
+          hashtags: serverHashtags,
+          createdAt: DateTime.now(),
+          duration: duration,
+        );
 
     final list = [..._memCache, moment];
     _memCache = list;
@@ -117,9 +126,11 @@ class MomentsService {
 
   /// Alterna like e devolve o Moment atualizado (otimisticamente).
   static Future<Moment> toggleLike(Moment moment) async {
+    final liked = await ApiService.togglePostLike(moment.id);
     final updated = moment.copyWith(
-      likedByMe: !moment.likedByMe,
-      likes: moment.likedByMe ? moment.likes - 1 : moment.likes + 1,
+      likedByMe: liked,
+      likes:
+          liked ? moment.likes + 1 : (moment.likes > 0 ? moment.likes - 1 : 0),
     );
     _replaceInCache(updated);
     await _saveLocal(_memCache);
@@ -144,20 +155,29 @@ class MomentsService {
     );
     _replaceInCache(updatedOriginal);
 
-    final repostMoment = Moment(
-      id: 'mm_rp_${DateTime.now().millisecondsSinceEpoch}',
-      userId: currentUserId,
-      userName: currentUserName,
-      userAvatarUrl: currentUserAvatarUrl,
-      userPilotProfile: currentUserPilotProfile,
-      videoUrl: original.videoUrl,
-      thumbnailUrl: original.thumbnailUrl,
-      caption: original.caption,
-      hashtags: original.hashtags,
-      createdAt: DateTime.now(),
-      duration: original.duration,
-      originalAuthorName: original.userName,
+    final repostContent =
+        '[REPOST:@${original.userName}] ${original.caption.isEmpty ? '' : '\n${original.caption}'}';
+    final repostPost = await ApiService.createPost(
+      content: repostContent,
+      images: [original.videoUrl],
+      hashtags: <String>{_momentHashtag, ...original.hashtags}.toList(),
     );
+    final repostMoment =
+        _momentFromPost(repostPost, currentUserId: currentUserId) ??
+            Moment(
+              id: 'mm_rp_${DateTime.now().millisecondsSinceEpoch}',
+              userId: currentUserId,
+              userName: currentUserName,
+              userAvatarUrl: currentUserAvatarUrl,
+              userPilotProfile: currentUserPilotProfile,
+              videoUrl: original.videoUrl,
+              thumbnailUrl: original.thumbnailUrl,
+              caption: original.caption,
+              hashtags: original.hashtags,
+              createdAt: DateTime.now(),
+              duration: original.duration,
+              originalAuthorName: original.userName,
+            );
 
     _memCache = [..._memCache, repostMoment];
     await _saveLocal(_memCache);
@@ -166,6 +186,33 @@ class MomentsService {
 
   /// Lista comentários (com fallback local).
   static Future<List<MomentComment>> getComments(String momentId) async {
+    try {
+      final rows = await ApiService.getPostComments(momentId);
+      final remote = rows
+          .map((j) => MomentComment(
+                id: (j['id'] as String?) ?? '',
+                userId:
+                    (j['user'] as Map<String, dynamic>?)?['id'] as String? ??
+                        '',
+                userName:
+                    (j['user'] as Map<String, dynamic>?)?['name'] as String? ??
+                        '',
+                userAvatarUrl: resolveImageUrl(
+                  ((j['user'] as Map<String, dynamic>?)?['photoUrl']
+                          as String?) ??
+                      '',
+                ),
+                text: (j['content'] as String?) ?? '',
+                createdAt: j['createdAt'] != null
+                    ? DateTime.parse(j['createdAt'] as String)
+                    : DateTime.now(),
+              ))
+          .where((c) => c.id.isNotEmpty)
+          .toList();
+      _commentsCache[momentId] = remote;
+      return remote;
+    } catch (_) {}
+
     if (_commentsCache.containsKey(momentId)) {
       return List.from(_commentsCache[momentId]!);
     }
@@ -194,6 +241,18 @@ class MomentsService {
     String? userAvatarUrl,
     required String text,
   }) async {
+    try {
+      await ApiService.addPostComment(momentId, content: text);
+      final updated = await getComments(momentId);
+      final idx = _memCache.indexWhere((m) => m.id == momentId);
+      if (idx >= 0) {
+        final m = _memCache[idx];
+        _replaceInCache(m.copyWith(comments: m.comments + 1));
+        await _saveLocal(_memCache);
+      }
+      return updated;
+    } catch (_) {}
+
     final current = await getComments(momentId);
     final comment = MomentComment(
       id: 'mc_${DateTime.now().millisecondsSinceEpoch}',
@@ -234,8 +293,16 @@ class MomentsService {
   /// Exclui um Moment (apenas se for do usuário atual).
   static Future<bool> deleteMoment(
       {required String momentId, required String currentUserId}) async {
-    final idx = _memCache.indexWhere(
-        (m) => m.id == momentId && m.userId == currentUserId);
+    try {
+      await ApiService.deletePost(momentId);
+      _memCache = List.from(_memCache)
+        ..removeWhere((m) => m.id == momentId && m.userId == currentUserId);
+      await _saveLocal(_memCache);
+      return true;
+    } catch (_) {}
+
+    final idx = _memCache
+        .indexWhere((m) => m.id == momentId && m.userId == currentUserId);
     if (idx < 0) return false;
     _memCache = List.from(_memCache)..removeAt(idx);
     await _saveLocal(_memCache);
@@ -280,24 +347,97 @@ class MomentsService {
     await prefs.setString(_localStoreKey, raw);
   }
 
-  static Future<String> _persistLocalMedia(
-    String inputPath, {
-    required String fallbackPrefix,
-  }) async {
-    final normalized = inputPath.replaceFirst(RegExp(r'^file://'), '');
-    final src = File(normalized);
-    if (!src.existsSync()) return inputPath;
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final ext = normalized.contains('.')
-          ? normalized.substring(normalized.lastIndexOf('.'))
-          : '';
-      final dstPath =
-          '${dir.path}/${fallbackPrefix}_${DateTime.now().millisecondsSinceEpoch}$ext';
-      final dst = await src.copy(dstPath);
-      return dst.path;
-    } catch (_) {
-      return inputPath;
+  static Moment? _momentFromPost(
+    Map<String, dynamic> raw, {
+    String? currentUserId,
+  }) {
+    final images = _parseImages(raw);
+    if (images.isEmpty) return null;
+    final firstMedia = resolveImageUrl(images.first);
+    if (!_looksLikeVideo(firstMedia)) return null;
+
+    final user = raw['user'] as Map<String, dynamic>?;
+    final hashtags = _parseHashtags(raw);
+    final rawContent = (raw['content'] as String?) ?? '';
+    final parsedRepostAuthor = _extractRepostAuthor(rawContent);
+    final cleanedCaption = _stripRepostPrefix(rawContent).trim();
+    final likesCount =
+        (raw['likesCount'] as int?) ?? ((raw['likes'] as List?)?.length ?? 0);
+    final commentsCount = (raw['commentsCount'] as int?) ?? 0;
+    final likedByMe = currentUserId != null &&
+        ((raw['likes'] as List<dynamic>?)?.any(
+              (e) => (e as Map<String, dynamic>)['userId'] == currentUserId,
+            ) ??
+            false);
+
+    return Moment(
+      id: (raw['id'] as String?) ?? '',
+      userId: (raw['userId'] as String?) ?? '',
+      userName: (user?['name'] as String?) ?? '',
+      userAvatarUrl: resolveImageUrl((user?['photoUrl'] as String?) ?? ''),
+      userPilotProfile: (user?['pilotProfile'] as String?) ??
+          raw['userPilotProfile'] as String?,
+      videoUrl: firstMedia,
+      thumbnailUrl: null,
+      caption: cleanedCaption.replaceAll('#$_momentHashtag', '').trim(),
+      hashtags: hashtags,
+      createdAt: raw['createdAt'] != null
+          ? DateTime.parse(raw['createdAt'] as String)
+          : DateTime.now(),
+      likes: likesCount,
+      comments: commentsCount,
+      reposts: ((raw['reposts'] as num?)?.toInt()) ?? 0,
+      likedByMe: likedByMe,
+      repostedByMe: false,
+      duration: Duration.zero,
+      originalAuthorName: parsedRepostAuthor,
+    );
+  }
+
+  static List<String> _parseImages(Map<String, dynamic> raw) {
+    final dynamic v = raw['images'];
+    if (v is List) {
+      return v.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
     }
+    if (v is String && v.startsWith('{') && v.endsWith('}')) {
+      final body = v.substring(1, v.length - 1);
+      if (body.trim().isEmpty) return const [];
+      return body
+          .split(',')
+          .map((e) => e.trim().replaceAll(RegExp(r'^"|"$'), ''))
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    return const [];
+  }
+
+  static List<String> _parseHashtags(Map<String, dynamic> raw) {
+    final v = raw['hashtags'];
+    if (v is List) {
+      return v.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+    }
+    final c = (raw['content'] as String?) ?? '';
+    return RegExp(r'#(\w+)')
+        .allMatches(c)
+        .map((m) => m.group(1) ?? '')
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  static bool _looksLikeVideo(String url) {
+    final u = url.toLowerCase();
+    return u.endsWith('.mp4') ||
+        u.endsWith('.mov') ||
+        u.endsWith('.m4v') ||
+        u.endsWith('.webm');
+  }
+
+  static String? _extractRepostAuthor(String content) {
+    final m = RegExp(r'^\[REPOST:@([^\]]+)\]').firstMatch(content);
+    return m?.group(1);
+  }
+
+  static String _stripRepostPrefix(String content) {
+    return content.replaceFirst(RegExp(r'^\[REPOST:@[^\]]+\]\s*'), '');
   }
 }

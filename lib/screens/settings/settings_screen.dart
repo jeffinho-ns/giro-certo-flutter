@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../../models/pilot_profile.dart';
+import '../../models/user.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/app_state_provider.dart';
+import '../../screens/login/delivery_registration_screen.dart';
+import '../../services/api_service.dart';
+import '../../services/onboarding_service.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import 'image_diagnostic_screen.dart';
@@ -12,6 +17,111 @@ import 'delivery_rider_payout_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  Future<bool> _confirmSwitchToDelivery(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return AlertDialog(
+          title: const Text('Mudar para Delivery?'),
+          content: Text(
+            'Para atuar como entregador, voce precisa enviar documentos para aprovacao. '
+            'Deseja continuar para o cadastro Delivery agora?',
+            style: theme.textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Sim, continuar'),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
+  }
+
+  Future<void> _promotePilotToDelivery(
+    BuildContext context,
+    AppStateProvider app,
+  ) async {
+    User? persistedUser;
+    Object? lastError;
+    final candidateProfiles = {
+      PilotProfileType.delivery.postgresPilotProfileValue,
+      PilotProfileType.delivery.apiValue,
+    };
+
+    for (final profileValue in candidateProfiles) {
+      try {
+        persistedUser = await ApiService.updateUserProfile(
+          pilotProfile: profileValue,
+        );
+        break;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    if (persistedUser != null) {
+      app.setUser(persistedUser);
+    } else if (app.user != null) {
+      app.setUser(
+        app.user!.copyWith(
+          pilotProfile: PilotProfileType.delivery.postgresPilotProfileValue,
+        ),
+      );
+      if (lastError != null) {
+        debugPrint('Falha ao persistir migracao para delivery: $lastError');
+      }
+    }
+
+    app.setPilotProfileType(PilotProfileType.delivery);
+    app.setDeliveryModerationStatus(DeliveryModerationStatus.pending);
+    await OnboardingService.savePilotType(PilotProfileType.delivery);
+    await OnboardingService.saveDeliveryStatus(
+        DeliveryModerationStatus.pending);
+    await OnboardingService.setLastKnownDeliveryRegStatus('PENDING');
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Perfil atualizado para Delivery. Seus documentos estao em analise.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startDeliveryMigrationFlow(
+    BuildContext context,
+    AppStateProvider app,
+  ) async {
+    final confirmed = await _confirmSwitchToDelivery(context);
+    if (!confirmed || !context.mounted) return;
+
+    final isBicycleCourier = app.bike?.isBicycle ?? false;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => DeliveryRegistrationScreen(
+          pilotType: PilotProfileType.delivery,
+          isBicycleCourier: isBicycleCourier,
+          onBack: () => Navigator.of(context).pop(),
+          onSubmit: (_) async {
+            await _promotePilotToDelivery(context, app);
+            if (!context.mounted) return;
+            Navigator.of(context).maybePop();
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +140,7 @@ class SettingsScreen extends StatelessWidget {
               title: 'Configurações',
               showBackButton: true,
             ),
-            
+
             // Conteúdo
             Expanded(
               child: SingleChildScrollView(
@@ -48,7 +158,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    
+
                     // Card de seleção de tema claro/escuro
                     Container(
                       padding: const EdgeInsets.all(24),
@@ -96,14 +206,16 @@ class SettingsScreen extends StatelessWidget {
                                   children: [
                                     Text(
                                       'Modo',
-                                      style: theme.textTheme.titleMedium?.copyWith(
+                                      style:
+                                          theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       'Escolha entre tema claro ou escuro',
-                                      style: theme.textTheme.bodySmall?.copyWith(
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
                                         fontSize: 13,
                                       ),
                                     ),
@@ -113,7 +225,7 @@ class SettingsScreen extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 24),
-                          
+
                           // Opções de tema
                           Row(
                             children: [
@@ -149,14 +261,16 @@ class SettingsScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    
+
                     const SizedBox(height: 32),
 
                     // Diagnóstico de imagens
                     ListTile(
-                      leading: Icon(LucideIcons.bug, color: themeProvider.primaryColor),
+                      leading: Icon(LucideIcons.bug,
+                          color: themeProvider.primaryColor),
                       title: const Text('Diagnóstico de Imagens'),
-                      subtitle: const Text('Ver o que a API retorna (posts, stories)'),
+                      subtitle: const Text(
+                          'Ver o que a API retorna (posts, stories)'),
                       trailing: const Icon(LucideIcons.chevronRight),
                       onTap: () {
                         Navigator.push(
@@ -169,9 +283,11 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     ListTile(
-                      leading: Icon(LucideIcons.map, color: themeProvider.primaryColor),
+                      leading: Icon(LucideIcons.map,
+                          color: themeProvider.primaryColor),
                       title: const Text('Mapas Offline'),
-                      subtitle: const Text('Baixar regiao para navegação com rede instável'),
+                      subtitle: const Text(
+                          'Baixar regiao para navegação com rede instável'),
                       trailing: const Icon(LucideIcons.chevronRight),
                       onTap: () {
                         Navigator.push(
@@ -182,9 +298,9 @@ class SettingsScreen extends StatelessWidget {
                         );
                       },
                     ),
-                    
+
                     const SizedBox(height: 32),
-                    
+
                     // Seção de Cores
                     Text(
                       'Cor do Tema',
@@ -195,7 +311,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    
+
                     // Card de seleção de cor
                     Container(
                       padding: const EdgeInsets.all(24),
@@ -243,14 +359,16 @@ class SettingsScreen extends StatelessWidget {
                                   children: [
                                     Text(
                                       'Cor Principal',
-                                      style: theme.textTheme.titleMedium?.copyWith(
+                                      style:
+                                          theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       'Personalize a cor do app',
-                                      style: theme.textTheme.bodySmall?.copyWith(
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
                                         fontSize: 13,
                                       ),
                                     ),
@@ -260,7 +378,7 @@ class SettingsScreen extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 24),
-                          
+
                           // Opções de cores
                           Wrap(
                             spacing: 12,
@@ -270,50 +388,64 @@ class SettingsScreen extends StatelessWidget {
                                 context: context,
                                 theme: theme,
                                 color: AppThemeColor.orange,
-                                isSelected: themeProvider.themeColor == AppThemeColor.orange,
+                                isSelected: themeProvider.themeColor ==
+                                    AppThemeColor.orange,
                                 primaryColor: AppColors.racingOrange,
                                 onTap: () {
-                                  themeProvider.setThemeColor(AppThemeColor.orange);
+                                  themeProvider
+                                      .setThemeColor(AppThemeColor.orange);
                                 },
                               ),
                               _buildColorOption(
                                 context: context,
                                 theme: theme,
                                 color: AppThemeColor.blue,
-                                isSelected: themeProvider.themeColor == AppThemeColor.blue,
-                                primaryColor: const Color(0xFF5C9FD4), // Azul suave
+                                isSelected: themeProvider.themeColor ==
+                                    AppThemeColor.blue,
+                                primaryColor:
+                                    const Color(0xFF5C9FD4), // Azul suave
                                 onTap: () {
-                                  themeProvider.setThemeColor(AppThemeColor.blue);
+                                  themeProvider
+                                      .setThemeColor(AppThemeColor.blue);
                                 },
                               ),
                               _buildColorOption(
                                 context: context,
                                 theme: theme,
                                 color: AppThemeColor.green,
-                                isSelected: themeProvider.themeColor == AppThemeColor.green,
-                                primaryColor: const Color(0xFF6BAF7A), // Verde suave
+                                isSelected: themeProvider.themeColor ==
+                                    AppThemeColor.green,
+                                primaryColor:
+                                    const Color(0xFF6BAF7A), // Verde suave
                                 onTap: () {
-                                  themeProvider.setThemeColor(AppThemeColor.green);
+                                  themeProvider
+                                      .setThemeColor(AppThemeColor.green);
                                 },
                               ),
                               _buildColorOption(
                                 context: context,
                                 theme: theme,
                                 color: AppThemeColor.purple,
-                                isSelected: themeProvider.themeColor == AppThemeColor.purple,
-                                primaryColor: const Color(0xFF9A7BAF), // Roxo suave
+                                isSelected: themeProvider.themeColor ==
+                                    AppThemeColor.purple,
+                                primaryColor:
+                                    const Color(0xFF9A7BAF), // Roxo suave
                                 onTap: () {
-                                  themeProvider.setThemeColor(AppThemeColor.purple);
+                                  themeProvider
+                                      .setThemeColor(AppThemeColor.purple);
                                 },
                               ),
                               _buildColorOption(
                                 context: context,
                                 theme: theme,
                                 color: AppThemeColor.red,
-                                isSelected: themeProvider.themeColor == AppThemeColor.red,
-                                primaryColor: const Color(0xFFD67B7B), // Vermelho suave
+                                isSelected: themeProvider.themeColor ==
+                                    AppThemeColor.red,
+                                primaryColor:
+                                    const Color(0xFFD67B7B), // Vermelho suave
                                 onTap: () {
-                                  themeProvider.setThemeColor(AppThemeColor.red);
+                                  themeProvider
+                                      .setThemeColor(AppThemeColor.red);
                                 },
                               ),
                             ],
@@ -321,12 +453,16 @@ class SettingsScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    
+
                     const SizedBox(height: 32),
 
                     Consumer<AppStateProvider>(
                       builder: (context, app, _) {
                         final user = app.user;
+                        final canSwitchToDelivery = user != null &&
+                            user.partnerId == null &&
+                            user.userType != UserType.lojista &&
+                            !app.isDeliveryPilot;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -365,14 +501,16 @@ class SettingsScreen extends StatelessWidget {
                               ),
                             ],
                             if (user != null &&
-                                (user.partnerId == null || app.isDeliveryPilot)) ...[
+                                (user.partnerId == null ||
+                                    app.isDeliveryPilot)) ...[
                               ListTile(
                                 contentPadding: EdgeInsets.zero,
                                 leading: Icon(
                                   LucideIcons.wallet,
                                   color: themeProvider.primaryColor,
                                 ),
-                                title: const Text('Entregador: conta de repasse'),
+                                title:
+                                    const Text('Entregador: conta de repasse'),
                                 subtitle: const Text(
                                   'Dados bancários para liquidações',
                                 ),
@@ -386,6 +524,26 @@ class SettingsScreen extends StatelessWidget {
                                     ),
                                   );
                                 },
+                              ),
+                            ],
+                            if (canSwitchToDelivery) ...[
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  LucideIcons.package,
+                                  color: themeProvider.primaryColor,
+                                ),
+                                title: const Text(
+                                  'Mudar perfil de pilotagem para Delivery',
+                                ),
+                                subtitle: const Text(
+                                  'Envie documentos para aprovacao e liberar corridas',
+                                ),
+                                trailing: const Icon(LucideIcons.chevronRight),
+                                onTap: () => _startDeliveryMigrationFlow(
+                                  context,
+                                  app,
+                                ),
                               ),
                             ],
                             const SizedBox(height: 8),
@@ -417,7 +575,8 @@ class SettingsScreen extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: themeProvider.primaryColor.withOpacity(0.2),
+                              color:
+                                  themeProvider.primaryColor.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(

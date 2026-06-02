@@ -79,20 +79,30 @@ class SocialService {
     String? pilotTypeFilter,
     String? hashtag,
     String? postType,
+    int limit = 50,
+    int offset = 0,
   }) async {
     try {
       final list = await ApiService.getPosts(
-        limit: 50,
-        offset: 0,
+        limit: limit,
+        offset: offset,
         pilotType: pilotTypeFilter,
         hashtag: hashtag,
         postType: postType,
       );
-      _likedPostIds.clear();
-      _cachedPosts = list.map((j) => _postFromApi(j, currentUserId: currentUserId)).toList();
-      return List.from(_cachedPosts);
+      if (offset == 0) {
+        _likedPostIds.clear();
+      }
+      final mapped =
+          list.map((j) => _postFromApi(j, currentUserId: currentUserId)).toList();
+      if (offset == 0) {
+        _cachedPosts = mapped;
+      } else {
+        _cachedPosts = [..._cachedPosts, ...mapped];
+      }
+      return List.from(mapped);
     } catch (_) {
-      _cachedPosts = [];
+      if (offset == 0) _cachedPosts = [];
       return [];
     }
   }
@@ -189,6 +199,13 @@ class SocialService {
     }
   }
 
+  /// Buscar um post por ID com mapeamento completo para o modelo de feed.
+  static Future<Post?> getPostById(String postId, {String? currentUserId}) async {
+    final raw = await ApiService.getPostById(postId);
+    if (raw == null) return null;
+    return _postFromApi(raw, currentUserId: currentUserId);
+  }
+
   /// Lista stories de um utilizador específico (apenas das últimas 24h).
   static Future<List<Story>> fetchStoriesByUserId(String userId) async {
     try {
@@ -197,6 +214,15 @@ class SocialService {
     } catch (_) {
       return [];
     }
+  }
+
+  /// Buscar story por ID com mapeamento completo.
+  static Future<Story?> getStoryById(String storyId) async {
+    final raw = await ApiService.getStoryById(storyId);
+    if (raw == null) return null;
+    final mapped = _storyFromMap(raw);
+    if (!_isStoryWithin24h(mapped)) return null;
+    return mapped;
   }
 
   /// Seguir utilizador. Retorna true se passou a seguir, false se já seguia ou erro.

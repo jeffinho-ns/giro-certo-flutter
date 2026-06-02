@@ -96,8 +96,9 @@ class _WhatsAppOrderTemplateCardState extends State<WhatsAppOrderTemplateCard> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Envie o modelo ao cliente. Quando ele responder no formato, o sistema '
-              'cria o pedido e manda o link de pagamento automaticamente '
+              'Envie o modelo ao cliente e peça para responder sem mudar os nomes dos campos. '
+              'Quando ele preencher no formato, o sistema '
+              'capta o pedido e manda o link de pagamento automaticamente '
               '(requer WhatsApp Business API configurado).',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.8),

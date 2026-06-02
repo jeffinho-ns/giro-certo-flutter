@@ -5,6 +5,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Aplica Google Services somente quando o arquivo existe localmente.
+// Assim o build não quebra em ambientes sem configuração Firebase ainda.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // Lê GOOGLE_MAPS_API_KEY sem java.util.Properties (evita "Unresolved reference: util" no Kotlin DSL).
 /** Token público Mapbox (pk.) — também em `android/.../mapbox_access_token.xml` se preferir ficheiro. */
 val mapboxAccessToken = run {

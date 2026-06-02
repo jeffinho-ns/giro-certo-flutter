@@ -33,7 +33,7 @@ class DeliveryOrderCard extends StatelessWidget {
         return Colors.grey;
     }
   }
-  
+
   IconData _getPriorityIcon(DeliveryPriority priority) {
     switch (priority) {
       case DeliveryPriority.urgent:
@@ -166,9 +166,11 @@ class DeliveryOrderCard extends StatelessWidget {
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(order.status, theme).withOpacity(0.2),
+                              color: _getStatusColor(order.status, theme)
+                                  .withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -182,12 +184,15 @@ class DeliveryOrderCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: _getPriorityColor(order.priority, theme).withOpacity(0.2),
+                              color: _getPriorityColor(order.priority, theme)
+                                  .withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: _getPriorityColor(order.priority, theme).withOpacity(0.5),
+                                color: _getPriorityColor(order.priority, theme)
+                                    .withOpacity(0.5),
                                 width: 1,
                               ),
                             ),
@@ -197,13 +202,15 @@ class DeliveryOrderCard extends StatelessWidget {
                                 Icon(
                                   _getPriorityIcon(order.priority),
                                   size: 12,
-                                  color: _getPriorityColor(order.priority, theme),
+                                  color:
+                                      _getPriorityColor(order.priority, theme),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   _getPriorityLabel(order.priority),
                                   style: TextStyle(
-                                    color: _getPriorityColor(order.priority, theme),
+                                    color: _getPriorityColor(
+                                        order.priority, theme),
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -230,16 +237,17 @@ class DeliveryOrderCard extends StatelessWidget {
                     Text(
                       'Taxa',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
                       ),
                     ),
                   ],
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Rota
             Row(
               children: [
@@ -273,6 +281,18 @@ class DeliveryOrderCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if ((order.recipientName ?? '').trim().isNotEmpty) ...[
+                        Text(
+                          'Entrega para: ${order.recipientName!.trim()}',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.neonGreen,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                      ],
                       Text(
                         order.storeAddress,
                         style: theme.textTheme.bodySmall,
@@ -282,8 +302,10 @@ class DeliveryOrderCard extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         order.deliveryAddress,
-                        style: theme.textTheme.bodySmall,
-                        maxLines: 1,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -291,9 +313,9 @@ class DeliveryOrderCard extends StatelessWidget {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Informações adicionais
             Row(
               children: [
@@ -318,7 +340,7 @@ class DeliveryOrderCard extends StatelessWidget {
                 ],
               ],
             ),
-            
+
             if (showAcceptButton && order.status == DeliveryStatus.pending) ...[
               const SizedBox(height: 16),
               SizedBox(
@@ -361,7 +383,8 @@ class DeliveryOrderCard extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoChip(ThemeData theme, {required IconData icon, required String label}) {
+  Widget _buildInfoChip(ThemeData theme,
+      {required IconData icon, required String label}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -388,4 +411,3 @@ class DeliveryOrderCard extends StatelessWidget {
     );
   }
 }
-

@@ -9,7 +9,9 @@ import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import '../../services/api_service.dart';
+import '../../services/social_service.dart';
 import '../../models/pilot_profile.dart';
+import '../../models/post_type.dart';
 import '../../models/bike.dart';
 import '../../models/vehicle_type.dart';
 import '../../models/user.dart';
@@ -44,11 +46,15 @@ class _GarageScreenState extends State<GarageScreen> {
   String _quickCategory = 'OLEO';
   String _quickStatus = 'OK';
   bool _isCreatingTimelineEvent = false;
+  bool _garagePublic = true;
+  bool _garageVisibilityLoading = false;
+  bool _creatingGarage = false;
 
   @override
   void initState() {
     super.initState();
     _loadDeliveryRegistrationIfNeeded();
+    _loadGarageVisibility();
   }
 
   @override
@@ -127,8 +133,29 @@ class _GarageScreenState extends State<GarageScreen> {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final user = appState.user;
     if (user == null || _isUploadingPhoto) return;
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(LucideIcons.camera),
+              title: const Text('Tirar foto'),
+              onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.image),
+              title: const Text('Escolher da galeria'),
+              onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await picker.pickImage(source: source, imageQuality: 85);
     if (picked == null) return;
 
     setState(() => _isUploadingPhoto = true);
@@ -160,11 +187,22 @@ class _GarageScreenState extends State<GarageScreen> {
   }
 
   Future<Bike> _ensurePersistedBike(Bike bike) async {
-    if (bike.id.isNotEmpty && !bike.id.startsWith('bike-')) return bike;
+    final bikeId = bike.id.trim();
+    final isTemporaryId = bikeId.isEmpty ||
+        bikeId.startsWith('bike-') ||
+        bikeId.startsWith('delivery-registration-') ||
+        bikeId.startsWith('mock-');
+    if (!isTemporaryId) return bike;
+    final safeModel = bike.model.trim().isEmpty ? 'Moto' : bike.model.trim();
+    final safeBrand = bike.brand.trim().isEmpty ? 'Sem marca' : bike.brand.trim();
+    final isBike = bike.vehicleType == AppVehicleType.bicycle;
+    final safePlate = bike.plate.trim().isNotEmpty
+        ? bike.plate.trim()
+        : (isBike ? 'S/N' : 'SEM-PLACA');
     final created = await ApiService.createBike(
-      model: bike.model,
-      brand: bike.brand,
-      plate: bike.plate,
+      model: safeModel,
+      brand: safeBrand,
+      plate: safePlate,
       currentKm: bike.currentKm,
       oilType: bike.oilType,
       frontTirePressure: bike.frontTirePressure,
@@ -228,6 +266,88 @@ class _GarageScreenState extends State<GarageScreen> {
         }
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadGarageVisibility() async {
+    final visibility = await ApiService.getMyGarageVisibility();
+    if (!mounted) return;
+    setState(() {
+      _garagePublic = visibility == 'PUBLIC';
+    });
+  }
+
+  Future<void> _updateGarageVisibility(bool isPublic) async {
+    if (_garageVisibilityLoading) return;
+    setState(() => _garageVisibilityLoading = true);
+    final previous = _garagePublic;
+    setState(() => _garagePublic = isPublic);
+    try {
+      final visibility =
+          await ApiService.updateMyGarageVisibility(isPublic ? 'PUBLIC' : 'PRIVATE');
+      if (!mounted) return;
+      setState(() => _garagePublic = visibility == 'PUBLIC');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _garagePublic
+                ? 'Garagem visível para outros pilotos.'
+                : 'Garagem privada para outros pilotos.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _garagePublic = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível atualizar a privacidade agora.')),
+      );
+    } finally {
+      if (mounted) setState(() => _garageVisibilityLoading = false);
+    }
+  }
+
+  Future<void> _createGarageForCurrentUser() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final user = appState.user;
+    if (user == null || _creatingGarage) return;
+    if (user.userType == UserType.lojista || user.partnerId != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Perfil lojista não usa garagem de piloto.')),
+      );
+      return;
+    }
+    setState(() => _creatingGarage = true);
+    try {
+      final isBicycle = appState.pilotProfileType == PilotProfileType.delivery &&
+          ((appState.bike?.vehicleType == AppVehicleType.bicycle) ||
+              ((_deliveryRegistration?['vehicleType'] as String?)
+                      ?.toUpperCase() ==
+                  'BICYCLE'));
+      final created = await ApiService.createBike(
+        model: isBicycle ? 'Bike urbana' : 'Minha moto',
+        brand: isBicycle ? 'Bicicleta' : 'Sem marca',
+        plate: isBicycle ? 'S/N' : 'SEM-PLACA',
+        currentKm: 0,
+        oilType: isBicycle ? '—' : '10W-40',
+        frontTirePressure: isBicycle ? 0 : 2.5,
+        rearTirePressure: isBicycle ? 0 : 2.8,
+        vehicleType: isBicycle ? AppVehicleType.bicycle : AppVehicleType.motorcycle,
+      );
+      if (!mounted) return;
+      appState.setBike(created);
+      _didInitForm = false;
+      _syncFormFromBike(created);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Garagem criada! Agora personalize do seu jeito.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Falha ao criar garagem: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _creatingGarage = false);
+    }
   }
 
   void _ensureTimelineLoaded(Bike bike) {
@@ -308,6 +428,60 @@ class _GarageScreenState extends State<GarageScreen> {
     }
   }
 
+  Future<void> _shareSetupAsPost(Bike bike) async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final user = appState.user;
+    if (user == null) return;
+    final setup = <String>[
+      if (bike.nickname != null && bike.nickname!.trim().isNotEmpty)
+        'Projeto: ${bike.nickname!.trim()}',
+      'Base: ${bike.brand} ${bike.model}',
+      if (bike.ridingStyle != null && bike.ridingStyle!.trim().isNotEmpty)
+        'Estilo: ${bike.ridingStyle!.trim()}',
+      if (bike.preferredColor != null && bike.preferredColor!.trim().isNotEmpty)
+        'Cor destaque: ${bike.preferredColor!.trim()}',
+      if (bike.accessories.isNotEmpty)
+        'Setup atual: ${bike.accessories.take(6).join(', ')}',
+      if (bike.nextUpgrade != null && bike.nextUpgrade!.trim().isNotEmpty)
+        'Próxima fase: ${bike.nextUpgrade!.trim()}',
+    ];
+    final content = [
+      'Minha garagem no Giro Certo',
+      ...setup,
+      '',
+      'Feedback da tropa? O que vocês mudariam nesse projeto?',
+      '#garagem #setup #projetodemoto #girocerto'
+    ].join('\n');
+    final media = <String>[
+      if (bike.vehiclePhotoUrl != null && bike.vehiclePhotoUrl!.trim().isNotEmpty)
+        bike.vehiclePhotoUrl!.trim(),
+      if (bike.photoUrl != null && bike.photoUrl!.trim().isNotEmpty)
+        bike.photoUrl!.trim(),
+      ...bike.additionalPhotos.where((p) => p.trim().isNotEmpty),
+    ].toSet().take(4).toList();
+    try {
+      await SocialService.createPost(
+        userId: user.id,
+        userName: user.name,
+        userBikeModel: bike.model,
+        userAvatarUrl: user.photoUrl,
+        userPilotProfile: user.pilotProfile,
+        content: content,
+        imageUrls: media.isEmpty ? null : media,
+        postType: PostType.dica,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Setup compartilhado no feed.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Falha ao compartilhar setup: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
@@ -321,6 +495,9 @@ class _GarageScreenState extends State<GarageScreen> {
 
     // Se não houver bike, mostrar mensagem
     if (bike == null) {
+      final canCreateGarage = appState.user != null &&
+          appState.user!.userType != UserType.lojista &&
+          appState.user!.partnerId == null;
       return Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         body: SafeArea(
@@ -351,12 +528,33 @@ class _GarageScreenState extends State<GarageScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Cadastre sua moto ou bike para liberar a experiência premium da sua garagem.',
+                        canCreateGarage
+                            ? 'Crie sua garagem agora e personalize com fotos, setup e projetos.'
+                            : 'Cadastre sua moto ou bike para liberar a experiência premium da sua garagem.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
                         ),
                         textAlign: TextAlign.center,
                       ),
+                      if (canCreateGarage) ...[
+                        const SizedBox(height: 18),
+                        FilledButton.icon(
+                          onPressed: _creatingGarage ? null : _createGarageForCurrentUser,
+                          icon: _creatingGarage
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(LucideIcons.plusCircle),
+                          label: Text(
+                            _creatingGarage ? 'Criando garagem...' : 'Criar minha garagem',
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -558,6 +756,37 @@ class _GarageScreenState extends State<GarageScreen> {
                           ? 'Visão rápida da bike'
                           : 'Visão rápida da moto',
                     ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(LucideIcons.eye, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _garagePublic
+                                  ? 'Garagem pública no perfil'
+                                  : 'Garagem privada no perfil',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Switch.adaptive(
+                            value: _garagePublic,
+                            onChanged: _garageVisibilityLoading
+                                ? null
+                                : (v) => _updateGarageVisibility(v),
+                            activeThumbColor: AppColors.racingOrange,
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -699,6 +928,12 @@ class _GarageScreenState extends State<GarageScreen> {
                         color: AppColors.statusOk,
                       ),
                     ],
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () => _shareSetupAsPost(bike),
+                      icon: const Icon(LucideIcons.share2),
+                      label: const Text('Compartilhar setup no feed'),
+                    ),
 
                     const SizedBox(height: 24),
                     _buildSectionTitle(context, 'Timeline da moto'),

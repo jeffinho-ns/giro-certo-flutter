@@ -144,6 +144,7 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
             builder: (context, trip, _) {
               final showProofPanel =
                   trip.phase == DeliveryTripPhase.awaitingDeliveryProof;
+              final isCancelled = trip.order.status == DeliveryStatus.cancelled;
 
               return Stack(
                 fit: StackFit.expand,
@@ -161,7 +162,7 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
                       errorMessage: trip.errorMessage,
                       onSubmit: _onCompleteDelivery,
                     ),
-                  if (!showProofPanel) ...[
+                  if (!showProofPanel && !isCancelled) ...[
                     TripNavigationPerfOverlay(performance: _performance),
                     Positioned(
                       right: 16,
@@ -192,6 +193,55 @@ class _TripNavigationScreenState extends State<TripNavigationScreen> {
                       ),
                     ),
                   ],
+                  if (isCancelled)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 20,
+                      child: SafeArea(
+                        top: false,
+                        child: Material(
+                          color: AppColors.alertRed.withValues(alpha: 0.95),
+                          borderRadius: BorderRadius.circular(14),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Corrida cancelada pelo lojista',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  trip.errorMessage ??
+                                      'O valor ficará retido no sistema para análise financeira.',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    onPressed: () => Navigator.of(context).pop(false),
+                                    icon: const Icon(LucideIcons.xCircle, size: 18),
+                                    label: const Text('Fechar corrida'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: AppColors.alertRed,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (!showProofPanel && trip.errorMessage != null)
                     Positioned(
                       left: 16,

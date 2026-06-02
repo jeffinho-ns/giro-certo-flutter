@@ -128,6 +128,50 @@ class _MomentosScreenState extends State<MomentosScreen> {
     await _load();
   }
 
+  Future<void> _onDelete(Moment moment) async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final userId = appState.user?.id;
+    if (userId == null || userId != moment.userId) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir momento?'),
+        content: const Text(
+          'Esse momento será removido do seu perfil e do feed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final ok = await MomentsService.deleteMoment(
+      momentId: moment.id,
+      currentUserId: userId,
+    );
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível excluir o momento.')),
+      );
+      return;
+    }
+    setState(() {
+      _moments.removeWhere((m) => m.id == moment.id);
+      if (_currentIndex >= _moments.length && _moments.isNotEmpty) {
+        _currentIndex = _moments.length - 1;
+      }
+    });
+  }
+
   void _openComments(Moment moment) {
     showModalBottomSheet(
       context: context,
@@ -139,6 +183,8 @@ class _MomentosScreenState extends State<MomentosScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final currentUserId = appState.user?.id;
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     return Scaffold(
       backgroundColor: Colors.black,
@@ -165,6 +211,8 @@ class _MomentosScreenState extends State<MomentosScreen> {
                   onLike: () => _onLike(moment),
                   onRepost: () => _onRepost(moment),
                   onComment: () => _openComments(moment),
+                  canDelete: currentUserId != null && currentUserId == moment.userId,
+                  onDelete: () => _onDelete(moment),
                 );
               },
             ),
@@ -278,6 +326,8 @@ class _MomentItem extends StatefulWidget {
   final VoidCallback onLike;
   final VoidCallback onRepost;
   final VoidCallback onComment;
+  final bool canDelete;
+  final VoidCallback? onDelete;
 
   const _MomentItem({
     required this.moment,
@@ -285,6 +335,8 @@ class _MomentItem extends StatefulWidget {
     required this.onLike,
     required this.onRepost,
     required this.onComment,
+    this.canDelete = false,
+    this.onDelete,
   });
 
   @override
@@ -569,6 +621,31 @@ class _MomentItemState extends State<_MomentItem> {
             ),
           ),
           // Ações laterais
+          if (widget.canDelete)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              right: 10,
+              child: Material(
+                color: Colors.black.withOpacity(0.35),
+                shape: const CircleBorder(),
+                child: PopupMenuButton<String>(
+                  icon: const Icon(
+                    LucideIcons.moreVertical,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  onSelected: (value) {
+                    if (value == 'delete') widget.onDelete?.call();
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Text('Excluir momento'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Positioned(
             right: 12,
             bottom: 24,

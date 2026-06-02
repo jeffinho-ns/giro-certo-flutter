@@ -18,19 +18,24 @@ import '../../widgets/social/post_card.dart';
 import '../../widgets/floating_bottom_nav.dart';
 import '../../widgets/menu_grid_modal.dart';
 import '../../widgets/social/feed_skeleton.dart';
+import '../../utils/colors.dart';
 import 'story_view_screen.dart';
 import 'story_preview_edit_screen.dart';
 import 'create_story_sheet.dart';
+import 'create_post_modal.dart';
 import 'post_comments_sheet.dart';
 import 'report_post_sheet.dart';
 import 'notifications_screen.dart';
 import 'profile_page.dart';
-import 'user_profile_screen.dart';
 import 'user_search_screen.dart';
+import 'explorar_screen.dart';
 import 'events_screen.dart';
 import '../momentos/momentos_screen.dart';
 import '../garage/garage_screen.dart';
 import '../chat/chat_screen.dart';
+import '../../models/user.dart';
+import '../../models/community_type.dart';
+import '../communities/communities_list_screen.dart';
 
 class SocialHomeScreen extends StatefulWidget {
   /// Quando true, a tela foi aberta pelo menu (ex.: News); mostra botão para voltar à home padrão.
@@ -45,11 +50,15 @@ class SocialHomeScreen extends StatefulWidget {
 class _SocialHomeScreenState extends State<SocialHomeScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   int _currentNavIndex = 0;
+  int _nearbyEventsCount = 0;
+  bool _didApplyInitialFeedDefaults = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final countProvider = Provider.of<NotificationsCountProvider>(context, listen: false);
       countProvider.loadFromApi();
@@ -60,21 +69,208 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
           Provider.of<DrawerProvider>(context, listen: false);
       drawerProvider.setScaffoldKey(_scaffoldKey);
       _loadData();
+      _loadNearbyEventHint();
     });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final feed = Provider.of<SocialFeedProvider>(context, listen: false);
+    final threshold = _scrollController.position.maxScrollExtent - 280;
+    if (_scrollController.position.pixels >= threshold) {
+      feed.loadMorePosts();
+    }
   }
 
   Future<void> _loadData() async {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final feed = Provider.of<SocialFeedProvider>(context, listen: false);
+    if (!_didApplyInitialFeedDefaults) {
+      feed.setFeedTab(FeedTab.forYou);
+      feed.setPilotFilter(FeedPilotFilter.all);
+      feed.setHashtagFilter('');
+      _didApplyInitialFeedDefaults = true;
+    }
     await feed.loadData(
       userBikeModel: appState.bike?.model,
       currentUserId: appState.user?.id,
+    );
+  }
+
+  Future<void> _loadNearbyEventHint() async {
+    final events = await ApiService.getEvents(limit: 1);
+    if (!mounted) return;
+    setState(() {
+      _nearbyEventsCount = events.isEmpty ? 0 : 1;
+    });
+  }
+
+  Widget _buildProfileDynamicCard(ThemeData theme, AppStateProvider appState) {
+    final userType = parseUserType(appState.user?.pilotProfile);
+    String title;
+    String subtitle;
+    IconData icon;
+    VoidCallback action;
+    switch (userType) {
+      case UserType.casual:
+        title = 'Seu fim de semana começa aqui';
+        subtitle = 'Explore eventos e rotas bonitas para seu próximo rolê.';
+        icon = LucideIcons.mountain;
+        action = () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const EventsScreen()),
+            );
+        break;
+      case UserType.diario:
+        title = 'Rotina mais inteligente';
+        subtitle = 'Confira dicas urbanas e mantenha sua moto em dia.';
+        icon = LucideIcons.mapPin;
+        action = () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const GarageScreen()),
+            );
+        break;
+      case UserType.racing:
+        title = 'Modo performance';
+        subtitle = 'Compartilhe setup e veja novidades de pista.';
+        icon = LucideIcons.flag;
+        action = () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ExplorarScreen()),
+            );
+        break;
+      case UserType.delivery:
+        title = 'Comunidade de entregadores';
+        subtitle = 'Troque rota, segurança e estratégia com outros riders.';
+        icon = LucideIcons.packageSearch;
+        action = () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const CommunitiesListScreen(
+                  initialType: CommunityType.delivery,
+                ),
+              ),
+            );
+        break;
+      default:
+        title = 'Conecte-se com a comunidade';
+        subtitle = 'Veja dicas, eventos e pilotos perto de você.';
+        icon = LucideIcons.sparkles;
+        action = () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CommunitiesListScreen()),
+            );
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: AppColors.racingOrange.withOpacity(0.14),
+            ),
+            child: Icon(icon, color: AppColors.racingOrange),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+          TextButton(onPressed: action, child: const Text('Abrir')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestedCommunityCard(ThemeData theme, AppStateProvider appState) {
+    final userType = parseUserType(appState.user?.pilotProfile);
+    final suggestedTypes = switch (userType) {
+      UserType.casual => [CommunityType.lazer, CommunityType.zona],
+      UserType.diario => [CommunityType.zona, CommunityType.manutencao],
+      UserType.racing => [CommunityType.marca, CommunityType.lazer],
+      UserType.delivery => [CommunityType.delivery, CommunityType.zona],
+      _ => [CommunityType.geral, CommunityType.zona],
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: theme.cardColor,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Comunidades recomendadas para seu perfil',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: suggestedTypes
+                .map(
+                  (t) => ActionChip(
+                    label: Text(t.label),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CommunitiesListScreen(initialType: t),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openCreatePost() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final feed = Provider.of<SocialFeedProvider>(context, listen: false);
+    final user = appState.user;
+    if (user == null) return;
+    final post = await showModalBottomSheet<dynamic>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CreatePostModal(
+        user: user,
+        userBikeModel: appState.bike?.model ?? 'Moto',
+      ),
+    );
+    if (!mounted || post == null) return;
+    if (post is Post) {
+      feed.prependPost(post);
+    } else {
+      await _loadData();
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Publicação enviada com sucesso!')),
     );
   }
 
@@ -113,11 +309,9 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                   MaterialPageRoute(
                     builder: (_) => isOwnPost
                         ? const ProfilePage()
-                        : UserProfileScreen(
+                        : ProfilePage(
                             userId: post.userId,
                             userName: post.userName,
-                            userAvatarUrl: post.userAvatarUrl,
-                            userBikeModel: post.userBikeModel,
                           ),
                   ),
                 );
@@ -171,6 +365,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
 
   Future<void> _openCreateStory() async {
     final result = await CreateStorySheet.show(context);
+    if (!mounted) return;
     if (result is Map && result['openPreview'] == true) {
       await StoryPreviewEditScreen.push(
         context,
@@ -267,6 +462,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final feed = Provider.of<SocialFeedProvider>(context);
+    final appState = Provider.of<AppStateProvider>(context);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -329,6 +525,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: SingleChildScrollView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -351,6 +548,18 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
+                            builder: (_) => const ExplorarScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(LucideIcons.compass),
+                      tooltip: 'Explorar',
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
                             builder: (_) => const UserSearchScreen(),
                           ),
                         );
@@ -360,6 +569,112 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ChoiceChip(
+                              label: const Text('Para você'),
+                              selected: feed.feedTab == FeedTab.forYou,
+                              onSelected: (_) => feed.setFeedTab(FeedTab.forYou),
+                            ),
+                            const SizedBox(width: 8),
+                            ChoiceChip(
+                              label: const Text('Seguindo'),
+                              selected: feed.feedTab == FeedTab.following,
+                              onSelected: (_) => feed.setFeedTab(FeedTab.following),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ChoiceChip(
+                              label: const Text('Todos'),
+                              selected: feed.pilotFilter == FeedPilotFilter.all,
+                              onSelected: (_) => feed.setPilotFilter(FeedPilotFilter.all),
+                            ),
+                            const SizedBox(width: 8),
+                            ChoiceChip(
+                              label: const Text('Lazer'),
+                              selected: feed.pilotFilter == FeedPilotFilter.lazer,
+                              onSelected: (_) => feed.setPilotFilter(FeedPilotFilter.lazer),
+                            ),
+                            const SizedBox(width: 8),
+                            ChoiceChip(
+                              label: const Text('Delivery'),
+                              selected: feed.pilotFilter == FeedPilotFilter.delivery,
+                              onSelected: (_) => feed.setPilotFilter(FeedPilotFilter.delivery),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Consumer<NotificationsCountProvider>(
+                  builder: (context, countProvider, _) {
+                    final unread = countProvider.unreadCount;
+                    final hasEvent = _nearbyEventsCount > 0;
+                    if (unread == 0 && !hasEvent) {
+                      return const SizedBox.shrink();
+                    }
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: theme.colorScheme.primaryContainer.withOpacity(0.32),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(LucideIcons.sparkles, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Você tem $unread notificações não lidas${hasEvent ? ' e ${_nearbyEventsCount} evento perto' : ''}.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => unread > 0
+                                      ? const NotificationsScreen()
+                                      : const EventsScreen(),
+                                ),
+                              );
+                            },
+                            child: Text(unread > 0 ? 'Ver agora' : 'Ver evento'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildProfileDynamicCard(theme, appState),
+                const SizedBox(height: 10),
+                _buildSuggestedCommunityCard(theme, appState),
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 150,
@@ -429,6 +744,24 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                         onLike: () => feed.toggleLike(post),
                         onComments: () => _openComments(post),
                         onOptions: () => _showPostOptions(post),
+                        onUserTap: () {
+                          final appUser = Provider.of<AppStateProvider>(
+                            context,
+                            listen: false,
+                          ).user;
+                          final isOwn = appUser?.id == post.userId;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => isOwn
+                                  ? const ProfilePage()
+                                  : ProfilePage(
+                                      userId: post.userId,
+                                      userName: post.userName,
+                                    ),
+                            ),
+                          );
+                        },
                         onHashtagTap: (tag) {
                           feed.setHashtagFilter(tag);
                           _loadData();
@@ -443,10 +776,34 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                       );
                     },
                   ),
+                if (feed.loadingMore)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                if (!feed.loadingMore && !feed.hasMorePosts && feed.filteredPosts.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Center(
+                      child: Text(
+                        'Você chegou ao fim do feed.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 100),
               ],
             ),
           ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openCreatePost,
+        backgroundColor: AppColors.racingOrange,
+        icon: const Icon(LucideIcons.plus, color: Colors.white),
+        label: const Text(
+          'Publicar agora',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ),
       bottomNavigationBar: FloatingBottomNav(

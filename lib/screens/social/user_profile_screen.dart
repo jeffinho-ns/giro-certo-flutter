@@ -125,7 +125,23 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     final avatarUrl = profileUser?['photoUrl'] as String? ??
         widget.userAvatarUrl;
+    final loadedName = (profileUser?['name'] as String?)?.trim();
     final coverUrl = profileUser?['coverUrl'] as String?;
+    final bikesRaw = profileUser?['bikes'];
+    String? bikeFromProfile;
+    if (bikesRaw is List && bikesRaw.isNotEmpty) {
+      final firstBike = bikesRaw.first;
+      if (firstBike is Map<String, dynamic>) {
+        bikeFromProfile = (firstBike['model'] as String?)?.trim();
+      } else if (firstBike is Map) {
+        bikeFromProfile = firstBike['model']?.toString().trim();
+      }
+    }
+    final profileBikeModel = bikeFromProfile != null && bikeFromProfile.isNotEmpty
+        ? bikeFromProfile
+        : ((profileUser?['bikeModel'] as String?)?.trim().isNotEmpty == true
+            ? (profileUser?['bikeModel'] as String).trim()
+            : widget.userBikeModel);
     final followersCount = (profileUser?['followersCount'] as num?)?.toInt() ?? 0;
     final followingCount = (profileUser?['followingCount'] as num?)?.toInt() ?? 0;
 
@@ -189,21 +205,66 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                widget.userName,
+                (loadedName != null && loadedName.isNotEmpty)
+                    ? loadedName
+                    : widget.userName,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              if (widget.userBikeModel != null &&
-                  widget.userBikeModel!.isNotEmpty) ...[
+              if (profileBikeModel != null &&
+                  profileBikeModel.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  widget.userBikeModel!,
+                  profileBikeModel,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.textTheme.bodySmall?.color?.withOpacity(0.8),
                   ),
                 ),
               ],
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(LucideIcons.bike, size: 18, color: AppColors.racingOrange),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Garagem do piloto',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        (profileBikeModel != null && profileBikeModel.isNotEmpty)
+                            ? 'Moto principal: $profileBikeModel'
+                            : 'Ainda sem modelo de moto informado.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Use os momentos deste perfil para trocar dicas de peças, setup e estilização.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.textTheme.bodySmall?.color?.withOpacity(0.85),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -401,6 +462,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       },
                       onComments: () => _openComments(post),
                       onOptions: () {},
+                      onUserTap: () {},
                     );
                   },
                 ),

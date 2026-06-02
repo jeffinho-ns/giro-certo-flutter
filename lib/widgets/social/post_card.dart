@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:video_player/video_player.dart';
 import '../../models/post.dart';
 import '../../models/post_type.dart';
 import '../../models/reaction_type.dart';
@@ -15,6 +16,7 @@ class SocialPostCard extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onComments;
   final VoidCallback onOptions;
+  final VoidCallback? onUserTap;
   final void Function(ReactionType type)? onReaction;
   final void Function(String hashtag)? onHashtagTap;
 
@@ -26,6 +28,7 @@ class SocialPostCard extends StatelessWidget {
     required this.onLike,
     required this.onComments,
     required this.onOptions,
+    this.onUserTap,
     this.onReaction,
     this.onHashtagTap,
   });
@@ -48,38 +51,43 @@ class SocialPostCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                ClipOval(
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: post.userAvatarUrl != null &&
-                            post.userAvatarUrl!.isNotEmpty
-                        ? ApiImage(
-                            url: post.userAvatarUrl!,
-                            fit: BoxFit.cover,
-                          )
-                        : Container(
-                            color: AppColors.racingOrange.withOpacity(0.2),
-                            alignment: Alignment.center,
-                            child: Text(
-                              (post.userName.isNotEmpty
-                                      ? post.userName[0]
-                                      : '?')
-                                  .toUpperCase(),
-                              style: const TextStyle(
-                                color: AppColors.racingOrange,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
+                GestureDetector(
+                  onTap: onUserTap,
+                  child: ClipOval(
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: post.userAvatarUrl != null &&
+                              post.userAvatarUrl!.isNotEmpty
+                          ? ApiImage(
+                              url: post.userAvatarUrl!,
+                              fit: BoxFit.cover,
+                            )
+                          : Container(
+                              color: AppColors.racingOrange.withOpacity(0.2),
+                              alignment: Alignment.center,
+                              child: Text(
+                                (post.userName.isNotEmpty
+                                        ? post.userName[0]
+                                        : '?')
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  color: AppColors.racingOrange,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
                               ),
                             ),
-                          ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                  child: GestureDetector(
+                    onTap: onUserTap,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       Row(
                         children: [
                           Text(
@@ -164,7 +172,8 @@ class SocialPostCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 IconButton(
@@ -213,27 +222,10 @@ class SocialPostCard extends StatelessWidget {
                 onTap: () => _openFullScreenImage(context, post.images!.first),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: post.images!.first.startsWith('assets/')
-                      ? Image.asset(
-                          post.images!.first,
-                          height: 200,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              _placeholderImage(theme),
-                        )
-                      : SizedBox(
-                          height: 200,
-                          width: double.infinity,
-                          child: ApiImage(
-                            url: post.images!.first,
-                            fit: BoxFit.cover,
-                            height: 200,
-                            width: double.infinity,
-                            errorBuilder: (_, __, ___) =>
-                                _placeholderImage(theme),
-                          ),
-                        ),
+                  child: _InlinePostMedia(
+                    mediaUrl: post.images!.first,
+                    placeholderBuilder: () => _placeholderImage(theme),
+                  ),
                 ),
               ),
             ],
@@ -349,6 +341,7 @@ class SocialPostCard extends StatelessWidget {
   }
 
   static void _openFullScreenImage(BuildContext context, String imageUrl) {
+    final isVideo = _isVideoUrl(imageUrl);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
@@ -364,7 +357,12 @@ class SocialPostCard extends StatelessWidget {
                     child: SizedBox(
                       width: MediaQuery.of(context).size.width,
                       height: MediaQuery.of(context).size.height,
-                      child: imageUrl.startsWith('assets/')
+                      child: isVideo
+                          ? _InlineVideoPlayer(
+                              mediaUrl: imageUrl,
+                              autoplay: true,
+                            )
+                          : imageUrl.startsWith('assets/')
                           ? Image.asset(
                               imageUrl,
                               fit: BoxFit.contain,
@@ -400,6 +398,141 @@ class SocialPostCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  static bool _isVideoUrl(String url) {
+    final parsedPath = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
+    final u = parsedPath;
+    return u.endsWith('.mp4') ||
+        u.endsWith('.mov') ||
+        u.endsWith('.m4v') ||
+        u.endsWith('.webm');
+  }
+}
+
+class _InlinePostMedia extends StatelessWidget {
+  final String mediaUrl;
+  final Widget Function() placeholderBuilder;
+
+  const _InlinePostMedia({
+    required this.mediaUrl,
+    required this.placeholderBuilder,
+  });
+
+  bool _isVideoUrl(String url) {
+    final parsedPath = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
+    final u = parsedPath;
+    return u.endsWith('.mp4') ||
+        u.endsWith('.mov') ||
+        u.endsWith('.m4v') ||
+        u.endsWith('.webm');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isVideoUrl(mediaUrl)) {
+      return _InlineVideoPlayer(mediaUrl: mediaUrl, autoplay: true);
+    }
+    return mediaUrl.startsWith('assets/')
+        ? Image.asset(
+            mediaUrl,
+            height: 220,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => placeholderBuilder(),
+          )
+        : SizedBox(
+            height: 220,
+            width: double.infinity,
+            child: ApiImage(
+              url: mediaUrl,
+              fit: BoxFit.cover,
+              height: 220,
+              width: double.infinity,
+              errorBuilder: (_, __, ___) => placeholderBuilder(),
+            ),
+          );
+  }
+}
+
+class _InlineVideoPlayer extends StatefulWidget {
+  final String mediaUrl;
+  final bool autoplay;
+
+  const _InlineVideoPlayer({
+    required this.mediaUrl,
+    this.autoplay = true,
+  });
+
+  @override
+  State<_InlineVideoPlayer> createState() => _InlineVideoPlayerState();
+}
+
+class _InlineVideoPlayerState extends State<_InlineVideoPlayer> {
+  VideoPlayerController? _controller;
+  Future<void>? _initializeFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.mediaUrl.startsWith('http')) return;
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl));
+    _initializeFuture = _controller!.initialize().then((_) {
+      _controller!
+        ..setLooping(true)
+        ..setVolume(0);
+      if (widget.autoplay) {
+        _controller!.play();
+      }
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_controller == null || _initializeFuture == null) {
+      return Container(
+        height: 220,
+        color: Colors.black12,
+        alignment: Alignment.center,
+        child: const Icon(LucideIcons.videoOff),
+      );
+    }
+    return FutureBuilder<void>(
+      future: _initializeFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done ||
+            !_controller!.value.isInitialized) {
+          return Container(
+            height: 220,
+            color: Colors.black12,
+            alignment: Alignment.center,
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          );
+        }
+        final aspect = _controller!.value.aspectRatio;
+        final height = (MediaQuery.of(context).size.width / (aspect <= 0 ? 0.56 : aspect))
+            .clamp(180.0, 460.0);
+        return SizedBox(
+          height: height,
+          width: double.infinity,
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: _controller!.value.size.width,
+              height: _controller!.value.size.height,
+              child: VideoPlayer(_controller!),
+            ),
+          ),
+        );
+      },
     );
   }
 }

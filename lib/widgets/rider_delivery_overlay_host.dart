@@ -113,8 +113,8 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
     session.attach(
       riderId: user.id,
       isDeliveryPilot: appState.isDeliveryPilot,
-      isDeliveryApproved:
-          appState.deliveryModerationStatus == DeliveryModerationStatus.approved,
+      isDeliveryApproved: appState.deliveryModerationStatus ==
+          DeliveryModerationStatus.approved,
     );
   }
 
@@ -213,14 +213,17 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
         }
 
         final activeTrip = session.activeTripOrder;
+
         /// Hub mapa/menu (índice 2): não cobrir o FAB — o banner só ajuda ao sair para outras abas.
-        final hubIndex = 2;
+        const hubIndex = 2;
         final navIndex =
             context.select<NavigationProvider, int>((n) => n.currentIndex);
         final showResume = session.shouldShowResumeTrip &&
             activeTrip != null &&
             !TripNavigationExperiment.activeSessionOpen &&
             navIndex != hubIndex;
+        final bottomInset = MediaQuery.of(context).padding.bottom;
+        final resumeBottomSpacing = bottomInset + 86;
 
         return Stack(
           clipBehavior: Clip.none,
@@ -230,7 +233,7 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
               Positioned(
                 left: 16,
                 right: 16,
-                bottom: 24,
+                bottom: resumeBottomSpacing,
                 child: _ActiveTripResumeBanner(
                   order: activeTrip,
                   onResume: _resumeTrip,

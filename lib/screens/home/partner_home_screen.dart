@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -43,6 +44,9 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   int _totalOrders = 0;
   int _completedOrders = 0;
   double _totalRevenue = 0.0;
+  int _todayOrdersCount = 0;
+  int _avgDispatchMinutes = 0;
+  List<Map<String, dynamic>> _deliveryRanking = const [];
   StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
   Timer? _realtimeReloadDebounce;
   Timer? _partnerBackgroundSyncTimer;
@@ -243,11 +247,24 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     final completedOrders =
         allOrders.where((o) => o.status == DeliveryStatus.completed).toList();
     final today = DateTime.now();
+    final todayCreated = allOrders.where((o) =>
+        o.createdAt.year == today.year &&
+        o.createdAt.month == today.month &&
+        o.createdAt.day == today.day);
     final todayOrders = completedOrders.where((o) =>
         o.completedAt != null &&
         o.completedAt!.year == today.year &&
         o.completedAt!.month == today.month &&
         o.completedAt!.day == today.day);
+    final dispatchDurations = allOrders
+        .where((o) => o.acceptedAt != null)
+        .map((o) => o.acceptedAt!.difference(o.createdAt).inMinutes)
+        .where((m) => m >= 0 && m <= 180)
+        .toList();
+    final avgDispatch = dispatchDurations.isEmpty
+        ? 0
+        : (dispatchDurations.reduce((a, b) => a + b) / dispatchDurations.length)
+            .round();
     final revenue =
         todayOrders.fold<double>(0.0, (sum, order) => sum + order.totalValue);
 
@@ -260,6 +277,8 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
       _totalOrders = allOrders.length;
       _completedOrders = completedOrders.length;
       _totalRevenue = revenue;
+      _todayOrdersCount = todayCreated.length;
+      _avgDispatchMinutes = avgDispatch;
       _knownOrderIds
         ..clear()
         ..addAll(allOrders.map((order) => order.id));
@@ -283,9 +302,14 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
 
       final allOrders =
           await ApiService.getDeliveryOrders(storeId: user.partnerId);
+      final ranking = await ApiService.getDeliveryRanking(
+        partnerId: user.partnerId,
+        limit: 3,
+      );
       if (!mounted) return;
       setState(() {
         _myPartner = nextPartner;
+        _deliveryRanking = ranking;
       });
       _syncFromOrderList(allOrders);
       if (showBlockingLoader) {
@@ -433,6 +457,30 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
+  Future<void> _copyWhatsAppTemplate() async {
+    try {
+      final data = await ApiService.getWhatsAppOrderTemplate();
+      final template = (data['template'] as String?)?.trim() ?? '';
+      if (template.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Template de WhatsApp indisponível agora.')),
+        );
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: template));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Template copiado para enviar no WhatsApp.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível copiar o template agora.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -463,7 +511,11 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                           delegate: SliverChildListDelegate([
                             _buildGreeting(theme, storeName),
                             const SizedBox(height: 20),
+                            _buildQuickOrderAndWhatsAppBlock(theme),
+                            const SizedBox(height: 16),
                             _buildQuickStats(theme, isDark),
+                            const SizedBox(height: 16),
+                            _buildOperationalPanel(theme, isDark),
                             const SizedBox(height: 16),
                             _buildRevenueCard(theme, isDark),
                             const SizedBox(height: 20),
@@ -583,6 +635,40 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     );
   }
 
+  Widget _buildQuickOrderAndWhatsAppBlock(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: _openCreateOrder,
+              icon: const Icon(LucideIcons.plus, size: 18),
+              label: const Text('Criar pedido rápido'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.racingOrange,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton.icon(
+            onPressed: _copyWhatsAppTemplate,
+            icon: const Icon(LucideIcons.copy, size: 18),
+            label: const Text('Copiar WhatsApp'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRevenueCard(ThemeData theme, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -644,6 +730,102 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperationalPanel(ThemeData theme, bool isDark) {
+    final activeRiders = _activeOrders
+        .where((o) => (o.riderId ?? '').isNotEmpty)
+        .map((o) => o.riderId!)
+        .toSet()
+        .length;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.activity, size: 18, color: AppColors.racingOrange),
+              const SizedBox(width: 8),
+              Text(
+                'Painel operacional',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _opsChip('SLA médio', _avgDispatchMinutes > 0 ? '${_avgDispatchMinutes} min' : '—'),
+              _opsChip('Pedidos hoje', '$_todayOrdersCount'),
+              _opsChip('Motos ativas', '$activeRiders'),
+            ],
+          ),
+          if (_deliveryRanking.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Ranking de entregadores',
+              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            ..._deliveryRanking.asMap().entries.map((entry) {
+              final i = entry.key;
+              final row = entry.value;
+              final name = (row['name'] as String?) ?? 'Entregador';
+              final completed = (row['completedCount'] as num?)?.toInt() ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Text('${i + 1}.', style: const TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '$completed concl.',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppColors.statusOk,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _opsChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.racingOrange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
         ],
       ),
     );

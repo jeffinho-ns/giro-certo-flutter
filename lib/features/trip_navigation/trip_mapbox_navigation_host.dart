@@ -39,6 +39,8 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
   double? _lastRoutedDestLat;
   double? _lastRoutedDestLng;
   bool _lastGuidanceActive = false;
+  int _routeRetryCount = 0;
+  Timer? _routeRetryTimer;
   ThemeProvider? _themeProvider;
   bool? _lastIsDark;
   EdgeInsets? _lastViewportPadding;
@@ -85,8 +87,8 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
     final isDark = _themeProvider?.isDarkMode ??
         Theme.of(context).brightness == Brightness.dark;
     final themeChanged = _lastIsDark != isDark;
-    final paddingChanged = viewportPadding != null &&
-        viewportPadding != _lastViewportPadding;
+    final paddingChanged =
+        viewportPadding != null && viewportPadding != _lastViewportPadding;
     if (!themeChanged && !paddingChanged) return;
     _lastIsDark = isDark;
     if (viewportPadding != null) {
@@ -114,6 +116,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
     if (_trip.phase != DeliveryTripPhase.awaitingDeliveryProof) {
       unawaited(_mapController?.finishNavigation());
     }
+    _routeRetryTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
@@ -177,6 +180,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
         }
         break;
       case MapBoxEvent.route_building:
+        _routeRetryTimer?.cancel();
         widget.performance?.markRouteBuildStarted();
         if (mounted) {
           setState(() {
@@ -186,6 +190,7 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
         }
         break;
       case MapBoxEvent.route_built:
+        _routeRetryCount = 0;
         widget.performance?.markRouteBuilt();
         if (mounted) {
           setState(() {
@@ -195,7 +200,9 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
             _lastGuidanceActive = _trip.navigationGuidanceActive;
           });
         }
-        if (!_starting && _mapController != null && _trip.navigationGuidanceActive) {
+        if (!_starting &&
+            _mapController != null &&
+            _trip.navigationGuidanceActive) {
           _starting = true;
           try {
             await _mapController!.startNavigation(options: _options);
@@ -212,12 +219,19 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
         }
         break;
       case MapBoxEvent.route_build_failed:
+        _scheduleRouteRetry();
         if (mounted) {
           setState(() {
             _buildingRoute = false;
             _error =
-                'Nao foi possivel calcular a rota. Verifique o token e a ligacao.';
+                'Nao foi possivel calcular a rota. A app vai tentar novamente automaticamente.';
           });
+        }
+        break;
+      case MapBoxEvent.user_off_route:
+      case MapBoxEvent.failed_to_reroute:
+        if (_trip.navigationGuidanceActive && !_buildingRoute) {
+          unawaited(_startRouteBuild());
         }
         break;
       case MapBoxEvent.navigation_running:
@@ -252,10 +266,40 @@ class TripMapboxNavigationHostState extends State<TripMapboxNavigationHost> {
     ];
   }
 
+  bool _hasValidOrigin() {
+    final lat = _trip.latitude ?? _options.initialLatitude;
+    final lng = _trip.longitude ?? _options.initialLongitude;
+    if (lat == null || lng == null) return false;
+    if (!lat.isFinite || !lng.isFinite) return false;
+    if (lat.abs() > 90 || lng.abs() > 180) return false;
+    // Evita pedir rota em coordenada nula enquanto o GPS ainda não fixou.
+    if (lat == 0 && lng == 0) return false;
+    return true;
+  }
+
+  void _scheduleRouteRetry() {
+    if (!_trip.navigationGuidanceActive || _routeRetryCount >= 3) return;
+    _routeRetryCount += 1;
+    _routeRetryTimer?.cancel();
+    _routeRetryTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted || !_trip.navigationGuidanceActive) return;
+      if (_mapController == null || !_hasValidOrigin()) return;
+      unawaited(_startRouteBuild());
+    });
+  }
+
   Future<void> _startRouteBuild() async {
     if (!_trip.navigationGuidanceActive) return;
     final c = _mapController;
     if (c == null) return;
+    if (!_hasValidOrigin()) {
+      if (!mounted) return;
+      setState(() {
+        _buildingRoute = false;
+        _error = 'Aguardando GPS para calcular rota...';
+      });
+      return;
+    }
     setState(() {
       _error = null;
       _starting = false;

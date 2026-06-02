@@ -11,6 +11,7 @@ enum FeedTab { forYou, following }
 enum FeedPilotFilter { all, delivery, lazer }
 
 class SocialFeedProvider extends ChangeNotifier {
+  static const int _pageSize = 20;
   List<Post> _posts = [];
   List<Story> _stories = [];
   String _searchQuery = '';
@@ -20,6 +21,11 @@ class SocialFeedProvider extends ChangeNotifier {
   FeedOrder _feedOrder = FeedOrder.recent;
   FeedTab _feedTab = FeedTab.forYou;
   FeedPilotFilter _pilotFilter = FeedPilotFilter.all;
+  bool _loadingMore = false;
+  bool _hasMorePosts = true;
+  int _offset = 0;
+  String? _lastCurrentUserId;
+  String? _lastUserBikeModel;
 
   /// Posts e stories por userId (perfis específicos).
   final Map<String, List<Post>> _profilePosts = {};
@@ -36,6 +42,8 @@ class SocialFeedProvider extends ChangeNotifier {
   FeedOrder get feedOrder => _feedOrder;
   FeedTab get feedTab => _feedTab;
   FeedPilotFilter get pilotFilter => _pilotFilter;
+  bool get loadingMore => _loadingMore;
+  bool get hasMorePosts => _hasMorePosts;
 
   List<Post> getProfilePosts(String userId) =>
       List.from(_profilePosts[userId] ?? []);
@@ -102,6 +110,10 @@ class SocialFeedProvider extends ChangeNotifier {
     String? pilotTypeParam,
     String? hashtagParam,
   }) async {
+    _lastCurrentUserId = currentUserId;
+    _lastUserBikeModel = userBikeModel;
+    _offset = 0;
+    _hasMorePosts = true;
     _loading = true;
     notifyListeners();
     try {
@@ -112,11 +124,15 @@ class SocialFeedProvider extends ChangeNotifier {
           currentUserId: currentUserId,
           pilotTypeFilter: pilotType,
           hashtag: _hashtagFilter.isNotEmpty ? _hashtagFilter : null,
+          limit: _pageSize,
+          offset: 0,
         ),
         SocialService.getStories(),
         SocialService.getFollowingIds(),
       ]);
       _posts = results[0] as List<Post>;
+      _offset = _posts.length;
+      _hasMorePosts = (results[0] as List<Post>).length >= _pageSize;
       _stories = results[1] as List<Story>;
       _followingIds.clear();
       _followingIds.addAll((results[2] as List<String>));
@@ -125,6 +141,41 @@ class SocialFeedProvider extends ChangeNotifier {
     }
     _loading = false;
     notifyListeners();
+  }
+
+  Future<void> loadMorePosts() async {
+    if (_loading || _loadingMore || !_hasMorePosts) return;
+    _loadingMore = true;
+    notifyListeners();
+    try {
+      final pilotType = _pilotFilter == FeedPilotFilter.delivery
+          ? 'delivery'
+          : _pilotFilter == FeedPilotFilter.lazer
+              ? 'lazer'
+              : null;
+      final next = await SocialService.getPosts(
+        userBikeModel: _lastUserBikeModel,
+        currentUserId: _lastCurrentUserId,
+        pilotTypeFilter: pilotType,
+        hashtag: _hashtagFilter.isNotEmpty ? _hashtagFilter : null,
+        limit: _pageSize,
+        offset: _offset,
+      );
+      if (next.isEmpty) {
+        _hasMorePosts = false;
+      } else {
+        final existingIds = _posts.map((p) => p.id).toSet();
+        final merged = next.where((p) => !existingIds.contains(p.id)).toList();
+        _posts = [..._posts, ...merged];
+        _offset += next.length;
+        if (next.length < _pageSize) _hasMorePosts = false;
+      }
+    } catch (_) {
+      _hasMorePosts = false;
+    } finally {
+      _loadingMore = false;
+      notifyListeners();
+    }
   }
 
   int getLikeCount(Post post) {

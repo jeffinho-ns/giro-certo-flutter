@@ -21,6 +21,7 @@ class DeliveryDetailModal extends StatefulWidget {
   final VoidCallback? onOrderUpdated;
   final bool isRider;
   final bool showRouteHistory;
+
   /// `prepaid` | `postpaid_pix` | `authorize_capture` da API (`delivery_payment_collection_mode`).
   final String? partnerCollectionMode;
 
@@ -329,8 +330,7 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                 isDark ? AppColors.panelDarkLow : AppColors.panelLightLow,
               ],
             ),
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: AppColors.raisedPanelShadows(isDark),
           ),
           child: Column(
@@ -356,8 +356,7 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                AppColors.racingOrangeLight
-                                    .withOpacity(0.95),
+                                AppColors.racingOrangeLight.withOpacity(0.95),
                                 AppColors.racingOrangeDark.withOpacity(0.9),
                               ],
                             ),
@@ -383,8 +382,7 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                               ),
                               Text(
                                 order.storeName,
-                                style:
-                                    theme.textTheme.bodyMedium?.copyWith(
+                                style: theme.textTheme.bodyMedium?.copyWith(
                                   color: theme.textTheme.bodyMedium?.color
                                       ?.withOpacity(0.7),
                                 ),
@@ -402,7 +400,8 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                                   color: Colors.black.withOpacity(0.45),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: AppColors.neonGreen.withOpacity(0.35),
+                                    color:
+                                        AppColors.neonGreen.withOpacity(0.35),
                                   ),
                                 ),
                                 child: Column(
@@ -558,8 +557,7 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                                 children: [
                                   Text(
                                     'Observações',
-                                    style:
-                                        theme.textTheme.titleSmall?.copyWith(
+                                    style: theme.textTheme.titleSmall?.copyWith(
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -739,8 +737,7 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(
-                                color:
-                                    Colors.white.withOpacity(0.2),
+                                color: Colors.white.withOpacity(0.2),
                               ),
                             ),
                             elevation: 0,
@@ -769,20 +766,18 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
-                          onPressed: () => unawaited(_generateAndOpenCheckout()),
-                          icon: const Icon(LucideIcons.smartphone,
-                              size: 18),
+                          onPressed: () =>
+                              unawaited(_generateAndOpenCheckout()),
+                          icon: const Icon(LucideIcons.smartphone, size: 18),
                           label: Text(
                             _modeEffective == 'postpaid_pix'
                                 ? 'Cobrar cliente agora (PIX)'
                                 : 'Gerar cobrança ao cliente',
                           ),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor:
-                                AppColors.racingOrangeDark.withValues(
-                                    alpha: 0.95),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
+                            foregroundColor: AppColors.racingOrangeDark
+                                .withValues(alpha: 0.95),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
                             side: BorderSide(
                               color: AppColors.racingOrangeDark
                                   .withValues(alpha: 0.65),
@@ -913,8 +908,7 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
     Map<String, dynamic> payment,
   ) {
     final status = '${payment['status'] ?? '?'}'.toUpperCase();
-    Color bg =
-        Colors.orange.withValues(alpha: 0.22);
+    Color bg = Colors.orange.withValues(alpha: 0.22);
     if (status == 'PAID') {
       bg = AppColors.neonGreen.withValues(alpha: 0.25);
     } else if (status.contains('FAIL') ||
@@ -1029,12 +1023,14 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
               children: [
                 Icon(LucideIcons.user,
                     size: 16,
-                    color:
-                        theme.textTheme.bodyMedium?.color?.withOpacity(0.6)),
+                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6)),
                 const SizedBox(width: 4),
                 Text(
-                  recipientName,
-                  style: theme.textTheme.bodySmall,
+                  'Destinatário: $recipientName',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.neonGreen,
+                  ),
                 ),
               ],
             ),
@@ -1045,8 +1041,7 @@ class _DeliveryDetailModalState extends State<DeliveryDetailModal> {
               children: [
                 Icon(LucideIcons.phone,
                     size: 16,
-                    color:
-                        theme.textTheme.bodyMedium?.color?.withOpacity(0.6)),
+                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6)),
                 const SizedBox(width: 4),
                 Text(
                   recipientPhone,

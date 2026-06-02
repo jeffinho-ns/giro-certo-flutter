@@ -328,16 +328,48 @@ class _ProfilePageState extends State<ProfilePage>
     final plate = b['plate'] as String? ?? '';
     if (id.isEmpty && model.isEmpty && brand.isEmpty) return null;
     final vt = AppVehicleTypeApi.fromApi(b['vehicleType'] as String?);
+    final accessories = (b['accessories'] is List)
+        ? (b['accessories'] as List<dynamic>)
+            .map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toList()
+        : const <String>[];
+    final galleryRaw = b['galleryUrls'] ?? b['gallery_urls'];
+    final gallery = (galleryRaw is List)
+        ? galleryRaw
+            .map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toList()
+        : const <String>[];
+    final mergedPhotos = <String>{
+      if ((b['vehiclePhotoUrl'] as String?)?.isNotEmpty == true)
+        b['vehiclePhotoUrl'] as String,
+      if ((b['photoUrl'] as String?)?.isNotEmpty == true) b['photoUrl'] as String,
+      ...gallery,
+    }.toList();
     return Bike(
       id: id.isNotEmpty ? id : '1',
       model: model.isNotEmpty ? model : 'Moto',
       brand: brand.isNotEmpty ? brand : '',
       plate: plate,
-      currentKm: 0,
-      oilType: '',
-      frontTirePressure: 2.5,
-      rearTirePressure: 2.8,
-      vehiclePhotoUrl: b['vehiclePhotoUrl'] as String?,
+      currentKm: ((b['currentKm'] as num?) ?? (b['current_km'] as num?) ?? 0).toInt(),
+      oilType: (b['oilType'] as String?) ?? (b['oil_type'] as String?) ?? '',
+      frontTirePressure:
+          ((b['frontTirePressure'] as num?) ?? (b['front_tire_pressure'] as num?) ?? 2.5)
+              .toDouble(),
+      rearTirePressure:
+          ((b['rearTirePressure'] as num?) ?? (b['rear_tire_pressure'] as num?) ?? 2.8)
+              .toDouble(),
+      photoUrl: b['photoUrl'] as String? ?? b['photo_url'] as String?,
+      vehiclePhotoUrl:
+          b['vehiclePhotoUrl'] as String? ?? b['vehicle_photo_url'] as String?,
+      nickname: b['nickname'] as String?,
+      ridingStyle: b['ridingStyle'] as String? ?? b['riding_style'] as String?,
+      accessories: accessories,
+      nextUpgrade: b['nextUpgrade'] as String? ?? b['next_upgrade'] as String?,
+      preferredColor:
+          b['preferredColor'] as String? ?? b['preferred_color'] as String?,
+      additionalPhotos: mergedPhotos,
       vehicleType: vt ?? AppVehicleType.motorcycle,
     );
   }
@@ -359,11 +391,16 @@ class _ProfilePageState extends State<ProfilePage>
         : null;
     final bikesList = loaded?['bikes'] as List<dynamic>?;
     final firstBike = bikesList != null && bikesList.isNotEmpty ? bikesList.first as Map<String, dynamic>? : null;
-    final bikeModel = firstBike?['model'] as String? ?? widget.userBikeModel ?? appState.bike?.model ?? '';
+    final bikeModel = firstBike?['model'] as String? ??
+        widget.userBikeModel ??
+        (isOwnProfile ? appState.bike?.model : '') ??
+        '';
     final bike = isOwnProfile
         ? appState.bike
         : _bikeFromLoaded(firstBike);
     final pilotProfile = loaded?['pilotProfile'] as String? ?? appState.user?.pilotProfile;
+    final garageVisibility = (loaded?['garageVisibility'] as String? ?? 'PUBLIC')
+        .toUpperCase();
     final isDeliveryPilot = (pilotProfile ?? '').toUpperCase().trim() == 'TRABALHO';
     final pilotTypeLabel = isDeliveryPilot ? 'Delivery' : 'Piloto';
 
@@ -547,8 +584,24 @@ class _ProfilePageState extends State<ProfilePage>
           controller: _tabController,
           children: [
             _StorysTab(stories: userStories, profileUserId: userId),
-            _MomentosTab(posts: userPosts, profileUserId: userId),
-            _GaragemTab(bike: bike, bikeModel: bikeModel, isOwnProfile: isOwnProfile),
+            _MomentosTab(
+              posts: userPosts,
+              profileUserId: userId,
+              isOwnProfile: isOwnProfile,
+              onMomentsChanged: () async {
+                if (isOwnProfile) {
+                  await _loadOwnProfile();
+                } else {
+                  await _loadOtherUserProfile();
+                }
+              },
+            ),
+            _GaragemTab(
+              bike: bike,
+              bikeModel: bikeModel,
+              isOwnProfile: isOwnProfile,
+              garageVisibility: garageVisibility,
+            ),
           ],
         ),
       ),
@@ -984,8 +1037,15 @@ class _StorysTab extends StatelessWidget {
 class _MomentosTab extends StatefulWidget {
   final List<Post> posts;
   final String profileUserId;
+  final bool isOwnProfile;
+  final Future<void> Function()? onMomentsChanged;
 
-  const _MomentosTab({required this.posts, required this.profileUserId});
+  const _MomentosTab({
+    required this.posts,
+    required this.profileUserId,
+    required this.isOwnProfile,
+    this.onMomentsChanged,
+  });
 
   @override
   State<_MomentosTab> createState() => _MomentosTabState();
@@ -1012,6 +1072,47 @@ class _MomentosTabState extends State<_MomentosTab> {
       _moments = list;
       _loading = false;
     });
+  }
+
+  Future<void> _deleteMoment(Moment moment) async {
+    if (!widget.isOwnProfile) return;
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final currentUserId = appState.user?.id;
+    if (currentUserId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir momento?'),
+        content: const Text('Esse momento será removido do seu perfil e do feed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final ok = await MomentsService.deleteMoment(
+      momentId: moment.id,
+      currentUserId: currentUserId,
+    );
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível excluir o momento.')),
+      );
+      return;
+    }
+    setState(() {
+      _moments = _moments.where((m) => m.id != moment.id).toList();
+    });
+    await widget.onMomentsChanged?.call();
   }
 
   @override
@@ -1078,7 +1179,11 @@ class _MomentosTabState extends State<_MomentosTab> {
                 delegate: SliverChildBuilderDelegate(
                   (context, i) {
                     final m = _moments[i];
-                    return _MomentTile(moment: m);
+                    return _MomentTile(
+                      moment: m,
+                      canDelete: widget.isOwnProfile,
+                      onDelete: () => _deleteMoment(m),
+                    );
                   },
                   childCount: _moments.length,
                 ),
@@ -1142,7 +1247,14 @@ class _MomentosTabState extends State<_MomentosTab> {
 
 class _MomentTile extends StatelessWidget {
   final Moment moment;
-  const _MomentTile({required this.moment});
+  final bool canDelete;
+  final VoidCallback? onDelete;
+
+  const _MomentTile({
+    required this.moment,
+    this.canDelete = false,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1172,7 +1284,7 @@ class _MomentTile extends StatelessWidget {
             else
               Container(color: Colors.black87),
             Positioned(
-              right: 6,
+              right: canDelete ? 34 : 6,
               top: 6,
               child: Container(
                 padding: const EdgeInsets.all(4),
@@ -1187,6 +1299,31 @@ class _MomentTile extends StatelessWidget {
                 ),
               ),
             ),
+            if (canDelete)
+              Positioned(
+                right: 6,
+                top: 6,
+                child: Material(
+                  color: Colors.black.withOpacity(0.45),
+                  shape: const CircleBorder(),
+                  child: PopupMenuButton<String>(
+                    icon: const Icon(
+                      LucideIcons.moreVertical,
+                      size: 12,
+                      color: Colors.white,
+                    ),
+                    onSelected: (value) {
+                      if (value == 'delete') onDelete?.call();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text('Excluir momento'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (moment.originalAuthorName != null)
               Positioned(
                 left: 6,
@@ -1237,22 +1374,25 @@ class _GaragemTab extends StatelessWidget {
   final Bike? bike;
   final String bikeModel;
   final bool isOwnProfile;
+  final String garageVisibility;
 
   const _GaragemTab({
     this.bike,
     required this.bikeModel,
     required this.isOwnProfile,
+    this.garageVisibility = 'PUBLIC',
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isPrivate = garageVisibility.toUpperCase() == 'PRIVATE';
 
-    if (!isOwnProfile) {
+    if (!isOwnProfile && isPrivate) {
       return _EmptyState(
-        icon: LucideIcons.bike,
+        icon: LucideIcons.lock,
         title: 'Garagem privada',
-        subtitle: 'Só o dono pode ver a garagem.',
+        subtitle: 'Este piloto escolheu manter a garagem privada.',
       );
     }
 
@@ -1260,48 +1400,195 @@ class _GaragemTab extends StatelessWidget {
       return _EmptyState(
         icon: LucideIcons.bike,
         title: 'Ainda sem moto',
-        subtitle: 'Adiciona a tua moto na garagem.',
-        action: 'Ver garagem',
-        onAction: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const GarageScreen()),
-          );
-        },
+        subtitle: isOwnProfile
+            ? 'Crie sua garagem para começar a exibir setup, fotos e projeto.'
+            : 'Este piloto ainda não compartilhou a garagem.',
+        action: isOwnProfile ? 'Criar garagem agora' : null,
+        onAction: isOwnProfile
+            ? () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const GarageScreen()),
+                );
+              }
+            : null,
       );
     }
 
+    final publicBike = bike;
+    final media = <String>[
+      if (publicBike?.vehiclePhotoUrl?.isNotEmpty == true) publicBike!.vehiclePhotoUrl!,
+      if (publicBike?.photoUrl?.isNotEmpty == true) publicBike!.photoUrl!,
+      ...?publicBike?.additionalPhotos,
+    ].where((e) => e.trim().isNotEmpty).toSet().toList();
+    final accessories = publicBike?.accessories ?? const <String>[];
+    final projectPhases = <String>[
+      if (accessories.isNotEmpty) 'Fase 1 · Setup atual: ${accessories.take(4).join(', ')}',
+      if (publicBike?.nextUpgrade?.trim().isNotEmpty == true)
+        'Fase 2 · Próxima modificação: ${publicBike!.nextUpgrade!.trim()}',
+      if ((publicBike?.preferredColor ?? '').trim().isNotEmpty)
+        'Fase 3 · Estética/cor: ${publicBike!.preferredColor!.trim()}',
+    ];
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (bike != null) ...[
-            _BikeCard(bike: bike!),
-            const SizedBox(height: 16),
+          if (publicBike != null) ...[
+            _BikeCard(bike: publicBike, isPublicView: !isOwnProfile, media: media),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _GarageInfoChip(icon: LucideIcons.gauge, label: '${publicBike.currentKm} km'),
+                  _GarageInfoChip(
+                    icon: LucideIcons.droplet,
+                    label: publicBike.oilType.trim().isNotEmpty ? publicBike.oilType : 'Óleo não informado',
+                  ),
+                  _GarageInfoChip(
+                    icon: LucideIcons.sparkles,
+                    label: publicBike.ridingStyle?.trim().isNotEmpty == true
+                        ? publicBike.ridingStyle!
+                        : 'Estilo livre',
+                  ),
+                  _GarageInfoChip(
+                    icon: LucideIcons.palette,
+                    label: publicBike.preferredColor?.trim().isNotEmpty == true
+                        ? publicBike.preferredColor!
+                        : 'Cor não informada',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (projectPhases.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Projeto em fases',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    ...projectPhases.asMap().entries.map(
+                          (entry) => _GarageProjectStep(
+                            index: entry.key + 1,
+                            text: entry.value,
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+            if (accessories.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Peças e acessórios',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: accessories
+                          .map((a) => Chip(label: Text(a), avatar: const Icon(LucideIcons.wrench, size: 14)))
+                          .toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (media.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Galeria do projeto',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 10),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: media.length.clamp(0, 9),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: 1,
+                      ),
+                      itemBuilder: (_, i) {
+                        final p = media[i];
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: p.startsWith('http')
+                              ? ApiImage(url: p, fit: BoxFit.cover)
+                              : Image.asset(
+                                  p,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: theme.dividerColor,
+                                    child: const Icon(LucideIcons.image),
+                                  ),
+                                ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
           if (bikeModel.isNotEmpty && bike == null)
             Text(
               bikeModel,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
           const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const GarageScreen()),
-              );
-            },
-            icon: const Icon(LucideIcons.bike),
-            label: const Text('Ver garagem completa'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.racingOrange,
-              side: const BorderSide(color: AppColors.racingOrange),
+          if (isOwnProfile)
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const GarageScreen()),
+                );
+              },
+              icon: const Icon(LucideIcons.bike),
+              label: const Text('Editar minha garagem completa'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.racingOrange,
+                side: const BorderSide(color: AppColors.racingOrange),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1310,72 +1597,164 @@ class _GaragemTab extends StatelessWidget {
 
 class _BikeCard extends StatelessWidget {
   final Bike bike;
+  final bool isPublicView;
+  final List<String> media;
 
-  const _BikeCard({required this.bike});
+  const _BikeCard({
+    required this.bike,
+    this.isPublicView = false,
+    this.media = const [],
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cover = media.isNotEmpty ? media.first : null;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      height: 230,
       decoration: BoxDecoration(
-        color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+        color: theme.cardColor,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.racingOrange.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(LucideIcons.bike, color: AppColors.racingOrange),
+          if (cover != null)
+            (cover.startsWith('http')
+                ? ApiImage(url: cover, fit: BoxFit.cover)
+                : Image.asset(
+                    cover,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(color: theme.dividerColor),
+                  ))
+          else
+            Container(color: theme.colorScheme.surfaceContainerHighest),
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Color(0xCC000000)],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ),
+          Positioned(
+            left: 14,
+            right: 14,
+            bottom: 14,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  bike.nickname?.trim().isNotEmpty == true
+                      ? bike.nickname!
+                      : '${bike.brand} ${bike.model}',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Row(
                   children: [
-                    Text(
-                      '${bike.brand} ${bike.model}',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.35),
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                    ),
-                    if (bike.isBicycle)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          'Bicicleta · entregas',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: AppColors.statusWarning,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      child: Text(
+                        bike.isBicycle ? 'Bike delivery' : 'Projeto de moto',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    Text(
-                      bike.isBicycle
-                          ? 'Nº ${bike.plate.isEmpty ? '—' : bike.plate}'
-                          : bike.plate,
-                      style: theme.textTheme.bodySmall,
                     ),
+                    if (!isPublicView && bike.plate.trim().isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        bike.plate,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            '${bike.currentKm} km',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.textTheme.bodySmall?.color,
+        ],
+      ),
+    );
+  }
+}
+
+class _GarageInfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _GarageInfoChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.racingOrange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppColors.racingOrange),
+          const SizedBox(width: 5),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _GarageProjectStep extends StatelessWidget {
+  final int index;
+  final String text;
+
+  const _GarageProjectStep({required this.index, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 11,
+            backgroundColor: AppColors.racingOrange.withOpacity(0.2),
+            child: Text(
+              '$index',
+              style: const TextStyle(
+                color: AppColors.racingOrange,
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
         ],

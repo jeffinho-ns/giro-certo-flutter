@@ -24,6 +24,9 @@ import '../../widgets/rider_dashboard.dart';
 import 'delivery_order_card.dart';
 import 'create_delivery_modal.dart';
 import 'delivery_detail_modal.dart';
+import '../communities/communities_list_screen.dart';
+import '../social/events_screen.dart';
+import '../../models/community_type.dart';
 
 class DeliveryScreen extends StatefulWidget {
   /// Quando `true` e o usuário for lojista, abre o modal de criar pedido
@@ -47,7 +50,9 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   Timer? _marketPulseTimer;
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<Map<String, dynamic>>? _deliveryRealtimeSubscription;
+  StreamSubscription<Map<String, dynamic>>? _deliveryNotificationSubscription;
   Timer? _realtimeReloadDebounce;
+  final Set<String> _shownCancelledOrderNotices = <String>{};
 
   // Localização real do usuário (fallback inicial em São Paulo)
   double _userLatitude = -23.5505;
@@ -66,6 +71,9 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   ZoneTimeWindow _timeWindow = ZoneTimeWindow.now;
   bool _showOrderPins = true;
   bool _showPartnerPins = true;
+  int _suggestedFollowsCount = 0;
+  int _nearbyEventsCount = 0;
+  static const double _dailyGoal = 120.0;
 
   // Determina se é motociclista ou lojista baseado no usuário logado
   bool get _isRiderMode {
@@ -83,6 +91,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     _maybeLoadPartnerPaySettings();
     _marketPulseTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       _loadOrders(silent: true);
+      _loadDeliveryPhase2Hints();
     });
     if (widget.autoOpenCreate) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -212,6 +221,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     _marketPulseTimer?.cancel();
     _positionSubscription?.cancel();
     _deliveryRealtimeSubscription?.cancel();
+    _deliveryNotificationSubscription?.cancel();
     _realtimeReloadDebounce?.cancel();
     _tabController?.dispose();
     _mapController?.dispose();
@@ -267,12 +277,60 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     if (userId == null) return;
     RealtimeService.instance.connect(userId);
     _deliveryRealtimeSubscription =
-        RealtimeService.instance.onDeliveryStatusChanged.listen((_) {
+        RealtimeService.instance.onDeliveryStatusChanged.listen((payload) {
+      _maybeShowCancelledByStoreMessage(payload);
       _realtimeReloadDebounce?.cancel();
       _realtimeReloadDebounce = Timer(const Duration(milliseconds: 500), () {
         if (mounted) _loadOrders(silent: true);
       });
     });
+    _deliveryNotificationSubscription =
+        RealtimeService.instance.onNotification.listen((payload) {
+      if (!_isRiderMode) return;
+      if ((payload['type'] as String?) != 'delivery_cancelled_by_store') return;
+      final orderId = payload['orderId']?.toString();
+      if (orderId == null || orderId.isEmpty) return;
+      if (_shownCancelledOrderNotices.contains(orderId)) return;
+      _shownCancelledOrderNotices.add(orderId);
+      if (!mounted) return;
+      final message = (payload['body'] as String?) ??
+          'A corrida foi cancelada pelo lojista. O valor ficará retido no sistema para análise financeira.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.orange.shade700,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    });
+  }
+
+  void _maybeShowCancelledByStoreMessage(Map<String, dynamic> payload) {
+    if (!_isRiderMode) return;
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final riderId = appState.user?.id;
+    if (riderId == null) return;
+    final orderRaw = payload['order'];
+    if (orderRaw is! Map<String, dynamic>) return;
+    try {
+      final order = ApiService.riderDeliveryOrderFromJson(orderRaw);
+      if (order.status != DeliveryStatus.cancelled) return;
+      if (order.riderId != null && order.riderId != riderId) return;
+      if (_shownCancelledOrderNotices.contains(order.id)) return;
+      _shownCancelledOrderNotices.add(order.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Corrida cancelada pelo lojista. O valor ficará retido no sistema para análise financeira.',
+          ),
+          backgroundColor: Colors.orange.shade700,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    } catch (_) {
+      // Payload pode vir parcial; ignora.
+    }
   }
 
   Future<void> _maybeLoadPartnerPaySettings() async {
@@ -349,6 +407,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
           _isLoading = false;
           _hasLoadedOnce = true;
         });
+        await _loadDeliveryPhase2Hints();
       } else {
         // Lojista: buscar apenas seus próprios pedidos
         if (user.partnerId != null) {
@@ -406,6 +465,21 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         }
       }
     }
+  }
+
+  Future<void> _loadDeliveryPhase2Hints() async {
+    if (!_isRiderMode || !mounted) return;
+    try {
+      final results = await Future.wait([
+        ApiService.getSuggestedFollows(limit: 6),
+        ApiService.getEvents(limit: 3),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _suggestedFollowsCount = (results[0] as List).length;
+        _nearbyEventsCount = (results[1] as List).length;
+      });
+    } catch (_) {}
   }
 
   Future<void> _acceptOrder(DeliveryOrder order) async {
@@ -504,6 +578,15 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         .where((o) =>
             !_isRiderMode || !riderSession.isOrderHiddenFromRiderLists(o.id))
         .toList();
+    final today = DateTime.now();
+    final todayEarnings = _completedOrders
+        .where((o) =>
+            o.completedAt != null &&
+            o.completedAt!.year == today.year &&
+            o.completedAt!.month == today.month &&
+            o.completedAt!.day == today.day)
+        .fold<double>(0.0, (sum, o) => sum + o.deliveryFee);
+    final goalProgress = (todayEarnings / _dailyGoal).clamp(0.0, 1.0);
 
     return Scaffold(
       body: Column(
@@ -515,6 +598,13 @@ class _DeliveryScreenState extends State<DeliveryScreen>
           ),
 
           if (_isRiderMode) _buildOnlineToggle(),
+          if (_isRiderMode)
+            _buildDeliveryPhase2Card(
+              context,
+              theme,
+              todayEarnings: todayEarnings,
+              goalProgress: goalProgress,
+            ),
 
           // Tabs - Verificar que TabController existe e tem o tamanho correto
           if (_tabController != null &&
@@ -647,6 +737,92 @@ class _DeliveryScreenState extends State<DeliveryScreen>
                               color: primaryColor,
                             ),
                           ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeliveryPhase2Card(
+    BuildContext context,
+    ThemeData theme, {
+    required double todayEarnings,
+    required double goalProgress,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: theme.cardColor,
+        border: Border.all(
+          color: AppColors.statusOk.withOpacity(0.22),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.wallet, size: 18, color: AppColors.statusOk),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Meta do dia: R\$ ${_dailyGoal.toStringAsFixed(0)}',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+              Text(
+                'R\$ ${todayEarnings.toStringAsFixed(2)}',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: AppColors.statusOk,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: goalProgress,
+              minHeight: 8,
+              backgroundColor: theme.dividerColor.withOpacity(0.25),
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.statusOk),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Comunidade ativa: $_suggestedFollowsCount entregadores sugeridos • $_nearbyEventsCount eventos próximos',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.78),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const CommunitiesListScreen(initialType: CommunityType.delivery),
+                  ),
+                ),
+                icon: const Icon(LucideIcons.users, size: 16),
+                label: const Text('Comunidade Delivery'),
+              ),
+              TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EventsScreen()),
+                ),
+                icon: const Icon(LucideIcons.mapPin, size: 16),
+                label: const Text('Ver eventos'),
+              ),
+            ],
           ),
         ],
       ),

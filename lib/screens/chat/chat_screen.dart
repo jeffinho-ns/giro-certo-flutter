@@ -102,6 +102,7 @@ class _ChatListFromService extends StatefulWidget {
 
 class _ChatListFromServiceState extends State<_ChatListFromService> {
   List<ChatConversation> _items = [];
+  String _searchQuery = '';
   bool _loading = true;
 
   @override
@@ -125,9 +126,39 @@ class _ChatListFromServiceState extends State<_ChatListFromService> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    return _ChatList(
-      items: _items,
-      emptyMessage: widget.emptyMessage,
+    final q = _searchQuery.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? _items
+        : _items.where((c) {
+            return c.title.toLowerCase().contains(q) ||
+                c.lastMessagePreview.toLowerCase().contains(q);
+          }).toList();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+          child: TextField(
+            onChanged: (value) => setState(() => _searchQuery = value),
+            decoration: InputDecoration(
+              hintText: 'Buscar conversa ou amigo',
+              prefixIcon: const Icon(LucideIcons.search, size: 18),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              isDense: true,
+            ),
+          ),
+        ),
+        Expanded(
+          child: _ChatList(
+            items: filtered,
+            emptyMessage: q.isEmpty
+                ? widget.emptyMessage
+                : 'Nenhuma conversa encontrada para "$_searchQuery".',
+          ),
+        ),
+      ],
     );
   }
 }

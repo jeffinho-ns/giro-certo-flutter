@@ -44,6 +44,32 @@ class _CreatePostModalState extends State<CreatePostModal> {
     setState(() => _imagePaths.removeAt(index));
   }
 
+  void _appendTag(String tag) {
+    final current = _controller.text.trimRight();
+    final alreadyContains = RegExp('(^|\\s)${RegExp.escape(tag)}(\\s|\$)', caseSensitive: false)
+        .hasMatch(current);
+    if (alreadyContains) return;
+    final sep = current.isEmpty ? '' : ' ';
+    _controller.text = '$current$sep$tag';
+    _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+    setState(() {});
+  }
+
+  List<String> _suggestedTagsForProfile() {
+    final profile = widget.user.pilotProfile.toUpperCase().trim();
+    switch (profile) {
+      case 'TRABALHO':
+        return const ['#rotadodia', '#vidadedelivery', '#pecas', '#dicapilotagem'];
+      case 'URBANO':
+        return const ['#trajeto', '#dicapilotagem', '#economia', '#setup'];
+      case 'PISTA':
+        return const ['#trackday', '#setup', '#freio', '#modificacao'];
+      case 'FIM_DE_SEMANA':
+      default:
+        return const ['#rolefimdesemana', '#estrada', '#estilizacao', '#pecas'];
+    }
+  }
+
   static IconData _iconForPostType(PostType t) {
     switch (t) {
       case PostType.dica:
@@ -213,6 +239,32 @@ class _CreatePostModalState extends State<CreatePostModal> {
                           fillColor: theme.cardColor,
                           contentPadding: const EdgeInsets.all(16),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Sugestões para interagir com a comunidade',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _suggestedTagsForProfile().map((tag) {
+                          return ActionChip(
+                            label: Text(tag),
+                            onPressed: () => _appendTag(tag),
+                            backgroundColor: AppColors.racingOrange.withOpacity(0.12),
+                            labelStyle: TextStyle(
+                              color: AppColors.racingOrange,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        }).toList(),
                       ),
                       if (_imagePaths.isNotEmpty) ...[
                         const SizedBox(height: 12),

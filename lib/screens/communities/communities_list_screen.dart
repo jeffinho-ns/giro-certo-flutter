@@ -11,7 +11,8 @@ import '../social/create_community_modal.dart';
 import 'community_detail_screen.dart';
 
 class CommunitiesListScreen extends StatefulWidget {
-  const CommunitiesListScreen({super.key});
+  final CommunityType? initialType;
+  const CommunitiesListScreen({super.key, this.initialType});
 
   @override
   State<CommunitiesListScreen> createState() => _CommunitiesListScreenState();
@@ -27,6 +28,7 @@ class _CommunitiesListScreenState extends State<CommunitiesListScreen> {
   @override
   void initState() {
     super.initState();
+    _typeFilter = widget.initialType;
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 

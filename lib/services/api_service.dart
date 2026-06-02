@@ -415,6 +415,35 @@ class ApiService {
     }
   }
 
+  static Future<String> getMyGarageVisibility() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/me/social-settings'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return 'PUBLIC';
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final raw = (data['garageVisibility'] as String? ?? 'PUBLIC').toUpperCase();
+      return raw == 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+    } catch (_) {
+      return 'PUBLIC';
+    }
+  }
+
+  static Future<String> updateMyGarageVisibility(String visibility) async {
+    final normalized = visibility.toUpperCase() == 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+    final response = await http.patch(
+      Uri.parse('$baseUrl/users/me/social-settings'),
+      headers: await _getHeaders(),
+      body: json.encode({'garageVisibility': normalized}),
+    );
+    _handleError(response);
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final raw = (data['garageVisibility'] as String? ?? normalized).toUpperCase();
+    return raw == 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+  }
+
   /// Buscar utilizadores por nome ou handle (ex: @jeff)
   static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     final q = query.trim().replaceFirst(RegExp(r'^@'), '');
@@ -1378,12 +1407,37 @@ class ApiService {
 
   static Bike _bikeFromJson(Map<String, dynamic> json) {
     final galleryRaw = json['galleryUrls'];
-    final gallery = galleryRaw is List
-        ? galleryRaw
-            .whereType<String>()
-            .where((s) => s.trim().isNotEmpty)
-            .toList()
-        : <String>[];
+    List<String> gallery;
+    if (galleryRaw is List) {
+      gallery = galleryRaw
+          .whereType<String>()
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+    } else if (galleryRaw is String && galleryRaw.trim().isNotEmpty) {
+      final raw = galleryRaw.trim();
+      if (raw.startsWith('[') && raw.endsWith(']')) {
+        try {
+          final parsed = jsonDecode(raw) as List<dynamic>;
+          gallery = parsed
+              .map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        } catch (_) {
+          gallery = <String>[];
+        }
+      } else if (raw.startsWith('{') && raw.endsWith('}')) {
+        final inner = raw.substring(1, raw.length - 1);
+        gallery = inner
+            .split(',')
+            .map((e) => e.trim().replaceAll(RegExp(r'^"|"$'), ''))
+            .where((s) => s.isNotEmpty)
+            .toList();
+      } else {
+        gallery = <String>[];
+      }
+    } else {
+      gallery = <String>[];
+    }
     final extras = [
       if (json['photoUrl'] is String &&
           (json['photoUrl'] as String).trim().isNotEmpty)
@@ -1405,10 +1459,14 @@ class ApiService {
       id: (json['id'] as String?) ?? 'bike-1',
       model: (json['model'] as String?) ?? 'Moto',
       brand: (json['brand'] as String?) ?? '',
-      plate: (json['plate'] as String?) ?? (json['plate_license'] as String?) ?? '',
-      currentKm: ((json['currentKm'] as num?) ?? (json['current_km'] as num?) ?? 0)
-          .toInt(),
-      oilType: (json['oilType'] as String?) ?? (json['oil_type'] as String?) ?? '',
+      plate: (json['plate'] as String?) ??
+          (json['plate_license'] as String?) ??
+          '',
+      currentKm:
+          ((json['currentKm'] as num?) ?? (json['current_km'] as num?) ?? 0)
+              .toInt(),
+      oilType:
+          (json['oilType'] as String?) ?? (json['oil_type'] as String?) ?? '',
       frontTirePressure: ((json['frontTirePressure'] as num?) ??
               (json['front_tire_pressure'] as num?) ??
               2.5)
@@ -1418,17 +1476,19 @@ class ApiService {
               2.8)
           .toDouble(),
       photoUrl: (json['photoUrl'] as String?) ?? (json['photo_url'] as String?),
-      vehiclePhotoUrl:
-          (json['vehiclePhotoUrl'] as String?) ?? (json['vehicle_photo_url'] as String?),
+      vehiclePhotoUrl: (json['vehiclePhotoUrl'] as String?) ??
+          (json['vehicle_photo_url'] as String?),
       nickname: json['nickname'] as String?,
-      ridingStyle: (json['ridingStyle'] as String?) ?? (json['riding_style'] as String?),
+      ridingStyle:
+          (json['ridingStyle'] as String?) ?? (json['riding_style'] as String?),
       accessories: (json['accessories'] as List<dynamic>?)
               ?.whereType<String>()
               .toList() ??
           const [],
-      nextUpgrade: (json['nextUpgrade'] as String?) ?? (json['next_upgrade'] as String?),
-      preferredColor:
-          (json['preferredColor'] as String?) ?? (json['preferred_color'] as String?),
+      nextUpgrade:
+          (json['nextUpgrade'] as String?) ?? (json['next_upgrade'] as String?),
+      preferredColor: (json['preferredColor'] as String?) ??
+          (json['preferred_color'] as String?),
       additionalPhotos: extras,
       vehicleType: vt,
     );
@@ -2019,6 +2079,24 @@ class ApiService {
     return list.map((e) => e as Map<String, dynamic>).toList();
   }
 
+  /// Buscar um post específico por ID (usado no deep link de notificações).
+  static Future<Map<String, dynamic>?> getPostById(String postId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/posts/$postId'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return null;
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final post = data['post'];
+      if (post is Map<String, dynamic>) return post;
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Upload de imagem para post. Retorna URL completa.
   /// Só retorna quando o upload for concluído com sucesso; em caso de falha lança exceção.
   /// Usa bytes + Content-Type (image/*) para o servidor aceitar o ficheiro.
@@ -2195,10 +2273,35 @@ class ApiService {
     }
   }
 
-  /// Tipo MIME da imagem a partir da extensão do ficheiro (o servidor exige image/*).
+  /// Buscar story por ID para deep link de notificações.
+  static Future<Map<String, dynamic>?> getStoryById(String storyId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/stories/$storyId'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404) return null;
+      _handleError(response);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final story = data['story'];
+      return story is Map<String, dynamic> ? story : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Tipo MIME a partir da extensão do ficheiro (imagem/vídeo).
   static MediaType _mediaTypeFromFilename(String filename) {
     final ext = filename.split('.').last.toLowerCase();
     switch (ext) {
+      case 'mp4':
+        return MediaType('video', 'mp4');
+      case 'mov':
+        return MediaType('video', 'quicktime');
+      case 'm4v':
+        return MediaType('video', 'x-m4v');
+      case 'webm':
+        return MediaType('video', 'webm');
       case 'png':
         return MediaType('image', 'png');
       case 'gif':

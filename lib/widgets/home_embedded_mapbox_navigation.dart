@@ -37,13 +37,14 @@ class HomeEmbeddedMapboxNavigationState
   MapBoxNavigationViewController? _controller;
   late MapBoxOptions _options;
   String? _banner;
-  bool _routeBuilt = false;
   bool _navigating = false;
   bool _starting = false;
   bool _buildingRoute = false;
   String? _error;
   double? _distanceRemainingM;
   double? _durationRemainingS;
+  int _routeRetryCount = 0;
+  Timer? _routeRetryTimer;
   ThemeProvider? _themeProvider;
   bool? _lastIsDark;
 
@@ -108,9 +109,25 @@ class HomeEmbeddedMapboxNavigationState
   @override
   void dispose() {
     _themeProvider?.removeListener(_onAppThemeChanged);
+    _routeRetryTimer?.cancel();
     unawaited(_controller?.finishNavigation());
     _controller?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeEmbeddedMapboxNavigation oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final destinationChanged = oldWidget.order.status != widget.order.status ||
+        oldWidget.order.id != widget.order.id;
+    final originChanged = oldWidget.originLatitude != widget.originLatitude ||
+        oldWidget.originLongitude != widget.originLongitude;
+    if (!destinationChanged && !originChanged) return;
+    _options.initialLatitude = widget.originLatitude;
+    _options.initialLongitude = widget.originLongitude;
+    if (_controller != null) {
+      unawaited(_startRouteBuild());
+    }
   }
 
   Future<void> recenterNavigation() async {
@@ -134,6 +151,7 @@ class HomeEmbeddedMapboxNavigationState
         }
         break;
       case MapBoxEvent.route_building:
+        _routeRetryTimer?.cancel();
         if (mounted) {
           setState(() {
             _buildingRoute = true;
@@ -142,9 +160,9 @@ class HomeEmbeddedMapboxNavigationState
         }
         break;
       case MapBoxEvent.route_built:
+        _routeRetryCount = 0;
         if (mounted) {
           setState(() {
-            _routeBuilt = true;
             _buildingRoute = false;
           });
         }
@@ -166,15 +184,21 @@ class HomeEmbeddedMapboxNavigationState
         }
         break;
       case MapBoxEvent.route_build_failed:
+        _scheduleRouteRetry();
         if (mounted) {
           const msg =
-              'Nao foi possivel calcular a rota no Mapbox. Verifique o token e a ligacao.';
+              'Nao foi possivel calcular a rota no Mapbox. A app vai tentar novamente automaticamente.';
           setState(() {
-            _routeBuilt = false;
             _buildingRoute = false;
             _error = msg;
           });
           widget.onNavigationFailed?.call();
+        }
+        break;
+      case MapBoxEvent.user_off_route:
+      case MapBoxEvent.failed_to_reroute:
+        if (!_buildingRoute && _controller != null) {
+          unawaited(_startRouteBuild());
         }
         break;
       case MapBoxEvent.navigation_running:
@@ -187,7 +211,6 @@ class HomeEmbeddedMapboxNavigationState
       case MapBoxEvent.navigation_cancelled:
         if (mounted) {
           setState(() {
-            _routeBuilt = false;
             _navigating = false;
           });
         }
@@ -213,7 +236,34 @@ class HomeEmbeddedMapboxNavigationState
     return [origin, dest];
   }
 
+  bool _hasValidOrigin() {
+    final lat = widget.originLatitude;
+    final lng = widget.originLongitude;
+    if (!lat.isFinite || !lng.isFinite) return false;
+    if (lat.abs() > 90 || lng.abs() > 180) return false;
+    if (lat == 0 && lng == 0) return false;
+    return true;
+  }
+
+  void _scheduleRouteRetry() {
+    if (_routeRetryCount >= 3 || _controller == null) return;
+    _routeRetryCount += 1;
+    _routeRetryTimer?.cancel();
+    _routeRetryTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted || _controller == null || !_hasValidOrigin()) return;
+      unawaited(_startRouteBuild());
+    });
+  }
+
   Future<void> _startRouteBuild() async {
+    if (!_hasValidOrigin()) {
+      if (!mounted) return;
+      setState(() {
+        _buildingRoute = false;
+        _error = 'Aguardando GPS para calcular rota...';
+      });
+      return;
+    }
     setState(() {
       _error = null;
       _starting = false;

@@ -25,6 +25,8 @@ class DeliveryTripController extends ChangeNotifier {
       : _order = initialOrder.withoutInternalCode() {
     _phase = _phaseFromStatus(initialOrder.status);
     RealtimeService.instance.setNavigationMode(true, orderId: initialOrder.id);
+    _deliveryStatusSubscription =
+        RealtimeService.instance.onDeliveryStatusChanged.listen(_onDeliveryStatusChanged);
   }
 
   DeliveryOrder _order;
@@ -36,6 +38,7 @@ class DeliveryTripController extends ChangeNotifier {
   double? _longitude;
   MapBoxNavigationViewController? mapboxController;
   StreamSubscription<Position>? _positionSubscription;
+  StreamSubscription<Map<String, dynamic>>? _deliveryStatusSubscription;
 
   DeliveryOrder get order => _order;
   DeliveryTripPhase get phase => _phase;
@@ -319,6 +322,27 @@ class DeliveryTripController extends ChangeNotifier {
     }
   }
 
+  void _onDeliveryStatusChanged(Map<String, dynamic> payload) {
+    final orderRaw = payload['order'];
+    final orderId = orderRaw is Map
+        ? orderRaw['id']?.toString()
+        : (payload['orderId']?.toString() ?? payload['id']?.toString());
+    if (orderId == null || orderId != _order.id) return;
+
+    final statusRaw = orderRaw is Map
+        ? orderRaw['status']?.toString()
+        : payload['status']?.toString();
+    if (statusRaw?.toLowerCase() != 'cancelled') return;
+
+    _order = _order.copyWith(status: DeliveryStatus.cancelled);
+    _errorMessage = payload['body']?.toString() ??
+        'Corrida cancelada pelo lojista. O valor ficará retido no sistema para análise financeira.';
+    RealtimeService.instance.setNavigationMode(false);
+    RealtimeService.instance.leaveOrderTracking(_order.id);
+    unawaited(_endNavigationGuidance());
+    notifyListeners();
+  }
+
   String _humanizeError(Object error) {
     final raw = error.toString();
     if (raw.startsWith('Exception: ')) {
@@ -334,6 +358,7 @@ class DeliveryTripController extends ChangeNotifier {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _deliveryStatusSubscription?.cancel();
     super.dispose();
   }
 }

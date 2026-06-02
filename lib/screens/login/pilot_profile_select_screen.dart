@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../models/pilot_profile.dart';
+import '../../models/community_type.dart';
+import '../communities/communities_list_screen.dart';
 import '../../widgets/onboarding_form_widgets.dart';
 import '../../utils/colors.dart';
 
@@ -100,6 +102,10 @@ class _PilotProfileSelectScreenState extends State<PilotProfileSelectScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              if (_selected != null) ...[
+                _RecommendedCommunitiesPreview(profile: _selected!),
+                const SizedBox(height: 12),
+              ],
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 250),
                 child: OnboardingPrimaryButton(
@@ -293,3 +299,56 @@ const List<_PilotProfileOption> _profileOptions = [
     accent: AppColors.statusWarning,
   ),
 ];
+
+class _RecommendedCommunitiesPreview extends StatelessWidget {
+  final PilotProfileType profile;
+
+  const _RecommendedCommunitiesPreview({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final suggestions = switch (profile) {
+      PilotProfileType.casual => [CommunityType.lazer, CommunityType.zona],
+      PilotProfileType.diario => [CommunityType.zona, CommunityType.manutencao],
+      PilotProfileType.racing => [CommunityType.marca, CommunityType.lazer],
+      PilotProfileType.delivery => [CommunityType.delivery, CommunityType.zona],
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: theme.cardColor,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Comunidades recomendadas para você',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: suggestions
+                .map(
+                  (s) => ActionChip(
+                    label: Text(s.label),
+                    avatar: const Icon(LucideIcons.users, size: 14),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CommunitiesListScreen(initialType: s),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}

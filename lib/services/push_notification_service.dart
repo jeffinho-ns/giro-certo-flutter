@@ -27,6 +27,62 @@ const AndroidNotificationChannel _channel = AndroidNotificationChannel(
   enableVibration: true,
 );
 
+const AndroidNotificationDetails _androidForegroundNotificationDetails =
+    AndroidNotificationDetails(
+  _channelId,
+  _channelName,
+  channelDescription: _channelDescription,
+  importance: Importance.max,
+  priority: Priority.high,
+  playSound: true,
+  enableVibration: true,
+);
+
+const DarwinNotificationDetails _iosForegroundNotificationDetails =
+    DarwinNotificationDetails(
+  presentAlert: true,
+  presentBadge: true,
+  presentSound: true,
+);
+
+/// Handler obrigatório para receber push com app em background/terminado.
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  final plugin = FlutterLocalNotificationsPlugin();
+  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const ios = DarwinInitializationSettings(requestAlertPermission: false);
+  await plugin.initialize(
+    settings: const InitializationSettings(android: android, iOS: ios),
+  );
+  final androidImpl = plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+  await androidImpl?.createNotificationChannel(_channel);
+
+  final data = message.data.isNotEmpty
+      ? Map<String, dynamic>.from(message.data)
+      : <String, dynamic>{};
+  final type = data['type'] as String?;
+  final title = message.notification?.title ??
+      (type == 'delivery_offer' ? 'Nova corrida disponível' : 'Giro Certo');
+  final body = message.notification?.body ??
+      (type == 'delivery_offer'
+          ? 'Abra o app para aceitar a corrida agora.'
+          : 'Você recebeu uma nova notificação.');
+
+  await plugin.show(
+    id: DateTime.now().millisecondsSinceEpoch.remainder(0x7FFFFFFF),
+    title: title,
+    body: body,
+    notificationDetails: const NotificationDetails(
+      android: _androidForegroundNotificationDetails,
+      iOS: _iosForegroundNotificationDetails,
+    ),
+    payload: json.encode(data),
+  );
+}
+
 /// Se o Firebase foi inicializado (necessário para FCM).
 bool get isFirebaseReady => _firebaseReady;
 
@@ -34,6 +90,7 @@ bool get isFirebaseReady => _firebaseReady;
 Future<bool> initializeFirebase() async {
   try {
     await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     _firebaseReady = true;
     // Log simples para validar inicialização do Firebase/FCM.
     // ignore: avoid_print
@@ -100,6 +157,12 @@ Future<void> requestPermissionAndRegisterToken() async {
       // ignore: avoid_print
       print('⚠️ FCM Token vazio ou nulo');
     }
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+      if (newToken.isEmpty) return;
+      try {
+        await ApiService.registerFcmToken(newToken);
+      } catch (_) {}
+    });
   } catch (e) {
     // ignore: avoid_print
     print('❌ Erro ao registar token FCM: $e');
@@ -145,20 +208,14 @@ void _navigateFromNotification(Map<String, dynamic> data) {
 Future<void> _showForegroundNotification(String title, String body, Map<String, dynamic> data) async {
   try {
     final payload = json.encode(data);
-    const android = AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDescription,
-      importance: Importance.high,
-      priority: Priority.high,
-      playSound: true,
-    );
-    const ios = DarwinNotificationDetails(presentAlert: true, presentSound: true);
     await _localNotifications.show(
       id: DateTime.now().millisecondsSinceEpoch.remainder(0x7FFFFFFF),
       title: title,
       body: body,
-      notificationDetails: const NotificationDetails(android: android, iOS: ios),
+      notificationDetails: const NotificationDetails(
+        android: _androidForegroundNotificationDetails,
+        iOS: _iosForegroundNotificationDetails,
+      ),
       payload: payload,
     );
   } catch (_) {}

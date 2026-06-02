@@ -1,11 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../services/api_service.dart';
+import '../../services/social_service.dart';
 import '../../services/realtime_service.dart';
 import '../../utils/colors.dart';
 import '../../providers/notifications_count_provider.dart';
+import '../../providers/app_state_provider.dart';
+import '../momentos/momentos_screen.dart';
+import 'post_comments_sheet.dart';
+import 'story_view_screen.dart';
 import 'profile_page.dart';
 
 /// Filtro da lista de notificações.
@@ -30,6 +36,165 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String? _error;
   _NotificationFilter _filter = _NotificationFilter.unread;
   StreamSubscription<Map<String, dynamic>>? _notificationSub;
+
+  Map<String, dynamic> _readMetadata(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = json.decode(raw);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<void> _openPostTargetById(String postId) async {
+    final currentUserId = Provider.of<AppStateProvider>(context, listen: false).user?.id;
+    final post = await SocialService.getPostById(
+      postId,
+      currentUserId: currentUserId,
+    );
+    if (!mounted) return;
+    if (post == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Publicação não encontrada.')),
+      );
+      return;
+    }
+    final isMoment = post.hashtags.any((h) => h.toLowerCase() == 'momento');
+    if (isMoment) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MomentosScreen(initialMomentId: post.id),
+        ),
+      );
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => PostCommentsSheet(post: post),
+    );
+  }
+
+  Future<void> _openStoryTargetById(String storyId) async {
+    final story = await SocialService.getStoryById(storyId);
+    if (!mounted) return;
+    if (story == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Story não encontrada.')),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StoryViewScreen(
+          stories: [story],
+          initialIndex: 0,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAlertTap(Map<String, dynamic> alert) async {
+    final metadata = _readMetadata(alert['metadata']);
+    String? firstNonEmpty(List<dynamic> values) {
+      for (final v in values) {
+        final s = v?.toString().trim();
+        if (s != null && s.isNotEmpty) return s;
+      }
+      return null;
+    }
+
+    final postId = firstNonEmpty([
+      metadata['postId'],
+      metadata['targetPostId'],
+      alert['postId'],
+      alert['targetPostId'],
+    ]);
+    final storyId = firstNonEmpty([
+      metadata['storyId'],
+      metadata['targetStoryId'],
+      alert['storyId'],
+      alert['targetStoryId'],
+    ]);
+    final momentId = firstNonEmpty([
+      metadata['momentId'],
+      metadata['targetMomentId'],
+      alert['momentId'],
+      alert['targetMomentId'],
+    ]);
+    final targetType =
+        firstNonEmpty([metadata['targetType'], metadata['entityType'], alert['type']])
+            ?.toLowerCase();
+    final genericTargetId = firstNonEmpty(
+      [metadata['targetId'], metadata['entityId'], alert['targetId']],
+    );
+    final actorId = (metadata['requesterId'] ??
+            metadata['authorId'] ??
+            metadata['userId'])
+        ?.toString();
+    final actorName =
+        (metadata['requesterName'] ?? metadata['authorName'] ?? metadata['userName'])
+            ?.toString();
+
+    if (postId != null && postId.isNotEmpty) {
+      await _openPostTargetById(postId);
+      return;
+    }
+    if (storyId != null && storyId.isNotEmpty) {
+      await _openStoryTargetById(storyId);
+      return;
+    }
+    if (momentId != null && momentId.isNotEmpty) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MomentosScreen(initialMomentId: momentId),
+        ),
+      );
+      return;
+    }
+    if (genericTargetId != null && targetType != null) {
+      if (targetType.contains('post')) {
+        await _openPostTargetById(genericTargetId);
+        return;
+      }
+      if (targetType.contains('story')) {
+        await _openStoryTargetById(genericTargetId);
+        return;
+      }
+      if (targetType.contains('moment')) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => MomentosScreen(initialMomentId: genericTargetId),
+          ),
+        );
+        return;
+      }
+    }
+    if (actorId != null && actorId.isNotEmpty) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProfilePage(
+            userId: actorId,
+            userName: actorName,
+          ),
+        ),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Não foi possível abrir o conteúdo desta notificação.')),
+    );
+  }
 
   Future<void> _loadAlerts() async {
     setState(() {
@@ -244,16 +409,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 final type = a['type'] as String?;
                                 final title = a['title'] as String? ?? 'Alerta';
                                 final body = a['body'] as String? ?? a['message'] as String?;
-                                final metadata = a['metadata'] as Map<String, dynamic>?;
+                                final metadata = _readMetadata(a['metadata']);
                                 final isFollowRequest = type == 'FOLLOW_REQUEST';
                                 final requestId = isFollowRequest
-                                    ? (metadata?['followRequestId'] as String?)
+                                    ? metadata['followRequestId']?.toString()
                                     : null;
                                 final requesterName = isFollowRequest
-                                    ? (metadata?['requesterName'] as String?)
+                                    ? metadata['requesterName']?.toString()
                                     : null;
                                 final requesterId = isFollowRequest
-                                    ? (metadata?['requesterId'] as String?)
+                                    ? metadata['requesterId']?.toString()
                                     : null;
 
                                 return Dismissible(
@@ -335,7 +500,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                         );
                                         return;
                                       }
-                                      // Qualquer outra notificação: marcar como lida e remover da lista
+                                      await _handleAlertTap(a);
+                                      if (!mounted) return;
                                       await _markAsReadAndRemove(a);
                                     },
                                   ),

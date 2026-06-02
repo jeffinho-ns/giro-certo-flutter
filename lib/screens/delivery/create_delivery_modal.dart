@@ -28,7 +28,11 @@ class CreateDeliveryModal extends StatefulWidget {
 
 class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   final _formKey = GlobalKey<FormState>();
-  final _deliveryAddressController = TextEditingController();
+  final _streetController = TextEditingController();
+  final _numberController = TextEditingController();
+  final _neighborhoodController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _complementController = TextEditingController();
   final _recipientNameController = TextEditingController();
   final _recipientPhoneController = TextEditingController();
   final _recipientCpfController = TextEditingController();
@@ -47,13 +51,18 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
   bool _isSearchingAddress = false;
   bool _isLoadingQuote = false;
   String? _selectedPlaceId;
+  String? _selectedFormattedAddress;
   String _sessionToken = '';
   Timer? _addressDebounce;
   String? _addressSearchError;
 
   @override
   void dispose() {
-    _deliveryAddressController.dispose();
+    _streetController.dispose();
+    _numberController.dispose();
+    _neighborhoodController.dispose();
+    _cityController.dispose();
+    _complementController.dispose();
     _recipientNameController.dispose();
     _recipientPhoneController.dispose();
     _recipientCpfController.dispose();
@@ -61,6 +70,28 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
     _valueController.dispose();
     _addressDebounce?.cancel();
     super.dispose();
+  }
+
+  String _composeSearchQuery() {
+    final parts = <String>[
+      _streetController.text.trim(),
+      _numberController.text.trim(),
+      _neighborhoodController.text.trim(),
+      _cityController.text.trim(),
+    ].where((p) => p.isNotEmpty).toList();
+    return parts.join(', ');
+  }
+
+  String _composeStructuredAddress() {
+    final street = _streetController.text.trim();
+    final number = _numberController.text.trim();
+    final neighborhood = _neighborhoodController.text.trim();
+    final city = _cityController.text.trim();
+    final complement = _complementController.text.trim();
+
+    final base = '$street, $number - $neighborhood, $city';
+    if (complement.isEmpty) return base;
+    return '$base (Compl.: $complement)';
   }
 
   Future<void> _fetchQuote() async {
@@ -145,10 +176,13 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
     }
 
     // Validar endereço de entrega
-    if (_deliveryAddressController.text.trim().isEmpty) {
+    if (_streetController.text.trim().isEmpty ||
+        _numberController.text.trim().isEmpty ||
+        _neighborhoodController.text.trim().isEmpty ||
+        _cityController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Informe o endereço de entrega'),
+          content: Text('Preencha rua, número, bairro e cidade da entrega'),
           backgroundColor: Colors.red,
         ),
       );
@@ -227,7 +261,7 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
       // Debug: log antes de criar
       print(
           '🚀 Criar pedido: store=${_selectedStore!.id} ${_selectedStore!.name}, '
-          'endereço=${_deliveryAddressController.text.trim().length} chars, '
+          'endereço=${_composeStructuredAddress().length} chars, '
           'valor=$value, taxa=${_deliveryFee}');
 
       // Criar pedido na API
@@ -237,7 +271,7 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
         storeAddress: _selectedStore!.address,
         storeLatitude: _selectedStore!.latitude,
         storeLongitude: _selectedStore!.longitude,
-        deliveryAddress: _deliveryAddressController.text.trim(),
+        deliveryAddress: _composeStructuredAddress(),
         deliveryLatitude: _deliveryLatitude!,
         deliveryLongitude: _deliveryLongitude!,
         recipientName: _recipientNameController.text.trim().isNotEmpty
@@ -423,13 +457,14 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
 
   void _startAddressSearch(String value) {
     _addressDebounce?.cancel();
-    final term = value.trim();
+    final term = value.trim().isEmpty ? _composeSearchQuery() : value.trim();
     if (term.length < 3) {
       setState(() {
         _addressPredictions.clear();
         _isSearchingAddress = false;
         _addressSearchError = null;
         _selectedPlaceId = null;
+        _selectedFormattedAddress = null;
         _deliveryLatitude = null;
         _deliveryLongitude = null;
         _deliveryFee = null;
@@ -479,9 +514,8 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
     setState(() {
       _selectedPlaceId = placeId;
       _addressSearchError = null;
-      _deliveryAddressController.text =
-          (place['formattedAddress'] as String?) ??
-              _deliveryAddressController.text;
+      _selectedFormattedAddress =
+          (place['formattedAddress'] as String?) ?? _composeSearchQuery();
       _deliveryLatitude = (place['latitude'] as num).toDouble();
       _deliveryLongitude = (place['longitude'] as num).toDouble();
       _addressPredictions.clear();
@@ -808,11 +842,16 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                                   final store = _selectedStore!;
                                   final addr = store.address.trim();
                                   setState(() {
-                                    _deliveryAddressController.text = addr;
+                                    _streetController.text = addr;
+                                    _numberController.clear();
+                                    _neighborhoodController.clear();
+                                    _cityController.clear();
+                                    _complementController.clear();
                                     _deliveryLatitude = store.latitude;
                                     _deliveryLongitude = store.longitude;
                                     _selectedPlaceId =
                                         'coords:${store.latitude},${store.longitude}|${Uri.encodeComponent(addr.isEmpty ? 'Endereço da loja' : addr)}';
+                                    _selectedFormattedAddress = addr;
                                     _addressPredictions.clear();
                                     _addressSearchError = null;
                                   });
@@ -828,23 +867,112 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                         ),
                         const SizedBox(height: 8),
                         TextFormField(
-                          controller: _deliveryAddressController,
+                          controller: _streetController,
                           decoration: InputDecoration(
-                            hintText: 'Ex: Rua Exemplo, 123 - Bairro, Cidade',
+                            hintText: 'Rua / Avenida',
                             prefixIcon: Icon(LucideIcons.mapPin),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Informe o endereço de entrega';
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Informe a rua';
                             }
                             return null;
                           },
-                          onChanged: (value) {
+                          onChanged: (_) {
                             _selectedPlaceId = null;
-                            _startAddressSearch(value);
+                            _selectedFormattedAddress = null;
+                            _startAddressSearch(_composeSearchQuery());
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                controller: _numberController,
+                                keyboardType: TextInputType.text,
+                                decoration: InputDecoration(
+                                  labelText: 'Número',
+                                  prefixIcon: Icon(LucideIcons.hash),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Número';
+                                  }
+                                  return null;
+                                },
+                                onChanged: (_) {
+                                  _selectedPlaceId = null;
+                                  _selectedFormattedAddress = null;
+                                  _startAddressSearch(_composeSearchQuery());
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 3,
+                              child: TextFormField(
+                                controller: _complementController,
+                                decoration: InputDecoration(
+                                  labelText: 'Complemento (opcional)',
+                                  prefixIcon: Icon(LucideIcons.building),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _neighborhoodController,
+                          decoration: InputDecoration(
+                            labelText: 'Bairro',
+                            prefixIcon: Icon(LucideIcons.map),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Informe o bairro';
+                            }
+                            return null;
+                          },
+                          onChanged: (_) {
+                            _selectedPlaceId = null;
+                            _selectedFormattedAddress = null;
+                            _startAddressSearch(_composeSearchQuery());
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _cityController,
+                          decoration: InputDecoration(
+                            labelText: 'Cidade',
+                            prefixIcon: Icon(LucideIcons.home),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Informe a cidade';
+                            }
+                            return null;
+                          },
+                          onChanged: (_) {
+                            _selectedPlaceId = null;
+                            _selectedFormattedAddress = null;
+                            _startAddressSearch(_composeSearchQuery());
                           },
                         ),
                         if (_isSearchingAddress)
@@ -877,14 +1005,25 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
-                            'Toque numa sugestão da lista para fixar o endereço. '
-                            'Só digitar rua e número sem escolher não cria o pedido.',
+                            'Após preencher os campos, escolha uma sugestão válida do Google. '
+                            'Isso garante rua, número e bairro corretos para o motoboy.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.textTheme.bodyMedium?.color
                                   ?.withValues(alpha: 0.7),
                             ),
                           ),
                         ),
+                        if (_selectedFormattedAddress != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Endereço validado: $_selectedFormattedAddress',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppColors.neonGreen,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         if (_addressPredictions.isNotEmpty)
                           Container(
                             margin: const EdgeInsets.only(top: 8),
@@ -931,7 +1070,7 @@ class _CreateDeliveryModalState extends State<CreateDeliveryModal> {
                         if (!_isSearchingAddress &&
                             _addressPredictions.isEmpty &&
                             _addressSearchError == null &&
-                            _deliveryAddressController.text.trim().length >= 3)
+                            _composeSearchQuery().trim().length >= 3)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
