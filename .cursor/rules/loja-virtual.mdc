@@ -1,0 +1,22 @@
+---
+description: Iniciativa Loja Virtual (Giro Certo) - guia e alertas obrigatórios
+alwaysApply: true
+---
+
+# Loja Virtual (Giro Certo) — leia antes de agir
+
+**Leia `PLANO_LOJA_VIRTUAL.md` e `AGENTS.md` na raiz antes de qualquer tarefa.** São a fonte de verdade (arquitetura, modelo de dados, roadmap, segurança).
+
+## Sempre alerte o usuário (em português) antes de prosseguir quando:
+
+- For commitar/adicionar segredos ou lixo de build: **`android/app/google-services.json`**, `android/.gradle/`, `android/local.properties`, `.env`, keystores. Bloqueie e avise; revise o `.gitignore`.
+- For fazer operação de git destrutiva (o `main` remoto costuma estar à frente e há WIP que conflita) → prefira `stash` a descartar; sempre avise.
+- For confiar no app como barreira de segurança → **segurança mora na API**.
+- For usar preço/valor calculado no cliente → validado pela API.
+- For expor localização do motoboy fora da janela de entrega ativa.
+
+## Padrões deste repo (giro-certo-flutter)
+
+- Flutter + provider. `ApiService` em `lib/services/api_service.dart`; Socket.IO em `realtime_service.dart`; Mapbox em `lib/features/trip_navigation/`.
+- Na loja virtual, o app **mexe pouco**: foco em `PartnerHomeScreen` exibir itens do pedido (via `storeOrderId`). Aceite/despacho seguem idênticos.
+- Só commitar/push quando o usuário pedir. Nunca `git add .` cego.
