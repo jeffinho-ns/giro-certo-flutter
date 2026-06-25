@@ -49,6 +49,11 @@ app.*.map.json
 android/.gradle/
 android/local.properties
 
+# Segredos / credenciais (NÃO versionar)
+android/app/google-services.json
+google-services.json
+**/google-services.json
+
 # Mapbox iOS: copiar ios/MapboxKeys.xcconfig.example para ios/MapboxKeys.xcconfig
 ios/MapboxKeys.xcconfig
 
