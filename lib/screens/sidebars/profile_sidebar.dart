@@ -14,6 +14,7 @@ import '../social/profile_page.dart';
 import '../help/help_screen.dart';
 import '../store/store_products_screen.dart';
 import '../store/store_promotions_screen.dart';
+import '../store/store_appearance_screen.dart';
 import '../../providers/navigation_provider.dart';
 
 class ProfileSidebar extends StatefulWidget {
@@ -344,6 +345,24 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                             MaterialPageRoute(
                               builder: (context) =>
                                   const StorePromotionsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _buildMenuItem(
+                        context: context,
+                        theme: theme,
+                        icon: LucideIcons.palette,
+                        title: 'Personalizar loja',
+                        subtitle: 'Capa, logo, cor e descrição',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const StoreAppearanceScreen(),
                             ),
                           );
                         },

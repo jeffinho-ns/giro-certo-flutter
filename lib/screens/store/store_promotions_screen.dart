@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/store_banner.dart';
 import '../../services/api_service.dart';
 import '../../widgets/api_image.dart';
+import '../../widgets/store_image_picker.dart';
 
 /// Gestão de promoções (banners) do lojista, exibidos na vitrine pública.
 class StorePromotionsScreen extends StatefulWidget {
@@ -310,10 +311,11 @@ class _BannerFormSheetState extends State<_BannerFormSheet> {
               Text(_error!, style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 8),
             ],
-            TextField(
-              controller: _imageCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'URL da imagem', border: OutlineInputBorder()),
+            StoreImagePicker(
+              label: 'Imagem do banner',
+              value: _imageCtrl.text,
+              aspect: 'wide',
+              onChanged: (v) => setState(() => _imageCtrl.text = v),
             ),
             const SizedBox(height: 12),
             TextField(

@@ -3,6 +3,7 @@ import '../../models/store_category.dart';
 import '../../models/store_product.dart';
 import '../../services/api_service.dart';
 import '../../widgets/api_image.dart';
+import '../../widgets/store_image_picker.dart';
 
 /// Gestão do cardápio do lojista: categorias e produtos.
 /// Toda a autorização/validação é feita na API (escopo por partnerId via token).
@@ -412,11 +413,11 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _photoCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'URL da foto (opcional)',
-                  border: OutlineInputBorder()),
+            StoreImagePicker(
+              label: 'Foto do produto (opcional)',
+              value: _photoCtrl.text,
+              aspect: 'wide',
+              onChanged: (v) => setState(() => _photoCtrl.text = v),
             ),
             const SizedBox(height: 8),
             SwitchListTile(

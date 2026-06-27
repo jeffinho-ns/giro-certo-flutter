@@ -1554,6 +1554,109 @@ class ApiService {
     _handleError(response);
   }
 
+  /// Upload de imagem da loja (produto/banner/logo/capa).
+  /// Reusa o endpoint de imagens (Firebase) e devolve a URL absoluta.
+  /// [entityId] é só o escopo de pasta; o vínculo real é salvar a URL no recurso.
+  static Future<String> uploadStoreImage(String filePath,
+      {String entityId = 'store'}) async {
+    final token = await _getToken();
+    if (token == null) {
+      throw Exception('Sessão expirada. Faça login novamente.');
+    }
+
+    final path = filePath.replaceFirst(RegExp(r'^file://'), '');
+    final file = File(path);
+    if (!file.existsSync()) {
+      throw Exception('Arquivo não encontrado. Selecione a imagem novamente.');
+    }
+    final bytes = await file.readAsBytes();
+    String filename = path.split(RegExp(r'[/\\]')).last;
+    if (filename.isEmpty) filename = 'image.jpg';
+
+    final uri = Uri.parse('$baseUrl/images/upload/partner/$entityId');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: filename,
+      contentType: _mediaTypeFromFilename(filename),
+    ));
+
+    final streamed = await request.send().timeout(
+          _requestTimeout,
+          onTimeout: () =>
+              throw Exception('Tempo esgotado ao enviar a imagem.'),
+        );
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode >= 400) {
+      String msg = 'Falha ao enviar a imagem (${response.statusCode}).';
+      try {
+        final body = json.decode(response.body) as Map<String, dynamic>?;
+        final err = body?['error']?.toString();
+        if (err != null && err.isNotEmpty) msg = err;
+      } catch (_) {}
+      throw Exception(msg);
+    }
+
+    final data = json.decode(response.body) as Map<String, dynamic>?;
+    final image = data?['image'] as Map<String, dynamic>?;
+    final url = image?['url'] as String? ?? data?['url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw Exception('Resposta do servidor sem URL. Tente novamente.');
+    }
+    if (url.startsWith('http')) return url;
+    final origin = Uri.parse(baseUrl).origin;
+    return '$origin${url.startsWith('/') ? url : '/$url'}';
+  }
+
+  // --- Personalização da loja (aparência) ---
+
+  static Future<Map<String, dynamic>> getStoreAppearance() async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/appearance'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout,
+            onTimeout: () =>
+                throw Exception('Tempo esgotado ao buscar a loja'));
+    _handleError(response);
+    final data = json.decode(response.body);
+    final appearance = data['appearance'];
+    return appearance is Map
+        ? Map<String, dynamic>.from(appearance)
+        : <String, dynamic>{};
+  }
+
+  static Future<Map<String, dynamic>> updateStoreAppearance({
+    String? tradingName,
+    String? description,
+    String? photoUrl,
+    String? coverUrl,
+    String? themeColor,
+  }) async {
+    final body = <String, dynamic>{};
+    if (tradingName != null) body['tradingName'] = tradingName;
+    if (description != null) body['description'] = description;
+    if (photoUrl != null) body['photoUrl'] = photoUrl;
+    if (coverUrl != null) body['coverUrl'] = coverUrl;
+    if (themeColor != null) body['themeColor'] = themeColor;
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/store/manage/appearance'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    final appearance = data['appearance'];
+    return appearance is Map
+        ? Map<String, dynamic>.from(appearance)
+        : <String, dynamic>{};
+  }
+
   static Future<Partner> getMyPartner() async {
     try {
       final response = await http
