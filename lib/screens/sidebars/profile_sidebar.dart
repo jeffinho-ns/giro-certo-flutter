@@ -12,6 +12,8 @@ import '../../widgets/api_image.dart';
 import '../settings/settings_screen.dart';
 import '../social/profile_page.dart';
 import '../help/help_screen.dart';
+import '../store/store_products_screen.dart';
+import '../store/store_promotions_screen.dart';
 import '../../providers/navigation_provider.dart';
 
 class ProfileSidebar extends StatefulWidget {
@@ -309,6 +311,44 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                         );
                       },
                     ),
+                    // Gestão da loja (apenas lojistas)
+                    if (isPartner) ...[
+                      const SizedBox(height: 8),
+                      _buildMenuItem(
+                        context: context,
+                        theme: theme,
+                        icon: LucideIcons.package,
+                        title: 'Meus Produtos',
+                        subtitle: 'Gerenciar cardápio e categorias',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const StoreProductsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _buildMenuItem(
+                        context: context,
+                        theme: theme,
+                        icon: LucideIcons.megaphone,
+                        title: 'Promoções',
+                        subtitle: 'Banners da vitrine',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const StorePromotionsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                     // Ocultar "Minha Garagem" para lojistas
                     if (!isPartner) ...[
                       const SizedBox(height: 8),

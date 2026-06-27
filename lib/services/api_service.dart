@@ -9,6 +9,9 @@ import '../models/partner.dart';
 import '../models/bike.dart';
 import '../models/vehicle_type.dart';
 import '../models/store_order_item.dart';
+import '../models/store_category.dart';
+import '../models/store_product.dart';
+import '../models/store_banner.dart';
 import '../utils/geo_coordinates_brazil.dart';
 import '../utils/delivery_proof_pin.dart';
 import 'delivery_registration_cache.dart';
@@ -1347,6 +1350,208 @@ class ApiService {
         .whereType<Map>()
         .map((e) => StoreOrderItem.fromJson(Map<String, dynamic>.from(e)))
         .toList();
+  }
+
+  // ============================================
+  // Loja virtual — gestão de catálogo (lojista)
+  // partnerId vem do token (server-side). Não enviar partnerId.
+  // ============================================
+
+  static Future<List<StoreCategory>> getStoreCategories() async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/categories'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout,
+            onTimeout: () =>
+                throw Exception('Tempo esgotado ao buscar categorias'));
+    _handleError(response);
+    final data = json.decode(response.body);
+    final list = (data['categories'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => StoreCategory.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<StoreCategory> createStoreCategory(String name) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/store/manage/categories'),
+      headers: await _getHeaders(),
+      body: json.encode({'name': name}),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreCategory.fromJson(
+        Map<String, dynamic>.from(data['category'] as Map));
+  }
+
+  static Future<void> deleteStoreCategory(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/store/manage/categories/$id'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+  }
+
+  static Future<List<StoreProduct>> getStoreProducts() async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/products'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout,
+            onTimeout: () =>
+                throw Exception('Tempo esgotado ao buscar produtos'));
+    _handleError(response);
+    final data = json.decode(response.body);
+    final list = (data['products'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => StoreProduct.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<StoreProduct> createStoreProduct({
+    required String name,
+    required double basePrice,
+    String? description,
+    String? categoryId,
+    String? photoUrl,
+    bool active = true,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'basePrice': basePrice,
+      'active': active,
+    };
+    if (description != null) body['description'] = description;
+    if (categoryId != null) body['categoryId'] = categoryId;
+    if (photoUrl != null) body['photoUrl'] = photoUrl;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/store/manage/products'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreProduct.fromJson(
+        Map<String, dynamic>.from(data['product'] as Map));
+  }
+
+  static Future<StoreProduct> updateStoreProduct(
+    String id, {
+    String? name,
+    double? basePrice,
+    String? description,
+    String? categoryId,
+    String? photoUrl,
+    bool? active,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (basePrice != null) body['basePrice'] = basePrice;
+    if (description != null) body['description'] = description;
+    if (categoryId != null) body['categoryId'] = categoryId;
+    if (photoUrl != null) body['photoUrl'] = photoUrl;
+    if (active != null) body['active'] = active;
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/store/manage/products/$id'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreProduct.fromJson(
+        Map<String, dynamic>.from(data['product'] as Map));
+  }
+
+  static Future<void> deleteStoreProduct(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/store/manage/products/$id'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+  }
+
+  // --- Promoções (banners) ---
+
+  static Future<List<StoreBanner>> getStoreBanners() async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/banners'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout,
+            onTimeout: () =>
+                throw Exception('Tempo esgotado ao buscar promoções'));
+    _handleError(response);
+    final data = json.decode(response.body);
+    final list = (data['banners'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => StoreBanner.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<StoreBanner> createStoreBanner({
+    required String imageUrl,
+    String? title,
+    String? linkUrl,
+    double? discount,
+    bool active = true,
+  }) async {
+    final body = <String, dynamic>{'imageUrl': imageUrl, 'active': active};
+    if (title != null) body['title'] = title;
+    if (linkUrl != null) body['linkUrl'] = linkUrl;
+    if (discount != null) body['discount'] = discount;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/store/manage/banners'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreBanner.fromJson(
+        Map<String, dynamic>.from(data['banner'] as Map));
+  }
+
+  static Future<StoreBanner> updateStoreBanner(
+    String id, {
+    String? imageUrl,
+    String? title,
+    String? linkUrl,
+    double? discount,
+    bool? active,
+  }) async {
+    final body = <String, dynamic>{};
+    if (imageUrl != null) body['imageUrl'] = imageUrl;
+    if (title != null) body['title'] = title;
+    if (linkUrl != null) body['linkUrl'] = linkUrl;
+    if (discount != null) body['discount'] = discount;
+    if (active != null) body['active'] = active;
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/store/manage/banners/$id'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreBanner.fromJson(
+        Map<String, dynamic>.from(data['banner'] as Map));
+  }
+
+  static Future<void> deleteStoreBanner(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/store/manage/banners/$id'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
   }
 
   static Future<Partner> getMyPartner() async {
