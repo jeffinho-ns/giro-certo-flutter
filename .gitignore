@@ -52,6 +52,11 @@ android/local.properties
 # Mapbox iOS: copiar ios/MapboxKeys.xcconfig.example para ios/MapboxKeys.xcconfig
 ios/MapboxKeys.xcconfig
 
+# Segredos do Firebase (NÃO versionar) — usar os arquivos locais por ambiente
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+ios/firebase_app_id_file.json
+
 # Generated files
 android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
