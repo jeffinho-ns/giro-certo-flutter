@@ -8,6 +8,7 @@ import '../models/delivery_order.dart';
 import '../models/partner.dart';
 import '../models/bike.dart';
 import '../models/vehicle_type.dart';
+import '../models/store_order_item.dart';
 import '../utils/geo_coordinates_brazil.dart';
 import '../utils/delivery_proof_pin.dart';
 import 'delivery_registration_cache.dart';
@@ -1220,6 +1221,7 @@ class ApiService {
       riderBikeModel: jsonStringOrNull(json['riderBikeModel']),
       riderBikeVehicleType: jsonStringOrNull(json['riderBikeVehicleType']),
       internalCode: jsonStringOrNull(json['internalCode']),
+      storeOrderId: jsonStringOrNull(json['storeOrderId']),
       distance: json['distance'] != null ? jsonDouble(json['distance']) : null,
       estimatedTime: json['estimatedTime'] != null
           ? (json['estimatedTime'] is num
@@ -1316,6 +1318,37 @@ class ApiService {
   }
 
   /// Obter própria loja (para lojistas)
+  /// Busca os itens de um pedido da loja virtual (cardápio com variações).
+  /// Usa o pedido de compra (StoreOrder) ligado ao DeliveryOrder via storeOrderId.
+  /// Escopado por partnerId na API (lojista só vê os próprios pedidos).
+  static Future<List<StoreOrderItem>> getStoreOrderItems(
+    String storeOrderId,
+  ) async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/orders/$storeOrderId'),
+          headers: await _getHeaders(),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            throw Exception('Tempo de espera esgotado ao buscar itens do pedido');
+          },
+        );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final order = data['order'];
+    if (order is! Map) return const [];
+    final rawItems = order['items'];
+    if (rawItems is! List) return const [];
+    return rawItems
+        .whereType<Map>()
+        .map((e) => StoreOrderItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
   static Future<Partner> getMyPartner() async {
     try {
       final response = await http

@@ -9,6 +9,7 @@ import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
 import '../../models/partner.dart';
 import '../../models/delivery_order.dart';
+import '../../models/store_order_item.dart';
 import '../../utils/colors.dart';
 import '../../utils/delivery_status_utils.dart';
 import '../../widgets/modern_header.dart';
@@ -39,6 +40,10 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   List<DeliveryOrder> _pendingOrders = [];
   final Set<String> _dispatchingOrderIds = <String>{};
   final Set<String> _knownOrderIds = <String>{};
+  // Itens da loja virtual por pedido (chave = id do DeliveryOrder).
+  final Map<String, List<StoreOrderItem>> _storeItemsByOrderId =
+      <String, List<StoreOrderItem>>{};
+  final Set<String> _storeItemsRequested = <String>{};
   final Set<String> _riderArrivedDialogOrderIds = <String>{};
   Partner? _myPartner;
   int _totalOrders = 0;
@@ -283,6 +288,31 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
         ..clear()
         ..addAll(allOrders.map((order) => order.id));
     });
+
+    // Carrega os itens dos pedidos vindos da loja virtual (têm storeOrderId).
+    for (final order in allOrders) {
+      _ensureStoreItemsLoaded(order);
+    }
+  }
+
+  /// Busca, uma única vez por pedido, os itens da loja virtual (cardápio).
+  Future<void> _ensureStoreItemsLoaded(DeliveryOrder order) async {
+    final storeOrderId = order.storeOrderId;
+    if (storeOrderId == null || storeOrderId.isEmpty) return;
+    if (_storeItemsByOrderId.containsKey(order.id)) return;
+    if (_storeItemsRequested.contains(order.id)) return;
+    _storeItemsRequested.add(order.id);
+    try {
+      final items = await ApiService.getStoreOrderItems(storeOrderId);
+      if (!mounted) return;
+      setState(() {
+        _storeItemsByOrderId[order.id] = items;
+      });
+    } catch (e) {
+      // Permite nova tentativa em um reload futuro.
+      _storeItemsRequested.remove(order.id);
+      debugPrint('Falha ao carregar itens do pedido ${order.id}: $e');
+    }
   }
 
   Future<void> _loadPartnerData({bool silent = false}) async {
@@ -1148,6 +1178,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                         ),
                       ),
                     ),
+                    _buildStoreItemsBlock(theme, order),
                     if (showMotoSearchBanner) ...[
                       const SizedBox(height: 10),
                       Row(
@@ -1287,6 +1318,142 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
               style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Lista os itens do pedido quando ele veio da loja virtual (cardápio).
+  Widget _buildStoreItemsBlock(ThemeData theme, DeliveryOrder order) {
+    final hasStoreOrder =
+        order.storeOrderId != null && order.storeOrderId!.isNotEmpty;
+    if (!hasStoreOrder) return const SizedBox.shrink();
+
+    final items = _storeItemsByOrderId[order.id];
+    if (items == null) {
+      // Carregando os itens em segundo plano.
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Carregando itens do pedido…',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.shoppingBag,
+                  size: 14, color: AppColors.racingOrange),
+              const SizedBox(width: 6),
+              Text(
+                'Itens do pedido',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...items.map((item) => _buildStoreItemRow(theme, item)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStoreItemRow(ThemeData theme, StoreOrderItem item) {
+    final optionsSummary = item.optionsSummary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.racingOrange.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${item.quantity}x',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppColors.racingOrange,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item.name,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+              Text(
+                _formatCurrency(item.lineTotal),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          if (optionsSummary.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 32, top: 1),
+              child: Text(
+                optionsSummary,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.65),
+                  height: 1.2,
+                ),
+              ),
+            ),
+          if (item.notes != null && item.notes!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 32, top: 1),
+              child: Text(
+                'Obs.: ${item.notes}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+                  fontStyle: FontStyle.italic,
+                  height: 1.2,
+                ),
+              ),
+            ),
         ],
       ),
     );

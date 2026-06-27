@@ -51,6 +51,7 @@ class DeliveryOrder {
   final String? internalCode;
   final double? distance; // Distância em km
   final int? estimatedTime; // Tempo estimado em minutos
+  final String? storeOrderId; // Liga à compra da loja virtual (itens do pedido)
 
   DeliveryOrder({
     required this.id,
@@ -84,6 +85,7 @@ class DeliveryOrder {
     this.internalCode,
     this.distance,
     this.estimatedTime,
+    this.storeOrderId,
   });
 
   // Calcula a distância total da corrida (loja -> entrega)
@@ -178,6 +180,7 @@ class DeliveryOrder {
       internalCode: internalCode ?? this.internalCode,
       distance: distance,
       estimatedTime: estimatedTime,
+      storeOrderId: storeOrderId,
     );
   }
 
@@ -214,6 +217,7 @@ class DeliveryOrder {
       riderBikeVehicleType: riderBikeVehicleType,
       distance: distance,
       estimatedTime: estimatedTime,
+      storeOrderId: storeOrderId,
     );
   }
 }
