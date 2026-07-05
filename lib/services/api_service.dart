@@ -1662,6 +1662,35 @@ class ApiService {
         : <String, dynamic>{};
   }
 
+  static Future<Map<String, dynamic>> getPartnerMeRaw() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/partners/me'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    final partner = data['partner'];
+    if (partner is! Map) {
+      throw Exception('Resposta da API não contém dados da loja');
+    }
+    return Map<String, dynamic>.from(partner);
+  }
+
+  static Future<Map<String, dynamic>> updateMyPartner(
+      Map<String, dynamic> body) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/partners/me'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    final partner = data['partner'];
+    return partner is Map
+        ? Map<String, dynamic>.from(partner)
+        : <String, dynamic>{};
+  }
+
   static Future<Partner> getMyPartner() async {
     try {
       final response = await http

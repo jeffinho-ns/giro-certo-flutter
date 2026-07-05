@@ -17,6 +17,7 @@ import '../help/help_screen.dart';
 import '../store/store_products_screen.dart';
 import '../store/store_promotions_screen.dart';
 import '../store/store_appearance_screen.dart';
+import '../store/store_settings_screen.dart';
 import '../../providers/navigation_provider.dart';
 
 class ProfileSidebar extends StatefulWidget {
@@ -365,6 +366,23 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                             MaterialPageRoute(
                               builder: (context) =>
                                   const StoreAppearanceScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _buildMenuItem(
+                        context: context,
+                        theme: theme,
+                        icon: LucideIcons.clock,
+                        title: 'Configurações',
+                        subtitle: 'Horário, telefone e raio de entrega',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const StoreSettingsScreen(),
                             ),
                           );
                         },
