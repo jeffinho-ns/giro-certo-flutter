@@ -63,3 +63,6 @@ android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 # Linux and macOS (if not needed)
 linux/
 macos/
+# Cursor/ECC: nao versionar segredos e estado local (mcp.json.example fica versionado)
+.cursor/mcp.json
+.cursor/ecc-install-state.json

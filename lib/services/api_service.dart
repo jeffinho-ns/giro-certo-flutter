@@ -33,8 +33,13 @@ class ApiStructuredException implements Exception {
 }
 
 class ApiService {
-  // TODO: Configurar via variável de ambiente
-  static const String baseUrl = 'https://giro-certo-api.onrender.com/api';
+  /// URL da API. Em release use:
+  /// `flutter run --dart-define=API_URL=https://sua-api.com/api`
+  /// Default aponta para o ambiente de produção atual.
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'https://giro-certo-api.onrender.com/api',
+  );
 
   /// Timeout para requisições HTTP (evita travamentos em rede instável)
   static const Duration _requestTimeout = Duration(seconds: 25);

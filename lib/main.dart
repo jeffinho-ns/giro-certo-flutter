@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_state_provider.dart';
@@ -37,9 +39,31 @@ import 'widgets/rider_delivery_overlay_host.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Captura erros de framework e de zona (visibilidade em produção).
+  // Quando Crashlytics/Sentry for adicionado, encaminhar para lá.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    if (kDebugMode) {
+      debugPrint('FlutterError: ${details.exceptionAsString()}');
+    }
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (kDebugMode) {
+      debugPrint('Uncaught: $error\n$stack');
+    }
+    return true;
+  };
+
   await push.initializeFirebase();
   await local_notifications.initializeLocalNotifications();
-  runApp(const MyApp());
+  runZonedGuarded(() {
+    runApp(const MyApp());
+  }, (error, stack) {
+    if (kDebugMode) {
+      debugPrint('Zone error: $error\n$stack');
+    }
+  });
 }
 
 class MyApp extends StatelessWidget {
