@@ -24,6 +24,8 @@ class Promotion {
 class Partner {
   final String id;
   final String name;
+  /// Identificador público da vitrine (/loja/<slug>).
+  final String? slug;
   final PartnerType type; // Store ou Mechanic
   final String address;
   final double latitude;
@@ -38,6 +40,7 @@ class Partner {
   Partner({
     required this.id,
     required this.name,
+    this.slug,
     required this.type,
     required this.address,
     required this.latitude,

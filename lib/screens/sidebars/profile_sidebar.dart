@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/app_state_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/onboarding_service.dart';
@@ -365,6 +367,69 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
                                   const StoreAppearanceScreen(),
                             ),
                           );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _buildMenuItem(
+                        context: context,
+                        theme: theme,
+                        icon: LucideIcons.externalLink,
+                        title: 'Ver vitrine',
+                        subtitle: 'Link público da loja (copiar/abrir)',
+                        onTap: () async {
+                          Navigator.pop(context);
+                          try {
+                            final partner = await ApiService.getMyPartner();
+                            final slug = partner.slug;
+                            if (slug == null || slug.isEmpty) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Sua loja ainda não tem link público (slug).',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            final path = '/loja/$slug';
+                            const webBase = String.fromEnvironment(
+                              'WEB_URL',
+                              defaultValue: '',
+                            );
+                            if (webBase.isNotEmpty) {
+                              final uri = Uri.parse(
+                                '${webBase.replaceAll(RegExp(r'/+$'), '')}$path',
+                              );
+                              await launchUrl(
+                                uri,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            } else {
+                              await Clipboard.setData(
+                                ClipboardData(text: path),
+                              );
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Copiado: $path — cole no navegador do celular',
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  e
+                                      .toString()
+                                      .replaceFirst('Exception: ', ''),
+                                ),
+                              ),
+                            );
+                          }
                         },
                       ),
                     ],

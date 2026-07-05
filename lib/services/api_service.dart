@@ -1698,6 +1698,7 @@ class ApiService {
     return Partner(
       id: json['id'] as String,
       name: json['name'] as String,
+      slug: json['slug']?.toString(),
       type: _parsePartnerType(json['type'] as String),
       address: json['address'] as String,
       latitude: (json['latitude'] as num).toDouble(),
