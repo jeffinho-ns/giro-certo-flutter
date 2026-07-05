@@ -89,7 +89,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
     _subscribeDeliveryRealtime();
     _loadOrders();
     _maybeLoadPartnerPaySettings();
-    _marketPulseTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+    _marketPulseTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       _loadOrders(silent: true);
       _loadDeliveryPhase2Hints();
     });

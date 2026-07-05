@@ -66,7 +66,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
       _subscribeRealtimeUpdates();
       _loadPartnerData();
     });
-    _partnerBackgroundSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+    _partnerBackgroundSyncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (!mounted) return;
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       final u = appState.user;
