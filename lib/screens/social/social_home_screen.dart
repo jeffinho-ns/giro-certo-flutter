@@ -202,6 +202,96 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
     );
   }
 
+  Widget _buildCommunityAndEventsShortcuts(ThemeData theme) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildShortcutTile(
+            theme,
+            icon: LucideIcons.users,
+            label: 'Comunidades',
+            subtitle: 'Grupos e chats',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CommunitiesListScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildShortcutTile(
+            theme,
+            icon: LucideIcons.calendar,
+            label: 'Eventos',
+            subtitle: _nearbyEventsCount > 0 ? 'Há eventos perto' : 'Rolês e encontros',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const EventsScreen()),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShortcutTile(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: theme.cardColor,
+            border: Border.all(
+              color: AppColors.racingOrange.withOpacity(0.22),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  color: AppColors.racingOrange.withOpacity(0.14),
+                ),
+                child: Icon(icon, color: AppColors.racingOrange, size: 18),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSuggestedCommunityCard(ThemeData theme, AppStateProvider appState) {
     final userType = parseUserType(appState.user?.pilotProfile);
     final suggestedTypes = switch (userType) {
@@ -221,9 +311,22 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Comunidades recomendadas para seu perfil',
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Comunidades recomendadas para seu perfil',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CommunitiesListScreen()),
+                ),
+                child: const Text('Ver todas'),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -673,6 +776,8 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                 ),
                 const SizedBox(height: 12),
                 _buildProfileDynamicCard(theme, appState),
+                const SizedBox(height: 10),
+                _buildCommunityAndEventsShortcuts(theme),
                 const SizedBox(height: 10),
                 _buildSuggestedCommunityCard(theme, appState),
                 const SizedBox(height: 20),

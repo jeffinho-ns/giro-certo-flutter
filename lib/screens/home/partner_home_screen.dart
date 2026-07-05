@@ -44,6 +44,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   final Map<String, List<StoreOrderItem>> _storeItemsByOrderId =
       <String, List<StoreOrderItem>>{};
   final Set<String> _storeItemsRequested = <String>{};
+  final Set<String> _storeItemsFailed = <String>{};
   final Set<String> _riderArrivedDialogOrderIds = <String>{};
   Partner? _myPartner;
   int _totalOrders = 0;
@@ -296,21 +297,34 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   }
 
   /// Busca, uma única vez por pedido, os itens da loja virtual (cardápio).
-  Future<void> _ensureStoreItemsLoaded(DeliveryOrder order) async {
+  Future<void> _ensureStoreItemsLoaded(
+    DeliveryOrder order, {
+    bool force = false,
+  }) async {
     final storeOrderId = order.storeOrderId;
     if (storeOrderId == null || storeOrderId.isEmpty) return;
-    if (_storeItemsByOrderId.containsKey(order.id)) return;
-    if (_storeItemsRequested.contains(order.id)) return;
+    if (!force && _storeItemsByOrderId.containsKey(order.id)) return;
+    if (!force && _storeItemsRequested.contains(order.id)) return;
     _storeItemsRequested.add(order.id);
+    if (mounted && _storeItemsFailed.contains(order.id)) {
+      setState(() => _storeItemsFailed.remove(order.id));
+    } else {
+      _storeItemsFailed.remove(order.id);
+    }
     try {
       final items = await ApiService.getStoreOrderItems(storeOrderId);
       if (!mounted) return;
       setState(() {
         _storeItemsByOrderId[order.id] = items;
+        _storeItemsRequested.remove(order.id);
+        _storeItemsFailed.remove(order.id);
       });
     } catch (e) {
-      // Permite nova tentativa em um reload futuro.
-      _storeItemsRequested.remove(order.id);
+      if (!mounted) return;
+      setState(() {
+        _storeItemsRequested.remove(order.id);
+        _storeItemsFailed.add(order.id);
+      });
       debugPrint('Falha ao carregar itens do pedido ${order.id}: $e');
     }
   }
@@ -1331,6 +1345,41 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
 
     final items = _storeItemsByOrderId[order.id];
     if (items == null) {
+      if (_storeItemsFailed.contains(order.id)) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.alertCircle,
+                size: 14,
+                color: theme.colorScheme.error.withValues(alpha: 0.85),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Não foi possível carregar os itens',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.textTheme.bodySmall?.color
+                        ?.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () =>
+                    unawaited(_ensureStoreItemsLoaded(order, force: true)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Tentar de novo'),
+              ),
+            ],
+          ),
+        );
+      }
       // Carregando os itens em segundo plano.
       return Padding(
         padding: const EdgeInsets.only(top: 10),

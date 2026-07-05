@@ -227,6 +227,8 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                   children: [
+                    if (!_loading && _error == null)
+                      _buildCriticalAlertBanner(summary, theme),
                     _buildHeaderCard(bike, summary, theme),
                     const SizedBox(height: 20),
                     if (_loading)
@@ -242,7 +244,7 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                     else if (_items.isEmpty)
                       _buildNoItemsState(theme)
                     else
-                      ..._items.map((m) => Padding(
+                      ..._sortedItems.map((m) => Padding(
                             padding: const EdgeInsets.only(bottom: 16),
                             child: _buildMaintenanceCard(bike, m, theme),
                           )),
@@ -294,6 +296,137 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
               label: const Text('Ir para a Garagem'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  List<Maintenance> get _sortedItems {
+    final priority = {'Crítico': 0, 'Atenção': 1, 'OK': 2};
+    final list = List<Maintenance>.from(_items);
+    list.sort((a, b) {
+      final pa = priority[a.status] ?? 3;
+      final pb = priority[b.status] ?? 3;
+      if (pa != pb) return pa.compareTo(pb);
+      return b.wearPercentage.compareTo(a.wearPercentage);
+    });
+    return list;
+  }
+
+  Widget _buildCriticalAlertBanner(
+      MaintenanceSummary summary, ThemeData theme) {
+    if (!summary.hasCritical && !summary.hasWarning) {
+      return const SizedBox.shrink();
+    }
+    final isCritical = summary.hasCritical;
+    final color =
+        isCritical ? AppColors.statusCritical : AppColors.statusWarning;
+    final criticalItems = _items
+        .where((m) => m.status == 'Crítico')
+        .map((m) => m.partName)
+        .toList();
+    final warningItems = _items
+        .where((m) => m.status == 'Atenção')
+        .map((m) => m.partName)
+        .toList();
+    final oilAlert = _items.any((m) =>
+        (m.id == 'oil' ||
+            m.partName.toLowerCase().contains('óleo') ||
+            m.partName.toLowerCase().contains('oleo')) &&
+        (m.status == 'Crítico' || m.status == 'Atenção'));
+
+    final highlight = oilAlert
+        ? 'Óleo do motor precisa de atenção.'
+        : (criticalItems.isNotEmpty
+            ? criticalItems.take(2).join(', ')
+            : warningItems.take(2).join(', '));
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.16),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.55), width: 1.5),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              isCritical ? LucideIcons.alertTriangle : LucideIcons.alertCircle,
+              color: color,
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isCritical
+                        ? 'Ação recomendada agora'
+                        : 'Itens em atenção',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    oilAlert
+                        ? '$highlight ${isCritical ? 'Troca urgente.' : 'Planeje a troca em breve.'}'
+                        : '$highlight${criticalItems.length + warningItems.length > 2 ? ' e mais.' : '.'}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (summary.criticalCount > 0 || summary.warningCount > 0) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        if (summary.criticalCount > 0)
+                          _alertBadge(
+                            '${summary.criticalCount} crítico${summary.criticalCount == 1 ? '' : 's'}',
+                            AppColors.statusCritical,
+                          ),
+                        if (summary.warningCount > 0)
+                          _alertBadge(
+                            '${summary.warningCount} em atenção',
+                            AppColors.statusWarning,
+                          ),
+                        if (oilAlert)
+                          _alertBadge('Óleo', color),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _alertBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -579,19 +712,28 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
         ? 'Troca recomendada agora'
         : '${NumberFormat('#,###').format(remainingKm)} km restantes';
 
+    final isAlert = maintenance.status != 'OK';
+    final isOil = maintenance.id == 'oil' ||
+        maintenance.partName.toLowerCase().contains('óleo') ||
+        maintenance.partName.toLowerCase().contains('oleo');
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: isAlert
+            ? Color.alphaBlend(statusColor.withOpacity(0.08), theme.cardColor)
+            : theme.cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: statusColor.withOpacity(0.22),
-          width: 1.2,
+          color: statusColor.withOpacity(isAlert ? 0.55 : 0.22),
+          width: isAlert ? 1.8 : 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withOpacity(0.06),
-            blurRadius: 10,
+            color: isAlert
+                ? statusColor.withOpacity(0.12)
+                : theme.shadowColor.withOpacity(0.06),
+            blurRadius: isAlert ? 14 : 10,
             offset: const Offset(0, 4),
           ),
         ],
@@ -622,10 +764,16 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      maintenance.category,
+                      isOil && isAlert
+                          ? '${maintenance.category} • prioridade'
+                          : maintenance.category,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.textTheme.bodyMedium?.color
-                            ?.withOpacity(0.7),
+                        color: isOil && isAlert
+                            ? statusColor
+                            : theme.textTheme.bodyMedium?.color
+                                ?.withOpacity(0.7),
+                        fontWeight:
+                            isOil && isAlert ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                   ],
@@ -635,9 +783,12 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.18),
+                  color: statusColor.withOpacity(isAlert ? 0.28 : 0.18),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: statusColor, width: 1),
+                  border: Border.all(
+                    color: statusColor,
+                    width: isAlert ? 1.4 : 1,
+                  ),
                 ),
                 child: Text(
                   maintenance.status,

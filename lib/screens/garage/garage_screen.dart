@@ -15,6 +15,9 @@ import '../../models/post_type.dart';
 import '../../models/bike.dart';
 import '../../models/vehicle_type.dart';
 import '../../models/user.dart';
+import '../../models/maintenance.dart';
+import '../../services/maintenance_service.dart';
+import '../maintenance/maintenance_detail_screen.dart';
 
 class GarageScreen extends StatefulWidget {
   const GarageScreen({super.key});
@@ -49,6 +52,9 @@ class _GarageScreenState extends State<GarageScreen> {
   bool _garagePublic = true;
   bool _garageVisibilityLoading = false;
   bool _creatingGarage = false;
+  MaintenanceSummary? _maintenanceSummary;
+  Maintenance? _oilMaintenance;
+  String? _maintenanceBikeId;
 
   @override
   void initState() {
@@ -85,6 +91,151 @@ class _GarageScreenState extends State<GarageScreen> {
     _colorController.text = bike.preferredColor ?? '';
     _upgradeController.text = bike.nextUpgrade ?? '';
     _accessoriesController.text = bike.accessories.join(', ');
+  }
+
+  void _ensureMaintenanceLoaded(Bike bike) {
+    if (_maintenanceBikeId == bike.id) return;
+    _maintenanceBikeId = bike.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadMaintenanceAlerts(bike);
+    });
+  }
+
+  Future<void> _loadMaintenanceAlerts(Bike bike) async {
+    try {
+      final items = await MaintenanceService.loadMaintenances(bike);
+      if (!mounted || _maintenanceBikeId != bike.id) return;
+      Maintenance? oil;
+      for (final m in items) {
+        final name = m.partName.toLowerCase();
+        if (m.id == 'oil' || name.contains('óleo') || name.contains('oleo')) {
+          oil = m;
+          break;
+        }
+      }
+      setState(() {
+        _maintenanceSummary = MaintenanceService.buildSummary(items);
+        _oilMaintenance = oil;
+      });
+    } catch (_) {
+      if (!mounted || _maintenanceBikeId != bike.id) return;
+      setState(() {
+        _maintenanceSummary = null;
+        _oilMaintenance = null;
+      });
+    }
+  }
+
+  void _openMaintenanceDetail() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MaintenanceDetailScreen()),
+    );
+  }
+
+  Widget _buildMaintenanceAlertBanner(ThemeData theme) {
+    final summary = _maintenanceSummary;
+    if (summary == null || (!summary.hasCritical && !summary.hasWarning)) {
+      return const SizedBox.shrink();
+    }
+    final isCritical = summary.hasCritical;
+    final color =
+        isCritical ? AppColors.statusCritical : AppColors.statusWarning;
+    final oilCritical = _oilMaintenance != null &&
+        (_oilMaintenance!.status == 'Crítico' ||
+            _oilMaintenance!.status == 'Atenção');
+    final title = isCritical
+        ? 'Manutenção crítica'
+        : 'Manutenção precisa de atenção';
+    final parts = <String>[];
+    if (oilCritical) parts.add('óleo');
+    if (summary.criticalCount > 0) {
+      parts.add(
+        '${summary.criticalCount} item${summary.criticalCount == 1 ? '' : 's'} crítico${summary.criticalCount == 1 ? '' : 's'}',
+      );
+    } else if (summary.warningCount > 0) {
+      parts.add(
+        '${summary.warningCount} item${summary.warningCount == 1 ? '' : 's'} em atenção',
+      );
+    }
+    final subtitle = oilCritical && isCritical
+        ? 'Óleo e outros itens exigem troca em breve. Toque para ver detalhes.'
+        : oilCritical
+            ? 'Óleo do motor em atenção. Toque para ver detalhes.'
+            : '${parts.join(' · ')}. Toque para ver detalhes.';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openMaintenanceDetail,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(0.55), width: 1.5),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isCritical
+                      ? LucideIcons.alertTriangle
+                      : LucideIcons.alertCircle,
+                  color: color,
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isCritical || oilCritical)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      isCritical ? 'CRÍTICO' : 'ATENÇÃO',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 4),
+                Icon(LucideIcons.chevronRight, color: color, size: 18),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _saveBikePremiumData(Bike bike) async {
@@ -578,6 +729,15 @@ class _GarageScreenState extends State<GarageScreen> {
     final health = _bikeHealthScore(bike);
     _syncFormFromBike(bike);
     _ensureTimelineLoaded(bike);
+    _ensureMaintenanceLoaded(bike);
+    final oilStatus = _oilMaintenance?.status;
+    final oilNeedsAttention =
+        oilStatus == 'Crítico' || oilStatus == 'Atenção';
+    final oilStatusColor = oilStatus == 'Crítico'
+        ? AppColors.statusCritical
+        : (oilStatus == 'Atenção'
+            ? AppColors.statusWarning
+            : AppColors.racingOrangeLight);
 
     return Scaffold(
       backgroundColor: profileTheme.background,
@@ -750,6 +910,8 @@ class _GarageScreenState extends State<GarageScreen> {
 
                     const SizedBox(height: 24),
 
+                    _buildMaintenanceAlertBanner(theme),
+
                     _buildSectionTitle(
                       context,
                       bike.vehicleType == AppVehicleType.bicycle
@@ -803,13 +965,46 @@ class _GarageScreenState extends State<GarageScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _buildInfoCard(
-                            context: context,
-                            theme: theme,
-                            icon: LucideIcons.droplet,
-                            label: 'Tipo de Óleo',
-                            value: bike.oilType,
-                            color: AppColors.racingOrangeLight,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              _buildInfoCard(
+                                context: context,
+                                theme: theme,
+                                icon: LucideIcons.droplet,
+                                label: oilNeedsAttention
+                                    ? 'Óleo • $oilStatus'
+                                    : 'Tipo de Óleo',
+                                value: bike.oilType.trim().isEmpty
+                                    ? 'Não informado'
+                                    : bike.oilType,
+                                color: oilStatusColor,
+                              ),
+                              if (oilNeedsAttention)
+                                Positioned(
+                                  top: -6,
+                                  right: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 7,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: oilStatusColor,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      oilStatus == 'Crítico' ? 'CRÍTICO' : 'ATENÇÃO',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ],
@@ -821,10 +1016,29 @@ class _GarageScreenState extends State<GarageScreen> {
                       icon: LucideIcons.heartPulse,
                       label: 'Saúde estimada da moto',
                       value: '${health.$1}% • ${health.$2}',
-                      color: health.$1 >= 80
-                          ? AppColors.statusOk
-                          : (health.$1 >= 60 ? AppColors.racingOrange : Colors.redAccent),
+                      color: (_maintenanceSummary?.hasCritical ?? false)
+                          ? AppColors.statusCritical
+                          : ((_maintenanceSummary?.hasWarning ?? false)
+                              ? AppColors.statusWarning
+                              : (health.$1 >= 80
+                                  ? AppColors.statusOk
+                                  : (health.$1 >= 60
+                                      ? AppColors.racingOrange
+                                      : Colors.redAccent))),
                     ),
+                    if (_maintenanceSummary != null &&
+                        (_maintenanceSummary!.hasCritical ||
+                            _maintenanceSummary!.hasWarning)) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _openMaintenanceDetail,
+                          icon: const Icon(LucideIcons.wrench, size: 16),
+                          label: const Text('Ver manutenção'),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Row(
                       children: [
