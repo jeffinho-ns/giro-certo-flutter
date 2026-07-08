@@ -41,6 +41,9 @@ class _StoreSettingsScreenState extends State<StoreSettingsScreen> {
   final _phoneCtrl = TextEditingController();
   final _prepCtrl = TextEditingController();
   final _radiusCtrl = TextEditingController();
+  final _feeMaxCtrl = TextEditingController();
+  final _feeFixedCtrl = TextEditingController();
+  String _feeMode = 'distance_capped';
   final Map<String, _DayHours> _hours = {};
 
   @override
@@ -61,6 +64,8 @@ class _StoreSettingsScreenState extends State<StoreSettingsScreen> {
     _phoneCtrl.dispose();
     _prepCtrl.dispose();
     _radiusCtrl.dispose();
+    _feeMaxCtrl.dispose();
+    _feeFixedCtrl.dispose();
     super.dispose();
   }
 
@@ -120,6 +125,14 @@ class _StoreSettingsScreenState extends State<StoreSettingsScreen> {
         _prepCtrl.text = prep != null ? prep.toString() : '';
         final radius = p['maxServiceRadius'];
         _radiusCtrl.text = radius != null ? radius.toString() : '';
+        final mode = (p['store_delivery_fee_mode'] ?? p['storeDeliveryFeeMode'] ?? 'distance_capped').toString();
+        if (mode == 'fixed' || mode == 'distance' || mode == 'distance_capped') {
+          _feeMode = mode;
+        }
+        final feeMax = p['store_delivery_fee_max'] ?? p['storeDeliveryFeeMax'];
+        _feeMaxCtrl.text = feeMax != null ? feeMax.toString() : '';
+        final feeFixed = p['store_delivery_fee_fixed'] ?? p['storeDeliveryFeeFixed'];
+        _feeFixedCtrl.text = feeFixed != null ? feeFixed.toString() : '';
         _applyOperatingHours(p['operatingHours']);
         _loading = false;
       });
@@ -162,6 +175,28 @@ class _StoreSettingsScreenState extends State<StoreSettingsScreen> {
       if (prep != null && prep > 0) body['avgPreparationTime'] = prep;
       final radius = double.tryParse(_radiusCtrl.text.trim().replaceAll(',', '.'));
       if (radius != null && radius > 0) body['maxServiceRadius'] = radius;
+
+      body['storeDeliveryFeeMode'] = _feeMode;
+      if (_feeMode == 'fixed') {
+        final fixed = double.tryParse(_feeFixedCtrl.text.trim().replaceAll(',', '.'));
+        if (fixed == null || fixed < 0) {
+          throw Exception('Informe o valor fixo do frete');
+        }
+        body['storeDeliveryFeeFixed'] = fixed;
+        final max = double.tryParse(_feeMaxCtrl.text.trim().replaceAll(',', '.'));
+        body['storeDeliveryFeeMax'] = max != null && max > 0 ? max : null;
+      } else if (_feeMode == 'distance_capped') {
+        final max = double.tryParse(_feeMaxCtrl.text.trim().replaceAll(',', '.'));
+        if (max == null || max <= 0) {
+          throw Exception('Informe o valor máximo do frete');
+        }
+        body['storeDeliveryFeeMax'] = max;
+        body['storeDeliveryFeeFixed'] = null;
+      } else {
+        final max = double.tryParse(_feeMaxCtrl.text.trim().replaceAll(',', '.'));
+        body['storeDeliveryFeeMax'] = max != null && max > 0 ? max : null;
+        body['storeDeliveryFeeFixed'] = null;
+      }
 
       await ApiService.updateMyPartner(body);
       if (!mounted) return;
@@ -229,6 +264,58 @@ class _StoreSettingsScreenState extends State<StoreSettingsScreen> {
                   ),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
+                const SizedBox(height: 24),
+                Text(
+                  'Frete da loja virtual',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _feeMode,
+                  decoration: const InputDecoration(
+                    labelText: 'Como calcular o frete',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'fixed', child: Text('Valor fixo')),
+                    DropdownMenuItem(
+                      value: 'distance_capped',
+                      child: Text('Por distância com teto máximo'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'distance',
+                      child: Text('Por distância (automático)'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _feeMode = v);
+                  },
+                ),
+                if (_feeMode == 'fixed') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _feeFixedCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Valor fixo do frete (R\$)',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                ],
+                if (_feeMode == 'fixed' || _feeMode == 'distance_capped') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _feeMaxCtrl,
+                    decoration: InputDecoration(
+                      labelText: _feeMode == 'distance_capped'
+                          ? 'Valor máximo do frete (R\$)'
+                          : 'Teto máximo opcional (R\$)',
+                      border: const OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text(
                   'Horário de funcionamento',
