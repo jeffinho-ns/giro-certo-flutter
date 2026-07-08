@@ -9,6 +9,7 @@ import '../models/partner.dart';
 import '../models/bike.dart';
 import '../models/vehicle_type.dart';
 import '../models/store_order_item.dart';
+import '../models/partner_store_order.dart';
 import '../models/store_category.dart';
 import '../models/store_product.dart';
 import '../models/store_banner.dart';
@@ -1326,6 +1327,50 @@ class ApiService {
   }
 
   /// Obter própria loja (para lojistas)
+  /// Lista pedidos da loja virtual (vitrine) para o lojista aceitar/despachar.
+  static Future<List<PartnerStoreOrder>> getPartnerStoreOrders({
+    int limit = 100,
+  }) async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/orders?limit=$limit'),
+          headers: await _getHeaders(),
+        )
+        .timeout(
+          const Duration(seconds: 12),
+          onTimeout: () =>
+              throw Exception('Tempo esgotado ao buscar pedidos da loja'),
+        );
+    _handleError(response);
+    final data = json.decode(response.body);
+    final list = (data['orders'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => PartnerStoreOrder.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  /// Aceita pedido pago da vitrine e chama motoboys (ponte → DeliveryOrder).
+  static Future<String?> acceptPartnerStoreOrder(String storeOrderId) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/store/manage/orders/$storeOrderId/accept'),
+          headers: await _getHeaders(),
+          body: json.encode({}),
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () =>
+              throw Exception('Tempo esgotado ao aceitar pedido da loja'),
+        );
+    _handleError(response);
+    final data = json.decode(response.body);
+    if (data is Map && data['deliveryOrderId'] != null) {
+      return data['deliveryOrderId'].toString();
+    }
+    return null;
+  }
+
   /// Busca os itens de um pedido da loja virtual (cardápio com variações).
   /// Usa o pedido de compra (StoreOrder) ligado ao DeliveryOrder via storeOrderId.
   /// Escopado por partnerId na API (lojista só vê os próprios pedidos).
