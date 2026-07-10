@@ -11,6 +11,7 @@ import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/delivery_registration_cache.dart';
+import '../../services/maintenance_service.dart';
 import '../../models/delivery_order.dart';
 import '../../models/partner.dart';
 import '../../models/pilot_profile.dart';
@@ -19,6 +20,7 @@ import '../../utils/delivery_status_utils.dart';
 import '../../widgets/modern_header.dart';
 import '../../widgets/quick_messages_card.dart';
 import '../../widgets/home_map_fab_column.dart';
+import '../../widgets/critical_alert_card.dart';
 import '../maintenance/maintenance_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -49,6 +51,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Partner> _marketPartners = [];
   MapType _mapType = MapType.normal;
   double _currentZoom = 15.0;
+  MaintenanceSummary? _maintenanceSummary;
+  String? _maintenanceHighlight;
+  String? _alertBikeId;
 
   static const LatLng _defaultCenter = LatLng(-23.5505, -46.6333);
 
@@ -71,6 +76,68 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (e) {
         debugPrint('Falha ao iniciar notificacoes em tempo real: $e');
       }
+      _loadMaintenanceAlert();
+    });
+  }
+
+  Future<void> _loadMaintenanceAlert() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final bike = appState.bike;
+    if (bike == null) {
+      if (mounted) {
+        setState(() {
+          _maintenanceSummary = null;
+          _maintenanceHighlight = null;
+          _alertBikeId = null;
+        });
+      }
+      return;
+    }
+    _alertBikeId = bike.id;
+    try {
+      final items = await MaintenanceService.loadMaintenances(bike);
+      final summary = MaintenanceService.buildSummary(items);
+      if (!summary.hasCritical && !summary.hasWarning) {
+        if (!mounted) return;
+        setState(() {
+          _maintenanceSummary = null;
+          _maintenanceHighlight = null;
+        });
+        return;
+      }
+      final critical = items
+          .where((m) => m.status == 'Crítico')
+          .map((m) => m.partName)
+          .toList();
+      final warning = items
+          .where((m) => m.status == 'Atenção')
+          .map((m) => m.partName)
+          .toList();
+      final highlight = critical.isNotEmpty
+          ? critical.take(2).join(', ')
+          : warning.take(2).join(', ');
+      if (!mounted) return;
+      setState(() {
+        _maintenanceSummary = summary;
+        _maintenanceHighlight = highlight;
+      });
+    } catch (e) {
+      debugPrint('Falha ao carregar alerta de manutenção: $e');
+      if (!mounted) return;
+      setState(() {
+        _maintenanceSummary = null;
+        _maintenanceHighlight = null;
+      });
+    }
+  }
+
+  void _openMaintenanceDetail() {
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(builder: (_) => const MaintenanceDetailScreen()),
+    )
+        .then((_) {
+      if (mounted) _loadMaintenanceAlert();
     });
   }
 
@@ -775,6 +842,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDeliveryProfile = appState.isDeliveryPilot;
     final showDeliveryPendingBanner = isDeliveryProfile &&
         appState.deliveryModerationStatus.isAwaitingModeration;
+    final bike = appState.bike;
+    final bikeId = bike?.id;
+    if (bikeId != null && bikeId != _alertBikeId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadMaintenanceAlert();
+      });
+    } else if (bikeId == null && _alertBikeId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadMaintenanceAlert();
+      });
+    }
 
     final initialPosition = _currentPosition ?? _defaultCenter;
 
@@ -831,6 +909,27 @@ class _HomeScreenState extends State<HomeScreen> {
             child: _DeliveryPendingBanner(),
           ),
 
+        if (isRider &&
+            _maintenanceSummary != null &&
+            (_maintenanceSummary!.hasCritical ||
+                _maintenanceSummary!.hasWarning))
+          Positioned(
+            top: showDeliveryPendingBanner ? 168 : 96,
+            left: 16,
+            right: 16,
+            child: CriticalAlertCard(
+              isCritical: _maintenanceSummary!.hasCritical,
+              title: _maintenanceSummary!.hasCritical
+                  ? 'Manutenção crítica na sua moto'
+                  : 'Manutenção em atenção',
+              message: _maintenanceHighlight == null ||
+                      _maintenanceHighlight!.isEmpty
+                  ? 'Toque para ver o que precisa trocar.'
+                  : '${_maintenanceHighlight!}. Toque para ver detalhes.',
+              onTap: _openMaintenanceDetail,
+            ),
+          ),
+
         // 3. Mensagens Rápidas – canto inferior esquerdo (acima do menu)
         Positioned(
           left: 16,
@@ -861,13 +960,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isHeatmapOn: _heatmapOn,
               selectedFilters: _filterOptions,
               selectedTimeWindow: _mapTimeWindow,
-              onDriveMode: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const MaintenanceDetailScreen()),
-                );
-              },
+              onDriveMode: _openMaintenanceDetail,
               onRecenter: _recenterMap,
               onHeatmapChanged: (v) {
                 setState(() => _heatmapOn = v);

@@ -33,8 +33,11 @@ import 'events_screen.dart';
 import '../momentos/momentos_screen.dart';
 import '../garage/garage_screen.dart';
 import '../chat/chat_screen.dart';
+import '../maintenance/maintenance_detail_screen.dart';
 import '../../models/user.dart';
 import '../../models/community_type.dart';
+import '../../services/maintenance_service.dart';
+import '../../widgets/critical_alert_card.dart';
 import '../communities/communities_list_screen.dart';
 
 class SocialHomeScreen extends StatefulWidget {
@@ -54,6 +57,8 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
   int _currentNavIndex = 0;
   int _nearbyEventsCount = 0;
   bool _didApplyInitialFeedDefaults = false;
+  MaintenanceSummary? _maintenanceSummary;
+  String? _maintenanceHighlight;
 
   @override
   void initState() {
@@ -70,6 +75,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
       drawerProvider.setScaffoldKey(_scaffoldKey);
       _loadData();
       _loadNearbyEventHint();
+      _loadMaintenanceAlert();
     });
   }
 
@@ -101,6 +107,144 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
     await feed.loadData(
       userBikeModel: appState.bike?.model,
       currentUserId: appState.user?.id,
+    );
+    await _loadMaintenanceAlert();
+  }
+
+  Future<void> _loadMaintenanceAlert() async {
+    final bike =
+        Provider.of<AppStateProvider>(context, listen: false).bike;
+    if (bike == null) {
+      if (!mounted) return;
+      setState(() {
+        _maintenanceSummary = null;
+        _maintenanceHighlight = null;
+      });
+      return;
+    }
+    try {
+      final items = await MaintenanceService.loadMaintenances(bike);
+      if (!mounted) return;
+      final summary = MaintenanceService.buildSummary(items);
+      if (!summary.hasCritical && !summary.hasWarning) {
+        setState(() {
+          _maintenanceSummary = null;
+          _maintenanceHighlight = null;
+        });
+        return;
+      }
+      final alertItems = items
+          .where((m) => m.status == 'Crítico' || m.status == 'Atenção')
+          .toList()
+        ..sort((a, b) => b.wearPercentage.compareTo(a.wearPercentage));
+      final top = alertItems.isNotEmpty ? alertItems.first : null;
+      final remaining = top == null
+          ? null
+          : (top.remainingKm <= 0
+              ? 'troca recomendada agora'
+              : '${top.remainingKm} km restantes');
+      setState(() {
+        _maintenanceSummary = summary;
+        _maintenanceHighlight = top == null
+            ? null
+            : '${top.partName} · $remaining';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _maintenanceSummary = null;
+        _maintenanceHighlight = null;
+      });
+    }
+  }
+
+  void _openMaintenanceDetail() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MaintenanceDetailScreen()),
+    ).then((_) => _loadMaintenanceAlert());
+  }
+
+  Widget _buildMaintenanceAlertBanner(ThemeData theme) {
+    final summary = _maintenanceSummary;
+    if (summary == null || (!summary.hasCritical && !summary.hasWarning)) {
+      return const SizedBox.shrink();
+    }
+    final isCritical = summary.hasCritical;
+    final title = isCritical
+        ? 'Manutenção crítica na sua moto'
+        : 'Manutenção precisa de atenção';
+    final message = _maintenanceHighlight ??
+        (isCritical
+            ? '${summary.criticalCount} item(ns) crítico(s). Toque para ver.'
+            : '${summary.warningCount} item(ns) em atenção. Toque para ver.');
+
+    if (isCritical) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: CriticalAlertCard(
+          title: title,
+          message: message,
+          onTap: _openMaintenanceDetail,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openMaintenanceDetail,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.statusWarning.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.statusWarning.withOpacity(0.55),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  LucideIcons.alertCircle,
+                  color: AppColors.statusWarning,
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: AppColors.statusWarning,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        message,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  LucideIcons.chevronRight,
+                  color: AppColors.statusWarning,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -636,6 +780,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 15),
+                _buildMaintenanceAlertBanner(theme),
                 Row(
                   children: [
                     Expanded(

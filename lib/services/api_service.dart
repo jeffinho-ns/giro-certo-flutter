@@ -2044,6 +2044,8 @@ class ApiService {
     final cycle = (recommendedChangeKm - lastChangeKm).abs();
     final used = (currentKm - lastChangeKm).clamp(0, cycle <= 0 ? 1 : cycle);
     final wear = cycle <= 0 ? 1.0 : (used / cycle).clamp(0.0, 1.0);
+    // Garante enum da API mesmo se a UI enviar labels em português.
+    final apiStatus = _normalizeMaintenanceStatus(status);
 
     final response = await http.post(
       Uri.parse('$baseUrl/bikes/$bikeId/maintenance'),
@@ -2055,12 +2057,32 @@ class ApiService {
         'recommendedChangeKm': recommendedChangeKm,
         'currentKm': currentKm,
         'wearPercentage': wear,
-        'status': status,
+        'status': apiStatus,
       }),
     );
     _handleError(response);
     final data = json.decode(response.body) as Map<String, dynamic>;
     return data['maintenanceLog'] as Map<String, dynamic>;
+  }
+
+  /// Normaliza status de manutenção para o enum da API: OK | ATENCAO | CRITICO.
+  static String _normalizeMaintenanceStatus(String status) {
+    switch (status.trim().toUpperCase()) {
+      case 'OK':
+        return 'OK';
+      case 'ATENCAO':
+      case 'ATENÇÃO':
+      case 'ATENÇAO':
+        return 'ATENCAO';
+      case 'CRITICO':
+      case 'CRÍTICO':
+        return 'CRITICO';
+      default:
+        final lower = status.trim().toLowerCase();
+        if (lower == 'atenção' || lower == 'atencao') return 'ATENCAO';
+        if (lower == 'crítico' || lower == 'critico') return 'CRITICO';
+        return 'OK';
+    }
   }
 
   static Future<String> uploadUserScopedImage(

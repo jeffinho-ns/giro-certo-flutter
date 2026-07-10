@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../../providers/app_state_provider.dart';
+import '../../services/api_service.dart';
 import '../../services/maintenance_service.dart';
-import '../../services/mock_data_service.dart';
 import '../../models/maintenance.dart';
 import '../../models/bike.dart';
 import '../../models/partner.dart';
@@ -24,13 +25,94 @@ class MaintenanceDetailScreen extends StatefulWidget {
 
 class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
   List<Maintenance> _items = const [];
+  List<Partner> _partners = const [];
   bool _loading = true;
+  bool _partnersLoading = false;
   String? _error;
+  double _userLatitude = -23.5505;
+  double _userLongitude = -46.6333;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _loadPartners();
+      _resolveUserLocation();
+    });
+  }
+
+  Future<void> _resolveUserLocation() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+      if (!mounted) return;
+      setState(() {
+        _userLatitude = pos.latitude;
+        _userLongitude = pos.longitude;
+      });
+    } catch (_) {
+      // Mantém fallback SP se GPS indisponível.
+    }
+  }
+
+  Future<void> _loadPartners() async {
+    if (_partnersLoading) return;
+    setState(() => _partnersLoading = true);
+    try {
+      // Preferir oficinas; se a API não filtrar, filtramos no cliente.
+      List<Partner> list = [];
+      try {
+        list = await ApiService.getPartners(type: 'MECHANIC');
+      } catch (_) {
+        list = const [];
+      }
+      if (list.isEmpty) {
+        final all = await ApiService.getPartners();
+        list = all
+            .where((p) =>
+                p.type == PartnerType.mechanic ||
+                _looksLikeWorkshop(p))
+            .toList();
+      }
+      if (!mounted) return;
+      setState(() {
+        _partners = list;
+        _partnersLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _partners = const [];
+        _partnersLoading = false;
+      });
+    }
+  }
+
+  bool _looksLikeWorkshop(Partner p) {
+    final hay = [
+      ...p.specialties,
+      p.name,
+    ].join(' ').toLowerCase();
+    const keywords = [
+      'oficina',
+      'mecân',
+      'mecan',
+      'óleo',
+      'oleo',
+      'pneu',
+      'travão',
+      'travao',
+      'freio',
+      'filtro',
+      'moto',
+    ];
+    return keywords.any(hay.contains);
   }
 
   Future<void> _load() async {
@@ -711,6 +793,9 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
     final remainingLabel = remainingKm <= 0
         ? 'Troca recomendada agora'
         : '${NumberFormat('#,###').format(remainingKm)} km restantes';
+    final lastServiceLabel = maintenance.lastChangeKm == 0
+        ? 'Sem registro de troca'
+        : 'Última troca aos ${NumberFormat('#,###').format(maintenance.lastChangeKm)} km';
 
     final isAlert = maintenance.status != 'OK';
     final isOil = maintenance.id == 'oil' ||
@@ -829,12 +914,27 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                   const SizedBox(width: 4),
                   Text(
                     remainingLabel,
-                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 12,
+                      fontWeight:
+                          isAlert ? FontWeight.w700 : FontWeight.w400,
+                      color: isAlert ? statusColor : null,
+                    ),
                   ),
                 ],
               ),
             ],
           ),
+          if (isAlert) ...[
+            const SizedBox(height: 6),
+            Text(
+              lastServiceLabel,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: 11,
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.65),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
@@ -939,32 +1039,82 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
   }
 
   Widget _buildPartnerSuggestion(Maintenance maintenance, ThemeData theme) {
-    const double userLatitude = -23.5505;
-    const double userLongitude = -46.6333;
+    if (_partnersLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 16),
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
 
-    final partners = MockDataService.getMockPartners();
-    final relevantPartners = partners.where((partner) {
-      final hasSpecialty = partner.specialties.any((specialty) =>
-          specialty.toLowerCase() == maintenance.category.toLowerCase());
-      final hasPromotion = partner.activePromotions.any((promo) =>
-          promo.category?.toLowerCase() == maintenance.category.toLowerCase());
-      return (hasSpecialty || hasPromotion) &&
-          partner.activePromotions.isNotEmpty;
+    final category = maintenance.category.toLowerCase();
+    final relevantPartners = _partners.where((partner) {
+      final isWorkshop =
+          partner.type == PartnerType.mechanic || _looksLikeWorkshop(partner);
+      if (!isWorkshop) return false;
+      // Sem especialidades cadastradas: ainda sugerir oficina genérica.
+      if (partner.specialties.isEmpty) return true;
+      return partner.specialties.any((specialty) {
+        final s = specialty.toLowerCase();
+        return s.contains(category) ||
+            category.contains(s) ||
+            _specialtyMatchesCategory(s, category);
+      });
     }).toList();
 
-    if (relevantPartners.isEmpty) return const SizedBox.shrink();
+    if (relevantPartners.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.mapPinOff,
+                size: 18,
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.55),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Nenhuma oficina parceira próxima ainda',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     relevantPartners.sort((a, b) => a
-        .distanceTo(userLatitude, userLongitude)
-        .compareTo(b.distanceTo(userLatitude, userLongitude)));
+        .distanceTo(_userLatitude, _userLongitude)
+        .compareTo(b.distanceTo(_userLatitude, _userLongitude)));
 
     final nearestPartner = relevantPartners.first;
-    final distance = nearestPartner.distanceTo(userLatitude, userLongitude);
-    final relevantPromotion = nearestPartner.activePromotions.firstWhere(
-      (promo) =>
-          promo.category?.toLowerCase() == maintenance.category.toLowerCase(),
-      orElse: () => nearestPartner.activePromotions.first,
-    );
+    final distance =
+        nearestPartner.distanceTo(_userLatitude, _userLongitude);
+    final Promotion? relevantPromotion =
+        nearestPartner.activePromotions.isEmpty
+            ? null
+            : nearestPartner.activePromotions.firstWhere(
+                (promo) =>
+                    promo.category?.toLowerCase() == category,
+                orElse: () => nearestPartner.activePromotions.first,
+              );
 
     return Padding(
       padding: const EdgeInsets.only(top: 16),
@@ -1010,43 +1160,73 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                 ),
               ],
             ),
-            if (relevantPromotion.discountPercentage > 0) ...[
+            if (nearestPartner.address.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                nearestPartner.address,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 12,
+                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.65),
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (relevantPromotion != null &&
+                relevantPromotion.discountPercentage > 0) ...[
               const SizedBox(height: 8),
               Text(
                 '${relevantPromotion.discountPercentage.toInt()}% de desconto via Giro Certo',
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppColors.racingOrange,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
               ),
             ],
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => VoucherModal(
-                      partner: nearestPartner,
-                      promotion: relevantPromotion,
-                    ),
-                  );
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.racingOrange,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+            if (relevantPromotion != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => VoucherModal(
+                        partner: nearestPartner,
+                        promotion: relevantPromotion,
+                      ),
+                    );
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.racingOrange,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: const Text('Ver Oferta'),
                 ),
-                child: const Text('Ver Oferta'),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  bool _specialtyMatchesCategory(String specialty, String category) {
+    const aliases = <String, List<String>>{
+      'óleo': ['oleo', 'oil', 'lubrificante'],
+      'oleo': ['óleo', 'oil', 'lubrificante'],
+      'pneus': ['pneu', 'tire', 'tyre'],
+      'travões': ['travao', 'travão', 'freio', 'freios', 'brake'],
+      'travao': ['travões', 'travão', 'freio', 'freios'],
+      'filtros': ['filtro', 'filter'],
+      'transmissão': ['transmissao', 'corrente', 'coroa'],
+      'motor': ['vela', 'arrefecimento', 'coolant'],
+    };
+    final extras = aliases[category] ?? const <String>[];
+    return extras.any(specialty.contains);
   }
 }
 

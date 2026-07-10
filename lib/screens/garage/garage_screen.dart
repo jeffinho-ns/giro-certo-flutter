@@ -144,25 +144,25 @@ class _GarageScreenState extends State<GarageScreen> {
     final oilCritical = _oilMaintenance != null &&
         (_oilMaintenance!.status == 'Crítico' ||
             _oilMaintenance!.status == 'Atenção');
+    final oilRemaining = _oilMaintenance?.remainingKm;
     final title = isCritical
-        ? 'Manutenção crítica'
-        : 'Manutenção precisa de atenção';
-    final parts = <String>[];
-    if (oilCritical) parts.add('óleo');
-    if (summary.criticalCount > 0) {
-      parts.add(
-        '${summary.criticalCount} item${summary.criticalCount == 1 ? '' : 's'} crítico${summary.criticalCount == 1 ? '' : 's'}',
-      );
-    } else if (summary.warningCount > 0) {
-      parts.add(
-        '${summary.warningCount} item${summary.warningCount == 1 ? '' : 's'} em atenção',
-      );
+        ? 'Sua moto precisa de manutenção urgente'
+        : 'Manutenção recomendada em breve';
+    String subtitle;
+    if (oilCritical && oilRemaining != null) {
+      final oilHint = oilRemaining <= 0
+          ? 'Óleo do motor já passou do ciclo'
+          : 'Óleo: faltam $oilRemaining km para a troca';
+      subtitle = isCritical
+          ? '$oilHint. Toque para ver o que trocar.'
+          : '$oilHint. Toque para ver detalhes.';
+    } else if (summary.criticalCount > 0) {
+      subtitle =
+          '${summary.criticalCount} item${summary.criticalCount == 1 ? '' : 's'} crítico${summary.criticalCount == 1 ? '' : 's'}. Toque para ver o que trocar.';
+    } else {
+      subtitle =
+          '${summary.warningCount} item${summary.warningCount == 1 ? '' : 's'} em atenção. Toque para ver detalhes.';
     }
-    final subtitle = oilCritical && isCritical
-        ? 'Óleo e outros itens exigem troca em breve. Toque para ver detalhes.'
-        : oilCritical
-            ? 'Óleo do motor em atenção. Toque para ver detalhes.'
-            : '${parts.join(' · ')}. Toque para ver detalhes.';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
