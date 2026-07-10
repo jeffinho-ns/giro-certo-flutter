@@ -46,35 +46,31 @@ class _PilotProfileSelectScreenState extends State<PilotProfileSelectScreen> {
       backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Perfil do Piloto',
-                style: theme.textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+                'Como você usa a moto?',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 widget.onlyDeliveryForBicycle
-                    ? 'Entregadores de bicicleta atuam no perfil Delivery. Conclua o cadastro a seguir.'
-                    : 'Escolha como voce usa sua moto no dia a dia.',
+                    ? 'Com bicicleta, o cadastro é para trabalhar com entregas (perfil Delivery).'
+                    : 'Escolha o perfil que mais combina com você. Isso personaliza o app e as comunidades.',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
+                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.75),
+                  height: 1.35,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               Expanded(
-                child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: 0.86,
-                  ),
+                child: ListView.separated(
                   itemCount: options.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final option = options[index];
                     final isSelected = _selected == option.type;
@@ -89,7 +85,7 @@ class _PilotProfileSelectScreenState extends State<PilotProfileSelectScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                'Piloto de bicicleta cadastra somente o perfil Delivery.',
+                                'Com bicicleta, use o perfil Delivery para trabalhar com entregas.',
                               ),
                             ),
                           );
@@ -101,18 +97,21 @@ class _PilotProfileSelectScreenState extends State<PilotProfileSelectScreen> {
                   },
                 ),
               ),
-              const SizedBox(height: 16),
               if (_selected != null) ...[
+                const SizedBox(height: 8),
                 _RecommendedCommunitiesPreview(profile: _selected!),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
               ],
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 250),
                 child: OnboardingPrimaryButton(
                   key: ValueKey(_selected != null),
-                  label: 'Continuar',
-                  onPressed:
-                      _selected == null ? null : () => widget.onContinue(_selected!),
+                  label: _selected == PilotProfileType.delivery
+                      ? 'Continuar para cadastro de entregador'
+                      : 'Continuar',
+                  onPressed: _selected == null
+                      ? null
+                      : () => widget.onContinue(_selected!),
                 ),
               ),
             ],
@@ -140,32 +139,32 @@ class _ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = option.accent;
+    final isWork = option.type == PilotProfileType.delivery;
 
-    return AnimatedScale(
-      scale: isSelected ? 1.02 : 1.0,
-      duration: const Duration(milliseconds: 240),
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 200),
-        opacity: isDimmed ? 0.4 : 1.0,
-        child: AnimatedContainer(
-        duration: const Duration(milliseconds: 240),
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: isDimmed ? 0.4 : 1.0,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
         decoration: BoxDecoration(
-          color: isSelected
-              ? accent.withOpacity(0.15)
-              : theme.cardColor,
-          borderRadius: BorderRadius.circular(20),
+          color: isSelected ? accent.withValues(alpha: 0.12) : theme.cardColor,
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: isSelected ? accent : theme.dividerColor.withOpacity(0.35),
-            width: isSelected ? 1.6 : 1,
+            color: isSelected
+                ? accent
+                : (isWork
+                    ? accent.withValues(alpha: 0.45)
+                    : theme.dividerColor.withValues(alpha: 0.35)),
+            width: isSelected ? 2 : 1.2,
           ),
           boxShadow: [
             BoxShadow(
               color: isSelected
-                  ? accent.withOpacity(0.15)
-                  : Colors.black.withOpacity(0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
+                  ? accent.withValues(alpha: 0.14)
+                  : Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -173,10 +172,10 @@ class _ProfileCard extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(18),
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+              padding: const EdgeInsets.all(14),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Hero(
@@ -184,57 +183,74 @@ class _ProfileCard extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: accent.withOpacity(0.15),
+                        color: accent.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Icon(option.icon, color: accent, size: 24),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    option.title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    option.description,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
-                    ),
-                  ),
-                  const Spacer(),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                option.title,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            if (isSelected)
+                              Icon(
+                                LucideIcons.checkCircle2,
+                                size: 20,
+                                color: accent,
+                              ),
+                          ],
                         ),
-                        decoration: BoxDecoration(
-                          color: accent.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(20),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            _Badge(
+                              label: option.badge,
+                              color: accent,
+                            ),
+                            if (option.secondaryBadge != null)
+                              _Badge(
+                                label: option.secondaryBadge!,
+                                color: accent,
+                                outlined: true,
+                              ),
+                          ],
                         ),
-                        child: Text(
-                          option.badge,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
+                        const SizedBox(height: 8),
+                        Text(
+                          option.description,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.textTheme.bodyMedium?.color
+                                ?.withValues(alpha: 0.8),
+                            height: 1.35,
                           ),
                         ),
-                      ),
-                      const Spacer(),
-                      AnimatedOpacity(
-                        opacity: isSelected ? 1 : 0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(
-                          LucideIcons.checkCircle,
-                          size: 18,
-                          color: accent,
-                        ),
-                      ),
-                    ],
+                        if (option.hint != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            option.hint!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: accent,
+                              fontWeight: FontWeight.w700,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -242,7 +258,38 @@ class _ProfileCard extends StatelessWidget {
           ),
         ),
       ),
-    ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool outlined;
+
+  const _Badge({
+    required this.label,
+    required this.color,
+    this.outlined = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: outlined ? Colors.transparent : color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: outlined ? Border.all(color: color.withValues(alpha: 0.5)) : null,
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
+      ),
     );
   }
 }
@@ -252,6 +299,8 @@ class _PilotProfileOption {
   final String title;
   final String description;
   final String badge;
+  final String? secondaryBadge;
+  final String? hint;
   final IconData icon;
   final Color accent;
 
@@ -260,6 +309,8 @@ class _PilotProfileOption {
     required this.title,
     required this.description,
     required this.badge,
+    this.secondaryBadge,
+    this.hint,
     required this.icon,
     required this.accent,
   });
@@ -269,32 +320,41 @@ const List<_PilotProfileOption> _profileOptions = [
   _PilotProfileOption(
     type: PilotProfileType.casual,
     title: 'Casual',
-    description: 'Passeios leves e curtos nos fins de semana.',
-    badge: 'Fim de Semana',
+    description:
+        'Passeios leves, fins de semana e rolês com amigos. Ideal se a moto é lazer, não trabalho.',
+    badge: 'Lazer',
+    secondaryBadge: 'Fim de semana',
     icon: LucideIcons.sun,
     accent: AppColors.racingOrange,
   ),
   _PilotProfileOption(
     type: PilotProfileType.diario,
-    title: 'Diario',
-    description: 'Uso diario e deslocamentos urbanos.',
+    title: 'Uso diário',
+    description:
+        'Você usa a moto todo dia para ir ao trabalho, faculdade ou deslocamentos na cidade — sem fazer entregas.',
     badge: 'Urbano',
+    secondaryBadge: 'Dia a dia',
     icon: LucideIcons.mapPin,
     accent: AppColors.neonGreen,
   ),
   _PilotProfileOption(
     type: PilotProfileType.racing,
-    title: 'Racing',
-    description: 'Performance, pista e adrenalina.',
+    title: 'Racing / pista',
+    description:
+        'Foco em performance, track day e adrenalina. Comunidades e conteúdo voltados à pista.',
     badge: 'Pista',
+    secondaryBadge: 'Performance',
     icon: LucideIcons.trophy,
     accent: AppColors.alertRed,
   ),
   _PilotProfileOption(
     type: PilotProfileType.delivery,
-    title: 'Delivery',
-    description: 'Rotina profissional com foco em entregas.',
+    title: 'Delivery — quero trabalhar',
+    description:
+        'Para quem quer receber e fazer corridas de entrega pelo Giro Certo (moto ou bike). Você vai cadastrar documentos e aguardar aprovação.',
     badge: 'Trabalho',
+    secondaryBadge: 'Ganhe com entregas',
+    hint: 'Escolha esta opção se o seu objetivo é trabalhar como entregador.',
     icon: LucideIcons.package,
     accent: AppColors.statusWarning,
   ),
@@ -314,38 +374,67 @@ class _RecommendedCommunitiesPreview extends StatelessWidget {
       PilotProfileType.racing => [CommunityType.marca, CommunityType.lazer],
       PilotProfileType.delivery => [CommunityType.delivery, CommunityType.zona],
     };
+    final subtitle = switch (profile) {
+      PilotProfileType.delivery =>
+        'Grupos de entregadores e por zona — toque para explorar.',
+      PilotProfileType.casual =>
+        'Rolês e comunidades da sua região.',
+      PilotProfileType.diario =>
+        'Zona e manutenção para o dia a dia.',
+      PilotProfileType.racing =>
+        'Marcas e lazer com foco em performance.',
+    };
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: theme.cardColor,
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Comunidades recomendadas para você',
+            'Comunidades para o seu perfil',
             style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+            ),
           ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: suggestions
-                .map(
-                  (s) => ActionChip(
-                    label: Text(s.label),
-                    avatar: const Icon(LucideIcons.users, size: 14),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CommunitiesListScreen(initialType: s),
-                      ),
+            children: [
+              ...suggestions.map(
+                (s) => ActionChip(
+                  label: Text(s.label),
+                  avatar: const Icon(LucideIcons.users, size: 14),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CommunitiesListScreen(initialType: s),
                     ),
                   ),
-                )
-                .toList(),
+                ),
+              ),
+              ActionChip(
+                label: const Text('Ver todas'),
+                avatar: const Icon(LucideIcons.list, size: 14),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CommunitiesListScreen(),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -17,7 +17,9 @@ class CommunityDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dateFmt = DateFormat('dd/MM/yyyy', 'pt_BR');
+    // Sem locale 'pt_BR' — evita LocaleDataException (tela branca) se o locale
+    // não foi inicializado com initializeDateFormatting.
+    final dateFmt = DateFormat('dd/MM/yyyy');
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

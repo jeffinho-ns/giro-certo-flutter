@@ -11,11 +11,11 @@ extension PilotProfileTypeExtension on PilotProfileType {
       case PilotProfileType.casual:
         return 'Casual';
       case PilotProfileType.diario:
-        return 'Diario';
+        return 'Uso diário';
       case PilotProfileType.racing:
-        return 'Racing';
+        return 'Racing / pista';
       case PilotProfileType.delivery:
-        return 'Delivery';
+        return 'Delivery (trabalho)';
     }
   }
 
