@@ -222,8 +222,48 @@ class MaintenanceService {
       lastChangeKm: bike.currentKm,
       recommendedChangeKm: maintenance.recommendedChangeKm,
       currentKm: bike.currentKm,
-      status: 'OK',
+      // Após troca, o item volta a OK (enum da API).
+      status: toApiStatus('OK'),
     );
+  }
+
+  /// Status de UI (PT) → enum da API: `OK` | `ATENCAO` | `CRITICO`.
+  static String toApiStatus(String status) {
+    switch (status.trim().toUpperCase()) {
+      case 'OK':
+        return 'OK';
+      case 'ATENCAO':
+      case 'ATENÇÃO':
+      case 'ATENÇAO':
+        return 'ATENCAO';
+      case 'CRITICO':
+      case 'CRÍTICO':
+        return 'CRITICO';
+      default:
+        // Labels PT usados no app
+        final lower = status.trim().toLowerCase();
+        if (lower == 'atenção' || lower == 'atencao') return 'ATENCAO';
+        if (lower == 'crítico' || lower == 'critico') return 'CRITICO';
+        return 'OK';
+    }
+  }
+
+  /// Enum da API → label de UI em português.
+  static String toUiStatus(String status) {
+    switch (status.trim().toUpperCase()) {
+      case 'ATENCAO':
+        return 'Atenção';
+      case 'CRITICO':
+        return 'Crítico';
+      case 'OK':
+        return 'OK';
+      default:
+        // Já pode ser label PT
+        if (status == 'Atenção' || status == 'Crítico' || status == 'OK') {
+          return status;
+        }
+        return 'OK';
+    }
   }
 
   static String _statusFor(double wear) {

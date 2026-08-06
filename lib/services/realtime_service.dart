@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../models/delivery_offer_payload.dart';
 import 'api_service.dart';
 import 'notification_service.dart';
+import 'sse_service.dart';
 
 /// Payload recebido em tempo real para uma nova mensagem de chat.
 class ChatMessagePayload {
@@ -241,6 +242,97 @@ class RealtimeService {
     _socket!.onConnectError((_) {
       _scheduleSilentReconnect();
     });
+
+    _startSseBridge();
+  }
+
+  void _startSseBridge() {
+    SseService.instance.disconnect();
+    SseService.instance.connect((event, data) {
+      _dispatchSseEvent(event, data);
+    });
+  }
+
+  void _dispatchSseEvent(String event, Map<String, dynamic> data) {
+    switch (event) {
+      case 'notification':
+        _notificationController.add(data);
+        break;
+      case 'delivery:status:changed':
+      case 'delivery:update':
+        _deliveryStatusController.add(data);
+        break;
+      case 'delivery:store_refresh':
+        final map = Map<String, dynamic>.from(data);
+        map['_storeRefresh'] = true;
+        _deliveryStatusController.add(map);
+        break;
+      case 'delivery:new_order_offer':
+        final orderRaw = data['order'];
+        if (orderRaw is Map) {
+          try {
+            final order = ApiService.riderDeliveryOrderFromJson(
+              Map<String, dynamic>.from(orderRaw),
+            );
+            final expires = data['expiresInSeconds'];
+            final distanceToStore = data['distanceToStoreKm'];
+            final routeDistance = data['routeDistanceKm'];
+            _deliveryOfferController.add(
+              DeliveryOfferPayload(
+                order: order,
+                expiresInSeconds: expires is num ? expires.toInt() : 15,
+                distanceToStoreKm: distanceToStore is num
+                    ? distanceToStore.toDouble()
+                    : double.tryParse('$distanceToStore'),
+                routeDistanceKm: routeDistance is num
+                    ? routeDistance.toDouble()
+                    : double.tryParse('$routeDistance'),
+              ),
+            );
+          } catch (e) {
+            debugPrint('SSE delivery:new_order_offer parse: $e');
+          }
+        }
+        break;
+      case 'delivery:race:lost':
+        _notificationController.add({
+          'type': 'delivery_race_lost',
+          ...data,
+        });
+        break;
+      case 'rider:location:update':
+        final userId = data['userId'] as String?;
+        final lat = data['lat'] is num
+            ? (data['lat'] as num).toDouble()
+            : double.tryParse('${data['lat']}');
+        final lng = data['lng'] is num
+            ? (data['lng'] as num).toDouble()
+            : double.tryParse('${data['lng']}');
+        if (userId != null && lat != null && lng != null) {
+          _riderLocationController.add(
+            RiderLocationPayload(
+              userId: userId,
+              lat: lat,
+              lng: lng,
+              orderId: data['orderId'] as String?,
+              status: data['status'] as String?,
+            ),
+          );
+        }
+        break;
+      case 'chat:message':
+        final chatId = data['chatId'] as String?;
+        final message = data['message'];
+        if (chatId != null && message is Map) {
+          _chatMessageController.add(ChatMessagePayload(
+            chatId: chatId,
+            message: Map<String, dynamic>.from(message),
+          ));
+        }
+        break;
+      default:
+        break;
+    }
   }
 
   void _scheduleSilentReconnect() {
@@ -316,6 +408,7 @@ class RealtimeService {
   }
 
   void disconnect({bool clearUserId = true}) {
+    SseService.instance.disconnect();
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _reconnectAttempt = 0;

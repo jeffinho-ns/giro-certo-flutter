@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../../providers/app_state_provider.dart';
+import '../../services/api_service.dart';
 import '../../services/maintenance_service.dart';
-import '../../services/mock_data_service.dart';
 import '../../models/maintenance.dart';
 import '../../models/bike.dart';
 import '../../models/partner.dart';
@@ -24,13 +25,94 @@ class MaintenanceDetailScreen extends StatefulWidget {
 
 class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
   List<Maintenance> _items = const [];
+  List<Partner> _partners = const [];
   bool _loading = true;
+  bool _partnersLoading = false;
   String? _error;
+  double _userLatitude = -23.5505;
+  double _userLongitude = -46.6333;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _loadPartners();
+      _resolveUserLocation();
+    });
+  }
+
+  Future<void> _resolveUserLocation() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+      if (!mounted) return;
+      setState(() {
+        _userLatitude = pos.latitude;
+        _userLongitude = pos.longitude;
+      });
+    } catch (_) {
+      // Mantém fallback SP se GPS indisponível.
+    }
+  }
+
+  Future<void> _loadPartners() async {
+    if (_partnersLoading) return;
+    setState(() => _partnersLoading = true);
+    try {
+      // Preferir oficinas; se a API não filtrar, filtramos no cliente.
+      List<Partner> list = [];
+      try {
+        list = await ApiService.getPartners(type: 'MECHANIC');
+      } catch (_) {
+        list = const [];
+      }
+      if (list.isEmpty) {
+        final all = await ApiService.getPartners();
+        list = all
+            .where((p) =>
+                p.type == PartnerType.mechanic ||
+                _looksLikeWorkshop(p))
+            .toList();
+      }
+      if (!mounted) return;
+      setState(() {
+        _partners = list;
+        _partnersLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _partners = const [];
+        _partnersLoading = false;
+      });
+    }
+  }
+
+  bool _looksLikeWorkshop(Partner p) {
+    final hay = [
+      ...p.specialties,
+      p.name,
+    ].join(' ').toLowerCase();
+    const keywords = [
+      'oficina',
+      'mecân',
+      'mecan',
+      'óleo',
+      'oleo',
+      'pneu',
+      'travão',
+      'travao',
+      'freio',
+      'filtro',
+      'moto',
+    ];
+    return keywords.any(hay.contains);
   }
 
   Future<void> _load() async {
@@ -227,6 +309,8 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                   children: [
+                    if (!_loading && _error == null)
+                      _buildCriticalAlertBanner(summary, theme),
                     _buildHeaderCard(bike, summary, theme),
                     const SizedBox(height: 20),
                     if (_loading)
@@ -242,7 +326,7 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                     else if (_items.isEmpty)
                       _buildNoItemsState(theme)
                     else
-                      ..._items.map((m) => Padding(
+                      ..._sortedItems.map((m) => Padding(
                             padding: const EdgeInsets.only(bottom: 16),
                             child: _buildMaintenanceCard(bike, m, theme),
                           )),
@@ -294,6 +378,137 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
               label: const Text('Ir para a Garagem'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  List<Maintenance> get _sortedItems {
+    final priority = {'Crítico': 0, 'Atenção': 1, 'OK': 2};
+    final list = List<Maintenance>.from(_items);
+    list.sort((a, b) {
+      final pa = priority[a.status] ?? 3;
+      final pb = priority[b.status] ?? 3;
+      if (pa != pb) return pa.compareTo(pb);
+      return b.wearPercentage.compareTo(a.wearPercentage);
+    });
+    return list;
+  }
+
+  Widget _buildCriticalAlertBanner(
+      MaintenanceSummary summary, ThemeData theme) {
+    if (!summary.hasCritical && !summary.hasWarning) {
+      return const SizedBox.shrink();
+    }
+    final isCritical = summary.hasCritical;
+    final color =
+        isCritical ? AppColors.statusCritical : AppColors.statusWarning;
+    final criticalItems = _items
+        .where((m) => m.status == 'Crítico')
+        .map((m) => m.partName)
+        .toList();
+    final warningItems = _items
+        .where((m) => m.status == 'Atenção')
+        .map((m) => m.partName)
+        .toList();
+    final oilAlert = _items.any((m) =>
+        (m.id == 'oil' ||
+            m.partName.toLowerCase().contains('óleo') ||
+            m.partName.toLowerCase().contains('oleo')) &&
+        (m.status == 'Crítico' || m.status == 'Atenção'));
+
+    final highlight = oilAlert
+        ? 'Óleo do motor precisa de atenção.'
+        : (criticalItems.isNotEmpty
+            ? criticalItems.take(2).join(', ')
+            : warningItems.take(2).join(', '));
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.16),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.55), width: 1.5),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              isCritical ? LucideIcons.alertTriangle : LucideIcons.alertCircle,
+              color: color,
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isCritical
+                        ? 'Ação recomendada agora'
+                        : 'Itens em atenção',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    oilAlert
+                        ? '$highlight ${isCritical ? 'Troca urgente.' : 'Planeje a troca em breve.'}'
+                        : '$highlight${criticalItems.length + warningItems.length > 2 ? ' e mais.' : '.'}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (summary.criticalCount > 0 || summary.warningCount > 0) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        if (summary.criticalCount > 0)
+                          _alertBadge(
+                            '${summary.criticalCount} crítico${summary.criticalCount == 1 ? '' : 's'}',
+                            AppColors.statusCritical,
+                          ),
+                        if (summary.warningCount > 0)
+                          _alertBadge(
+                            '${summary.warningCount} em atenção',
+                            AppColors.statusWarning,
+                          ),
+                        if (oilAlert)
+                          _alertBadge('Óleo', color),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _alertBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -578,20 +793,32 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
     final remainingLabel = remainingKm <= 0
         ? 'Troca recomendada agora'
         : '${NumberFormat('#,###').format(remainingKm)} km restantes';
+    final lastServiceLabel = maintenance.lastChangeKm == 0
+        ? 'Sem registro de troca'
+        : 'Última troca aos ${NumberFormat('#,###').format(maintenance.lastChangeKm)} km';
+
+    final isAlert = maintenance.status != 'OK';
+    final isOil = maintenance.id == 'oil' ||
+        maintenance.partName.toLowerCase().contains('óleo') ||
+        maintenance.partName.toLowerCase().contains('oleo');
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: isAlert
+            ? Color.alphaBlend(statusColor.withOpacity(0.08), theme.cardColor)
+            : theme.cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: statusColor.withOpacity(0.22),
-          width: 1.2,
+          color: statusColor.withOpacity(isAlert ? 0.55 : 0.22),
+          width: isAlert ? 1.8 : 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withOpacity(0.06),
-            blurRadius: 10,
+            color: isAlert
+                ? statusColor.withOpacity(0.12)
+                : theme.shadowColor.withOpacity(0.06),
+            blurRadius: isAlert ? 14 : 10,
             offset: const Offset(0, 4),
           ),
         ],
@@ -622,10 +849,16 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      maintenance.category,
+                      isOil && isAlert
+                          ? '${maintenance.category} • prioridade'
+                          : maintenance.category,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.textTheme.bodyMedium?.color
-                            ?.withOpacity(0.7),
+                        color: isOil && isAlert
+                            ? statusColor
+                            : theme.textTheme.bodyMedium?.color
+                                ?.withOpacity(0.7),
+                        fontWeight:
+                            isOil && isAlert ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                   ],
@@ -635,9 +868,12 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.18),
+                  color: statusColor.withOpacity(isAlert ? 0.28 : 0.18),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: statusColor, width: 1),
+                  border: Border.all(
+                    color: statusColor,
+                    width: isAlert ? 1.4 : 1,
+                  ),
                 ),
                 child: Text(
                   maintenance.status,
@@ -678,12 +914,27 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                   const SizedBox(width: 4),
                   Text(
                     remainingLabel,
-                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 12,
+                      fontWeight:
+                          isAlert ? FontWeight.w700 : FontWeight.w400,
+                      color: isAlert ? statusColor : null,
+                    ),
                   ),
                 ],
               ),
             ],
           ),
+          if (isAlert) ...[
+            const SizedBox(height: 6),
+            Text(
+              lastServiceLabel,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: 11,
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.65),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
@@ -788,32 +1039,82 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
   }
 
   Widget _buildPartnerSuggestion(Maintenance maintenance, ThemeData theme) {
-    const double userLatitude = -23.5505;
-    const double userLongitude = -46.6333;
+    if (_partnersLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 16),
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
 
-    final partners = MockDataService.getMockPartners();
-    final relevantPartners = partners.where((partner) {
-      final hasSpecialty = partner.specialties.any((specialty) =>
-          specialty.toLowerCase() == maintenance.category.toLowerCase());
-      final hasPromotion = partner.activePromotions.any((promo) =>
-          promo.category?.toLowerCase() == maintenance.category.toLowerCase());
-      return (hasSpecialty || hasPromotion) &&
-          partner.activePromotions.isNotEmpty;
+    final category = maintenance.category.toLowerCase();
+    final relevantPartners = _partners.where((partner) {
+      final isWorkshop =
+          partner.type == PartnerType.mechanic || _looksLikeWorkshop(partner);
+      if (!isWorkshop) return false;
+      // Sem especialidades cadastradas: ainda sugerir oficina genérica.
+      if (partner.specialties.isEmpty) return true;
+      return partner.specialties.any((specialty) {
+        final s = specialty.toLowerCase();
+        return s.contains(category) ||
+            category.contains(s) ||
+            _specialtyMatchesCategory(s, category);
+      });
     }).toList();
 
-    if (relevantPartners.isEmpty) return const SizedBox.shrink();
+    if (relevantPartners.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.mapPinOff,
+                size: 18,
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.55),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Nenhuma oficina parceira próxima ainda',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     relevantPartners.sort((a, b) => a
-        .distanceTo(userLatitude, userLongitude)
-        .compareTo(b.distanceTo(userLatitude, userLongitude)));
+        .distanceTo(_userLatitude, _userLongitude)
+        .compareTo(b.distanceTo(_userLatitude, _userLongitude)));
 
     final nearestPartner = relevantPartners.first;
-    final distance = nearestPartner.distanceTo(userLatitude, userLongitude);
-    final relevantPromotion = nearestPartner.activePromotions.firstWhere(
-      (promo) =>
-          promo.category?.toLowerCase() == maintenance.category.toLowerCase(),
-      orElse: () => nearestPartner.activePromotions.first,
-    );
+    final distance =
+        nearestPartner.distanceTo(_userLatitude, _userLongitude);
+    final Promotion? relevantPromotion =
+        nearestPartner.activePromotions.isEmpty
+            ? null
+            : nearestPartner.activePromotions.firstWhere(
+                (promo) =>
+                    promo.category?.toLowerCase() == category,
+                orElse: () => nearestPartner.activePromotions.first,
+              );
 
     return Padding(
       padding: const EdgeInsets.only(top: 16),
@@ -859,43 +1160,73 @@ class _MaintenanceDetailScreenState extends State<MaintenanceDetailScreen> {
                 ),
               ],
             ),
-            if (relevantPromotion.discountPercentage > 0) ...[
+            if (nearestPartner.address.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                nearestPartner.address,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 12,
+                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.65),
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (relevantPromotion != null &&
+                relevantPromotion.discountPercentage > 0) ...[
               const SizedBox(height: 8),
               Text(
                 '${relevantPromotion.discountPercentage.toInt()}% de desconto via Giro Certo',
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppColors.racingOrange,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
               ),
             ],
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => VoucherModal(
-                      partner: nearestPartner,
-                      promotion: relevantPromotion,
-                    ),
-                  );
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.racingOrange,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+            if (relevantPromotion != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => VoucherModal(
+                        partner: nearestPartner,
+                        promotion: relevantPromotion,
+                      ),
+                    );
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.racingOrange,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: const Text('Ver Oferta'),
                 ),
-                child: const Text('Ver Oferta'),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  bool _specialtyMatchesCategory(String specialty, String category) {
+    const aliases = <String, List<String>>{
+      'óleo': ['oleo', 'oil', 'lubrificante'],
+      'oleo': ['óleo', 'oil', 'lubrificante'],
+      'pneus': ['pneu', 'tire', 'tyre'],
+      'travões': ['travao', 'travão', 'freio', 'freios', 'brake'],
+      'travao': ['travões', 'travão', 'freio', 'freios'],
+      'filtros': ['filtro', 'filter'],
+      'transmissão': ['transmissao', 'corrente', 'coroa'],
+      'motor': ['vela', 'arrefecimento', 'coolant'],
+    };
+    final extras = aliases[category] ?? const <String>[];
+    return extras.any(specialty.contains);
   }
 }
 

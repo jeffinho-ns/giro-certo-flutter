@@ -9,6 +9,8 @@ import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
 import '../../models/partner.dart';
 import '../../models/delivery_order.dart';
+import '../../models/store_order_item.dart';
+import '../../models/partner_store_order.dart';
 import '../../utils/colors.dart';
 import '../../utils/delivery_status_utils.dart';
 import '../../widgets/modern_header.dart';
@@ -39,7 +41,15 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
   List<DeliveryOrder> _pendingOrders = [];
   final Set<String> _dispatchingOrderIds = <String>{};
   final Set<String> _knownOrderIds = <String>{};
+  // Itens da loja virtual por pedido (chave = id do DeliveryOrder).
+  final Map<String, List<StoreOrderItem>> _storeItemsByOrderId =
+      <String, List<StoreOrderItem>>{};
+  final Set<String> _storeItemsRequested = <String>{};
+  final Set<String> _storeItemsFailed = <String>{};
   final Set<String> _riderArrivedDialogOrderIds = <String>{};
+  List<PartnerStoreOrder> _virtualStoreOrders = [];
+  final Set<String> _acceptingVirtualStoreOrderIds = <String>{};
+  final Set<String> _knownVirtualStoreOrderIds = <String>{};
   Partner? _myPartner;
   int _totalOrders = 0;
   int _completedOrders = 0;
@@ -60,7 +70,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
       _subscribeRealtimeUpdates();
       _loadPartnerData();
     });
-    _partnerBackgroundSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+    _partnerBackgroundSyncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (!mounted) return;
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       final u = appState.user;
@@ -119,6 +129,17 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     if (payload['_storeRefresh'] == true) {
       final sid = payload['storeId']?.toString();
       if (sid != null && sid == partnerId.toString()) {
+        final reason = payload['reason']?.toString();
+        if (reason == 'store_order_paid' && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Novo pedido da loja virtual — pagamento confirmado! Toque em Aceitar para chamar motoboys.',
+              ),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
         _loadPartnerData(silent: true);
       }
       return;
@@ -283,6 +304,44 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
         ..clear()
         ..addAll(allOrders.map((order) => order.id));
     });
+
+    // Carrega os itens dos pedidos vindos da loja virtual (têm storeOrderId).
+    for (final order in allOrders) {
+      _ensureStoreItemsLoaded(order);
+    }
+  }
+
+  /// Busca, uma única vez por pedido, os itens da loja virtual (cardápio).
+  Future<void> _ensureStoreItemsLoaded(
+    DeliveryOrder order, {
+    bool force = false,
+  }) async {
+    final storeOrderId = order.storeOrderId;
+    if (storeOrderId == null || storeOrderId.isEmpty) return;
+    if (!force && _storeItemsByOrderId.containsKey(order.id)) return;
+    if (!force && _storeItemsRequested.contains(order.id)) return;
+    _storeItemsRequested.add(order.id);
+    if (mounted && _storeItemsFailed.contains(order.id)) {
+      setState(() => _storeItemsFailed.remove(order.id));
+    } else {
+      _storeItemsFailed.remove(order.id);
+    }
+    try {
+      final items = await ApiService.getStoreOrderItems(storeOrderId);
+      if (!mounted) return;
+      setState(() {
+        _storeItemsByOrderId[order.id] = items;
+        _storeItemsRequested.remove(order.id);
+        _storeItemsFailed.remove(order.id);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _storeItemsRequested.remove(order.id);
+        _storeItemsFailed.add(order.id);
+      });
+      debugPrint('Falha ao carregar itens do pedido ${order.id}: $e');
+    }
   }
 
   Future<void> _loadPartnerData({bool silent = false}) async {
@@ -302,6 +361,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
 
       final allOrders =
           await ApiService.getDeliveryOrders(storeId: user.partnerId);
+      final virtualOrders = await ApiService.getPartnerStoreOrders();
       final ranking = await ApiService.getDeliveryRanking(
         partnerId: user.partnerId,
         limit: 3,
@@ -310,6 +370,10 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
       setState(() {
         _myPartner = nextPartner;
         _deliveryRanking = ranking;
+        _virtualStoreOrders = virtualOrders;
+        _knownVirtualStoreOrderIds
+          ..clear()
+          ..addAll(virtualOrders.map((o) => o.id));
       });
       _syncFromOrderList(allOrders);
       if (showBlockingLoader) {
@@ -319,6 +383,33 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     } catch (_) {
       if (mounted && showBlockingLoader) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  List<PartnerStoreOrder> get _virtualStorePaidOrders =>
+      _virtualStoreOrders.where((o) => o.isPaidAwaitingAccept).toList();
+
+  Future<void> _acceptVirtualStoreOrder(PartnerStoreOrder order) async {
+    if (_acceptingVirtualStoreOrderIds.contains(order.id)) return;
+    setState(() => _acceptingVirtualStoreOrderIds.add(order.id));
+    try {
+      await ApiService.acceptPartnerStoreOrder(order.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pedido aceito — motociclistas notificados.'),
+        ),
+      );
+      await _loadPartnerData(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao aceitar pedido: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _acceptingVirtualStoreOrderIds.remove(order.id));
       }
     }
   }
@@ -518,6 +609,10 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                             _buildOperationalPanel(theme, isDark),
                             const SizedBox(height: 16),
                             _buildRevenueCard(theme, isDark),
+                            if (_virtualStorePaidOrders.isNotEmpty) ...[
+                              const SizedBox(height: 28),
+                              _buildVirtualStoreOrdersSection(theme, isDark),
+                            ],
                             const SizedBox(height: 20),
                             _buildNewOrderCta(theme),
                             if (_activeOrders.isNotEmpty) ...[
@@ -555,7 +650,8 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                             ],
                             if (_activeOrders.isEmpty &&
                                 _pendingOrders.isEmpty &&
-                                _awaitingDispatchOrders.isEmpty) ...[
+                                _awaitingDispatchOrders.isEmpty &&
+                                _virtualStorePaidOrders.isEmpty) ...[
                               const SizedBox(height: 32),
                               _buildEmptyState(theme, isDark),
                             ],
@@ -615,7 +711,8 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
         Expanded(
           child: _StatChip(
             label: 'Aguardando',
-            value: '${_pendingOrders.length + _awaitingDispatchOrders.length}',
+            value:
+                '${_pendingOrders.length + _awaitingDispatchOrders.length + _virtualStorePaidOrders.length}',
             icon: LucideIcons.clock,
             color: AppColors.statusWarning,
             isDark: isDark,
@@ -955,6 +1052,127 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
     );
   }
 
+  Widget _buildVirtualStoreOrdersSection(ThemeData theme, bool isDark) {
+    final paidOrders = _virtualStorePaidOrders;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader(
+          theme,
+          title: 'Loja virtual — pagos',
+          count: paidOrders.length,
+          accent: AppColors.racingOrange,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Pedidos feitos na vitrine online. Aceite para chamar motoboys — sincronizado com o painel admin.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.65),
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...paidOrders.map(
+          (o) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildVirtualStoreOrderCard(theme, isDark, o),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVirtualStoreOrderCard(
+    ThemeData theme,
+    bool isDark,
+    PartnerStoreOrder order,
+  ) {
+    final isAccepting = _acceptingVirtualStoreOrderIds.contains(order.id);
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.panelDarkHigh : AppColors.panelLightHigh,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.racingOrange.withValues(alpha: 0.45)),
+        boxShadow: AppColors.raisedPanelShadows(isDark),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '#${order.id.length >= 8 ? order.id.substring(order.id.length - 8) : order.id}',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.statusOk.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Pago',
+                  style: TextStyle(
+                    color: AppColors.statusOk,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(order.customerName, style: theme.textTheme.bodyMedium),
+          Text(
+            order.customerPhone,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            order.customerAddress,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'R\$ ${order.total.toStringAsFixed(2)}',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: AppColors.racingOrange,
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: isAccepting ? null : () => _acceptVirtualStoreOrder(order),
+            icon: isAccepting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(LucideIcons.checkCircle2, size: 18),
+            label: Text(isAccepting ? 'Aceitando...' : 'Aceitar e chamar motoboy'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.racingOrange,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChamadosSection(ThemeData theme, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1148,6 +1366,7 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                         ),
                       ),
                     ),
+                    _buildStoreItemsBlock(theme, order),
                     if (showMotoSearchBanner) ...[
                       const SizedBox(height: 10),
                       Row(
@@ -1287,6 +1506,177 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
               style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Lista os itens do pedido quando ele veio da loja virtual (cardápio).
+  Widget _buildStoreItemsBlock(ThemeData theme, DeliveryOrder order) {
+    final hasStoreOrder =
+        order.storeOrderId != null && order.storeOrderId!.isNotEmpty;
+    if (!hasStoreOrder) return const SizedBox.shrink();
+
+    final items = _storeItemsByOrderId[order.id];
+    if (items == null) {
+      if (_storeItemsFailed.contains(order.id)) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.alertCircle,
+                size: 14,
+                color: theme.colorScheme.error.withValues(alpha: 0.85),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Não foi possível carregar os itens',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.textTheme.bodySmall?.color
+                        ?.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () =>
+                    unawaited(_ensureStoreItemsLoaded(order, force: true)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Tentar de novo'),
+              ),
+            ],
+          ),
+        );
+      }
+      // Carregando os itens em segundo plano.
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Carregando itens do pedido…',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.shoppingBag,
+                  size: 14, color: AppColors.racingOrange),
+              const SizedBox(width: 6),
+              Text(
+                'Itens do pedido',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...items.map((item) => _buildStoreItemRow(theme, item)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStoreItemRow(ThemeData theme, StoreOrderItem item) {
+    final optionsSummary = item.optionsSummary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.racingOrange.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${item.quantity}x',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppColors.racingOrange,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item.name,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+              Text(
+                _formatCurrency(item.lineTotal),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          if (optionsSummary.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 32, top: 1),
+              child: Text(
+                optionsSummary,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.65),
+                  height: 1.2,
+                ),
+              ),
+            ),
+          if (item.notes != null && item.notes!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 32, top: 1),
+              child: Text(
+                'Obs.: ${item.notes}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+                  fontStyle: FontStyle.italic,
+                  height: 1.2,
+                ),
+              ),
+            ),
         ],
       ),
     );

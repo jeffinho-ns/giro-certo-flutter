@@ -50,9 +50,16 @@ class _CommunitiesListScreenState extends State<CommunitiesListScreen> {
         _all = list;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Não foi possível carregar as comunidades. Puxe para atualizar.',
+          ),
+        ),
+      );
     }
   }
 
@@ -165,29 +172,50 @@ class _CommunitiesListScreenState extends State<CommunitiesListScreen> {
   }
 
   Widget _empty(ThemeData theme) {
+    final filterLabel = _typeFilter?.label;
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
-        const SizedBox(height: 120),
-        Icon(LucideIcons.users,
-            size: 48,
-            color: theme.textTheme.bodyMedium?.color?.withOpacity(0.4)),
+        const SizedBox(height: 100),
+        Icon(
+          LucideIcons.users,
+          size: 48,
+          color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.4),
+        ),
         const SizedBox(height: 12),
         Center(
-          child: Text(
-            'Ainda não há comunidades para mostrar.',
-            style: theme.textTheme.bodyMedium,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              filterLabel == null
+                  ? 'Ainda não há comunidades para mostrar.'
+                  : 'Nenhuma comunidade em “$filterLabel” no momento.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium,
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Center(
           child: Text(
-            'Crie a sua e convide outros motociclistas.',
+            filterLabel == null
+                ? 'Crie a sua e convide outros motociclistas.'
+                : 'Toque em “Todas” acima ou crie uma nova comunidade.',
+            textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
             ),
           ),
         ),
+        if (filterLabel != null) ...[
+          const SizedBox(height: 16),
+          Center(
+            child: TextButton(
+              onPressed: () => setState(() => _typeFilter = null),
+              child: const Text('Ver todas as comunidades'),
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -8,6 +8,11 @@ import '../models/delivery_order.dart';
 import '../models/partner.dart';
 import '../models/bike.dart';
 import '../models/vehicle_type.dart';
+import '../models/store_order_item.dart';
+import '../models/partner_store_order.dart';
+import '../models/store_category.dart';
+import '../models/store_product.dart';
+import '../models/store_banner.dart';
 import '../utils/geo_coordinates_brazil.dart';
 import '../utils/delivery_proof_pin.dart';
 import 'delivery_registration_cache.dart';
@@ -29,8 +34,13 @@ class ApiStructuredException implements Exception {
 }
 
 class ApiService {
-  // TODO: Configurar via variável de ambiente
-  static const String baseUrl = 'https://giro-certo-api.onrender.com/api';
+  /// URL da API. Em release use:
+  /// `flutter run --dart-define=API_URL=https://sua-api.com/api`
+  /// Default aponta para o ambiente de produção atual.
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'https://giro-certo-api.onrender.com/api',
+  );
 
   /// Timeout para requisições HTTP (evita travamentos em rede instável)
   static const Duration _requestTimeout = Duration(seconds: 25);
@@ -1220,6 +1230,7 @@ class ApiService {
       riderBikeModel: jsonStringOrNull(json['riderBikeModel']),
       riderBikeVehicleType: jsonStringOrNull(json['riderBikeVehicleType']),
       internalCode: jsonStringOrNull(json['internalCode']),
+      storeOrderId: jsonStringOrNull(json['storeOrderId']),
       distance: json['distance'] != null ? jsonDouble(json['distance']) : null,
       estimatedTime: json['estimatedTime'] != null
           ? (json['estimatedTime'] is num
@@ -1316,6 +1327,415 @@ class ApiService {
   }
 
   /// Obter própria loja (para lojistas)
+  /// Lista pedidos da loja virtual (vitrine) para o lojista aceitar/despachar.
+  static Future<List<PartnerStoreOrder>> getPartnerStoreOrders({
+    int limit = 100,
+  }) async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/orders?limit=$limit'),
+          headers: await _getHeaders(),
+        )
+        .timeout(
+          const Duration(seconds: 12),
+          onTimeout: () =>
+              throw Exception('Tempo esgotado ao buscar pedidos da loja'),
+        );
+    _handleError(response);
+    final data = json.decode(response.body);
+    final list = (data['orders'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => PartnerStoreOrder.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  /// Aceita pedido pago da vitrine e chama motoboys (ponte → DeliveryOrder).
+  static Future<String?> acceptPartnerStoreOrder(String storeOrderId) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/store/manage/orders/$storeOrderId/accept'),
+          headers: await _getHeaders(),
+          body: json.encode({}),
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () =>
+              throw Exception('Tempo esgotado ao aceitar pedido da loja'),
+        );
+    _handleError(response);
+    final data = json.decode(response.body);
+    if (data is Map && data['deliveryOrderId'] != null) {
+      return data['deliveryOrderId'].toString();
+    }
+    return null;
+  }
+
+  /// Busca os itens de um pedido da loja virtual (cardápio com variações).
+  /// Usa o pedido de compra (StoreOrder) ligado ao DeliveryOrder via storeOrderId.
+  /// Escopado por partnerId na API (lojista só vê os próprios pedidos).
+  static Future<List<StoreOrderItem>> getStoreOrderItems(
+    String storeOrderId,
+  ) async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/orders/$storeOrderId'),
+          headers: await _getHeaders(),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            throw Exception('Tempo de espera esgotado ao buscar itens do pedido');
+          },
+        );
+
+    _handleError(response);
+
+    final data = json.decode(response.body);
+    final order = data['order'];
+    if (order is! Map) return const [];
+    final rawItems = order['items'];
+    if (rawItems is! List) return const [];
+    return rawItems
+        .whereType<Map>()
+        .map((e) => StoreOrderItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  // ============================================
+  // Loja virtual — gestão de catálogo (lojista)
+  // partnerId vem do token (server-side). Não enviar partnerId.
+  // ============================================
+
+  static Future<List<StoreCategory>> getStoreCategories() async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/categories'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout,
+            onTimeout: () =>
+                throw Exception('Tempo esgotado ao buscar categorias'));
+    _handleError(response);
+    final data = json.decode(response.body);
+    final list = (data['categories'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => StoreCategory.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<StoreCategory> createStoreCategory(String name) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/store/manage/categories'),
+      headers: await _getHeaders(),
+      body: json.encode({'name': name}),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreCategory.fromJson(
+        Map<String, dynamic>.from(data['category'] as Map));
+  }
+
+  static Future<void> deleteStoreCategory(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/store/manage/categories/$id'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+  }
+
+  static Future<List<StoreProduct>> getStoreProducts() async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/products'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout,
+            onTimeout: () =>
+                throw Exception('Tempo esgotado ao buscar produtos'));
+    _handleError(response);
+    final data = json.decode(response.body);
+    final list = (data['products'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => StoreProduct.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<StoreProduct> createStoreProduct({
+    required String name,
+    required double basePrice,
+    String? description,
+    String? categoryId,
+    String? photoUrl,
+    bool active = true,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'basePrice': basePrice,
+      'active': active,
+    };
+    if (description != null) body['description'] = description;
+    if (categoryId != null) body['categoryId'] = categoryId;
+    if (photoUrl != null) body['photoUrl'] = photoUrl;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/store/manage/products'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreProduct.fromJson(
+        Map<String, dynamic>.from(data['product'] as Map));
+  }
+
+  static Future<StoreProduct> updateStoreProduct(
+    String id, {
+    String? name,
+    double? basePrice,
+    String? description,
+    String? categoryId,
+    String? photoUrl,
+    bool? active,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (basePrice != null) body['basePrice'] = basePrice;
+    if (description != null) body['description'] = description;
+    if (categoryId != null) body['categoryId'] = categoryId;
+    if (photoUrl != null) body['photoUrl'] = photoUrl;
+    if (active != null) body['active'] = active;
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/store/manage/products/$id'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreProduct.fromJson(
+        Map<String, dynamic>.from(data['product'] as Map));
+  }
+
+  static Future<void> deleteStoreProduct(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/store/manage/products/$id'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+  }
+
+  // --- Promoções (banners) ---
+
+  static Future<List<StoreBanner>> getStoreBanners() async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/banners'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout,
+            onTimeout: () =>
+                throw Exception('Tempo esgotado ao buscar promoções'));
+    _handleError(response);
+    final data = json.decode(response.body);
+    final list = (data['banners'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => StoreBanner.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<StoreBanner> createStoreBanner({
+    required String imageUrl,
+    String? title,
+    String? linkUrl,
+    double? discount,
+    bool active = true,
+  }) async {
+    final body = <String, dynamic>{'imageUrl': imageUrl, 'active': active};
+    if (title != null) body['title'] = title;
+    if (linkUrl != null) body['linkUrl'] = linkUrl;
+    if (discount != null) body['discount'] = discount;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/store/manage/banners'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreBanner.fromJson(
+        Map<String, dynamic>.from(data['banner'] as Map));
+  }
+
+  static Future<StoreBanner> updateStoreBanner(
+    String id, {
+    String? imageUrl,
+    String? title,
+    String? linkUrl,
+    double? discount,
+    bool? active,
+  }) async {
+    final body = <String, dynamic>{};
+    if (imageUrl != null) body['imageUrl'] = imageUrl;
+    if (title != null) body['title'] = title;
+    if (linkUrl != null) body['linkUrl'] = linkUrl;
+    if (discount != null) body['discount'] = discount;
+    if (active != null) body['active'] = active;
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/store/manage/banners/$id'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    return StoreBanner.fromJson(
+        Map<String, dynamic>.from(data['banner'] as Map));
+  }
+
+  static Future<void> deleteStoreBanner(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/store/manage/banners/$id'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+  }
+
+  /// Upload de imagem da loja (produto/banner/logo/capa).
+  /// Reusa o endpoint de imagens (Firebase) e devolve a URL absoluta.
+  /// [entityId] é só o escopo de pasta; o vínculo real é salvar a URL no recurso.
+  static Future<String> uploadStoreImage(String filePath,
+      {String entityId = 'store'}) async {
+    final token = await _getToken();
+    if (token == null) {
+      throw Exception('Sessão expirada. Faça login novamente.');
+    }
+
+    final path = filePath.replaceFirst(RegExp(r'^file://'), '');
+    final file = File(path);
+    if (!file.existsSync()) {
+      throw Exception('Arquivo não encontrado. Selecione a imagem novamente.');
+    }
+    final bytes = await file.readAsBytes();
+    String filename = path.split(RegExp(r'[/\\]')).last;
+    if (filename.isEmpty) filename = 'image.jpg';
+
+    final uri = Uri.parse('$baseUrl/images/upload/partner/$entityId');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: filename,
+      contentType: _mediaTypeFromFilename(filename),
+    ));
+
+    final streamed = await request.send().timeout(
+          _requestTimeout,
+          onTimeout: () =>
+              throw Exception('Tempo esgotado ao enviar a imagem.'),
+        );
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode >= 400) {
+      String msg = 'Falha ao enviar a imagem (${response.statusCode}).';
+      try {
+        final body = json.decode(response.body) as Map<String, dynamic>?;
+        final err = body?['error']?.toString();
+        if (err != null && err.isNotEmpty) msg = err;
+      } catch (_) {}
+      throw Exception(msg);
+    }
+
+    final data = json.decode(response.body) as Map<String, dynamic>?;
+    final image = data?['image'] as Map<String, dynamic>?;
+    final url = image?['url'] as String? ?? data?['url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw Exception('Resposta do servidor sem URL. Tente novamente.');
+    }
+    if (url.startsWith('http')) return url;
+    final origin = Uri.parse(baseUrl).origin;
+    return '$origin${url.startsWith('/') ? url : '/$url'}';
+  }
+
+  // --- Personalização da loja (aparência) ---
+
+  static Future<Map<String, dynamic>> getStoreAppearance() async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/store/manage/appearance'),
+          headers: await _getHeaders(),
+        )
+        .timeout(_requestTimeout,
+            onTimeout: () =>
+                throw Exception('Tempo esgotado ao buscar a loja'));
+    _handleError(response);
+    final data = json.decode(response.body);
+    final appearance = data['appearance'];
+    return appearance is Map
+        ? Map<String, dynamic>.from(appearance)
+        : <String, dynamic>{};
+  }
+
+  static Future<Map<String, dynamic>> updateStoreAppearance({
+    String? tradingName,
+    String? description,
+    String? photoUrl,
+    String? coverUrl,
+    String? themeColor,
+  }) async {
+    final body = <String, dynamic>{};
+    if (tradingName != null) body['tradingName'] = tradingName;
+    if (description != null) body['description'] = description;
+    if (photoUrl != null) body['photoUrl'] = photoUrl;
+    if (coverUrl != null) body['coverUrl'] = coverUrl;
+    if (themeColor != null) body['themeColor'] = themeColor;
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/store/manage/appearance'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    final appearance = data['appearance'];
+    return appearance is Map
+        ? Map<String, dynamic>.from(appearance)
+        : <String, dynamic>{};
+  }
+
+  static Future<Map<String, dynamic>> getPartnerMeRaw() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/partners/me'),
+      headers: await _getHeaders(),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    final partner = data['partner'];
+    if (partner is! Map) {
+      throw Exception('Resposta da API não contém dados da loja');
+    }
+    return Map<String, dynamic>.from(partner);
+  }
+
+  static Future<Map<String, dynamic>> updateMyPartner(
+      Map<String, dynamic> body) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/partners/me'),
+      headers: await _getHeaders(),
+      body: json.encode(body),
+    );
+    _handleError(response);
+    final data = json.decode(response.body);
+    final partner = data['partner'];
+    return partner is Map
+        ? Map<String, dynamic>.from(partner)
+        : <String, dynamic>{};
+  }
+
   static Future<Partner> getMyPartner() async {
     try {
       final response = await http
@@ -1352,6 +1772,7 @@ class ApiService {
     return Partner(
       id: json['id'] as String,
       name: json['name'] as String,
+      slug: json['slug']?.toString(),
       type: _parsePartnerType(json['type'] as String),
       address: json['address'] as String,
       latitude: (json['latitude'] as num).toDouble(),
@@ -1623,6 +2044,8 @@ class ApiService {
     final cycle = (recommendedChangeKm - lastChangeKm).abs();
     final used = (currentKm - lastChangeKm).clamp(0, cycle <= 0 ? 1 : cycle);
     final wear = cycle <= 0 ? 1.0 : (used / cycle).clamp(0.0, 1.0);
+    // Garante enum da API mesmo se a UI enviar labels em português.
+    final apiStatus = _normalizeMaintenanceStatus(status);
 
     final response = await http.post(
       Uri.parse('$baseUrl/bikes/$bikeId/maintenance'),
@@ -1634,12 +2057,32 @@ class ApiService {
         'recommendedChangeKm': recommendedChangeKm,
         'currentKm': currentKm,
         'wearPercentage': wear,
-        'status': status,
+        'status': apiStatus,
       }),
     );
     _handleError(response);
     final data = json.decode(response.body) as Map<String, dynamic>;
     return data['maintenanceLog'] as Map<String, dynamic>;
+  }
+
+  /// Normaliza status de manutenção para o enum da API: OK | ATENCAO | CRITICO.
+  static String _normalizeMaintenanceStatus(String status) {
+    switch (status.trim().toUpperCase()) {
+      case 'OK':
+        return 'OK';
+      case 'ATENCAO':
+      case 'ATENÇÃO':
+      case 'ATENÇAO':
+        return 'ATENCAO';
+      case 'CRITICO':
+      case 'CRÍTICO':
+        return 'CRITICO';
+      default:
+        final lower = status.trim().toLowerCase();
+        if (lower == 'atenção' || lower == 'atencao') return 'ATENCAO';
+        if (lower == 'crítico' || lower == 'critico') return 'CRITICO';
+        return 'OK';
+    }
   }
 
   static Future<String> uploadUserScopedImage(
