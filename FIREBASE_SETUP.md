@@ -50,3 +50,8 @@ Para notificacoes em background/tela bloqueada, o Flutter usa:
 - `PUSH_BACKGROUND_SETUP.md` (guia completo)
 
 Sem esses arquivos/plataforma configurada, o app roda normalmente, mas push FCM pode nao funcionar em background.
+
+### Produção nas lojas (após piloto)
+
+Enquanto o piloto usa `com.example.*`, mantenha Firebase alinhado a esses IDs.  
+Quando for publicar nas lojas, recriar apps Firebase com o package/bundle **final** — passos em [`docs/RELEASE_CHECKLIST.md`](./docs/RELEASE_CHECKLIST.md) (secção “Após piloto — Firebase”). Não renomear IDs no código antes disso.

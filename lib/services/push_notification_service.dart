@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../app_navigator_key.dart';
@@ -144,19 +145,49 @@ Future<void> requestPermissionAndRegisterToken() async {
       badge: true,
       sound: true,
     );
-    // ignore: avoid_print
-    print('🔔 Permissão de notificação FCM: ${settings.authorizationStatus}');
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('🔔 Permissão de notificação FCM: ${settings.authorizationStatus}');
+    }
+
+    if (Platform.isIOS) {
+      // No iOS o token FCM só é fiável depois do APNs token.
+      String? apns = await messaging.getAPNSToken();
+      for (var i = 0; i < 10 && (apns == null || apns.isEmpty); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        apns = await messaging.getAPNSToken();
+      }
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print(apns == null || apns.isEmpty
+            ? '⚠️ APNs token ainda nulo — push iOS pode falhar'
+            : '✅ APNs token obtido (${apns.length} chars)');
+      }
+    }
 
     final token = await messaging.getToken();
     if (token != null && token.isNotEmpty) {
-      // Log do token para testes manuais no Firebase Console.
-      // ignore: avoid_print
-      print('📲 FCM Token: $token');
-      await ApiService.registerFcmToken(token);
-    } else {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('📲 FCM Token: $token');
+      }
+      try {
+        await ApiService.registerFcmToken(token);
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('✅ FCM Token enviado para a API');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('⚠️ Falha ao registar token FCM na API: $e');
+        }
+      }
+    } else if (kDebugMode) {
       // ignore: avoid_print
       print('⚠️ FCM Token vazio ou nulo');
     }
+
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
       if (newToken.isEmpty) return;
       try {
@@ -164,8 +195,10 @@ Future<void> requestPermissionAndRegisterToken() async {
       } catch (_) {}
     });
   } catch (e) {
-    // ignore: avoid_print
-    print('❌ Erro ao registar token FCM: $e');
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('❌ Erro ao registar token FCM: $e');
+    }
   }
 }
 

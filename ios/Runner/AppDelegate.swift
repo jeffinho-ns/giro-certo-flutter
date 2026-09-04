@@ -2,6 +2,7 @@ import Flutter
 import UIKit
 import GoogleMaps
 import UserNotifications
+import FirebaseMessaging
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -11,10 +12,27 @@ import UserNotifications
   ) -> Bool {
     GMSServices.provideAPIKey("AIzaSyCYujVw1ifZiGAYCrp30RD4yiB5DFcrj4k")
 
-    // Permite que notificações sejam exibidas em foreground no iOS.
     UNUserNotificationCenter.current().delegate = self
+    application.registerForRemoteNotifications()
 
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    // Garante que o FCM conhece o token APNs (sandbox neste build).
+    Messaging.messaging().apnsToken = deviceToken
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    NSLog("APNs registration failed: \(error.localizedDescription)")
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
   }
 }

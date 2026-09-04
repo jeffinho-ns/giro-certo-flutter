@@ -123,3 +123,7 @@ Sem estes ficheiros/tokens, a navegação turn-by-turn **não arranca** (placeho
 4. Confirmar que as chamadas batem na API de produção (não localhost).
 
 Próximo passo do plano de go-live (API): `docs/GO_LIVE_DIA_0` / checklist de dia 0 no repo `giro-certo-api`.
+
+## Partilhar com outros telemóveis
+
+Guia de APK + TestFlight: [`PILOTO_DISTRIBUICAO.md`](./PILOTO_DISTRIBUICAO.md).

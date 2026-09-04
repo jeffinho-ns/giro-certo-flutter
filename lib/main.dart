@@ -37,27 +37,27 @@ import 'services/notification_service.dart' as local_notifications;
 import 'widgets/realtime_connection.dart';
 import 'widgets/rider_delivery_overlay_host.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Captura erros de framework e de zona (visibilidade em produção).
-  // Quando Crashlytics/Sentry for adicionado, encaminhar para lá.
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    if (kDebugMode) {
-      debugPrint('FlutterError: ${details.exceptionAsString()}');
-    }
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    if (kDebugMode) {
-      debugPrint('Uncaught: $error\n$stack');
-    }
-    return true;
-  };
+    // Captura erros de framework e de zona (visibilidade em produção).
+    // Quando Crashlytics/Sentry for adicionado, encaminhar para lá.
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      if (kDebugMode) {
+        debugPrint('FlutterError: ${details.exceptionAsString()}');
+      }
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      if (kDebugMode) {
+        debugPrint('Uncaught: $error\n$stack');
+      }
+      return true;
+    };
 
-  await push.initializeFirebase();
-  await local_notifications.initializeLocalNotifications();
-  runZonedGuarded(() {
+    await push.initializeFirebase();
+    await local_notifications.initializeLocalNotifications();
     runApp(const MyApp());
   }, (error, stack) {
     if (kDebugMode) {

@@ -292,7 +292,17 @@ class ApiService {
       headers: await _getHeaders(),
       body: json.encode({'token': token}),
     );
-    if (response.statusCode >= 400) return;
+    if (response.statusCode >= 400) {
+      // ignore: avoid_print
+      print(
+        '⚠️ Falha ao registar FCM na API: HTTP ${response.statusCode} ${response.body}',
+      );
+      throw Exception(
+        'Falha ao registar FCM: HTTP ${response.statusCode}',
+      );
+    }
+    // ignore: avoid_print
+    print('✅ API aceitou FCM token (HTTP ${response.statusCode})');
   }
 
   /// Obter usuário atual
