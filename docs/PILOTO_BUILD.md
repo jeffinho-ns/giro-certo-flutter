@@ -1,7 +1,7 @@
 # Build piloto — App Flutter apontando para produção
 
 > Fase **antes** da publicação nas lojas. Instala no telefone via cabo/USB.  
-> Package de loja: `br.com.girocerto.app`. Passos do App Store Connect: [`APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md).
+> Package atual: `com.example.giroCerto` (o mesmo dos builds de TestFlight). Novo build: [`APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md).
 
 ---
 
@@ -108,8 +108,8 @@ Sem estes ficheiros/tokens, a navegação turn-by-turn **não arranca** (placeho
 
 ## Firebase no piloto
 
-- Package: Android e iOS `br.com.girocerto.app`.
-- Recrie `google-services.json` / `GoogleService-Info.plist` **para estes IDs** no Firebase. Push do piloto antigo (`com.example.*`) não serve neste binário.
+- Package: Android `com.example.giro_certo`, iOS `com.example.giroCerto`.
+- Use o `google-services.json` / `GoogleService-Info.plist` **já existentes** para estes IDs. Não recrie Firebase agora.
 - Ver [`APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md), `RELEASE_CHECKLIST.md` e `FIREBASE_SETUP.md`.
 
 ---

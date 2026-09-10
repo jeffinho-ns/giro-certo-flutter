@@ -1,7 +1,7 @@
 # Distribuição piloto — Android e iOS
 
 > Objetivo: instalar o Giro Certo em **outros telemóveis** sem publicar ainda na Play Store / App Store.  
-> Package: Android e iOS `br.com.girocerto.app`. App novo no TestFlight / App Store Connect.
+> Package atual: Android `com.example.giro_certo`, iOS `com.example.giroCerto` (o mesmo dos builds de TestFlight).
 
 ## O que já está pronto no projeto
 
@@ -50,7 +50,7 @@ Cabo USB só serve no teu Mac. Para outros iPhones use **TestFlight**.
 ### Pré-requisitos (uma vez)
 
 1. [App Store Connect](https://appstoreconnect.apple.com) → criar app:
-   - Bundle ID: `br.com.girocerto.app` (tem de existir no Apple Developer)
+   - Bundle ID: `com.example.giroCerto` (já existe no Apple Developer)
    - Nome: Giro Certo
 2. Em **Users and Access**, convidar os testadores (email Apple ID)
 3. Xcode → conta Apple Developer ligada (Team `9HHX57B4G5`)

@@ -1,30 +1,24 @@
 # Checklist de release nas lojas — App Flutter (riders + lojistas)
 
-> Identidade de loja: Android `br.com.girocerto.app`, iOS `br.com.girocerto.app`.  
-> O piloto antigo (`com.example.*`) **não** recebe mais este binário — testers reinstalam.  
-> App Store Connect (app novo): [`APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md).  
-> Build com API de produção: [`PILOTO_BUILD.md`](./PILOTO_BUILD.md).
+> Identidade atual (TestFlight já em uso): Android `com.example.giro_certo`, iOS `com.example.giroCerto`.  
+> **Não** criar app novo no Connect — só subir build. Guia: [`APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md).  
+> Package final (`br.com.girocerto.app`) fica para quando for publicar na loja pública, não agora.
 
 ---
 
-## Ordem recomendada (após piloto)
+## Ordem recomendada
 
-1. ~~Definir package / bundle finais~~ → `br.com.girocerto.app`
-2. Keystore Android + assinatura iOS
-3. Firebase produção (apps **novos** com IDs finais) + APNs
-4. Crashlytics (ou Sentry)
-5. Builds de loja + TestFlight / Play internal
-6. Smoke final nos tracks internos
+1. Subir build novo no TestFlight **do app que já existe**
+2. Keystore Android + Crashlytics — quando for Play / loja pública
+3. Só na loja pública: trocar package/bundle (quebra instalações atuais)
 
 ---
 
 ## Identidade do app
 
-- [x] Package final: `br.com.girocerto.app`
-- [x] Android: `applicationId` em `android/app/build.gradle.kts`
-- [x] iOS: `PRODUCT_BUNDLE_IDENTIFIER` em `project.pbxproj`
-- [ ] Recriar apps Firebase com o bundle/package final (ficheiros locais, gitignored)
-- [x] Testers do piloto têm de **reinstalar** (ID novo = app novo)
+- [x] Bundle do piloto / TestFlight: `com.example.giroCerto` / `com.example.giro_certo`
+- [ ] Package final `br.com.girocerto.app` — **não agora** (só na publicação pública)
+- [x] Testers atuais continuam no mesmo app; só instalam o build novo
 
 ---
 

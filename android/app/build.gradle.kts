@@ -56,9 +56,8 @@ android {
     }
 
     defaultConfig {
-        // Identidade de loja (App Store / Play). Namespace Kotlin permanece
-        // com.example.giro_certo para não mover o MainActivity.
-        applicationId = "br.com.girocerto.app"
+        // Bundle do TestFlight / App Store Connect já existente.
+        applicationId = "com.example.giro_certo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
