@@ -53,5 +53,5 @@ Sem esses arquivos/plataforma configurada, o app roda normalmente, mas push FCM 
 
 ### Produção nas lojas (após piloto)
 
-Enquanto o piloto usava `com.example.*`, o Firebase estava alinhado a esses IDs.  
-Com a identidade de loja `br.com.girocerto.app`, recrie os apps Firebase — passos em [`docs/APP_STORE_CONNECT.md`](./docs/APP_STORE_CONNECT.md) e [`docs/RELEASE_CHECKLIST.md`](./docs/RELEASE_CHECKLIST.md).
+Enquanto o TestFlight usa `com.example.*`, mantenha o Firebase nesses IDs.  
+Não recrie apps Firebase agora. Package final (`br.com.girocerto.app`) só na loja pública — ver [`docs/APP_STORE_CONNECT.md`](./docs/APP_STORE_CONNECT.md).

@@ -3,7 +3,7 @@
 > **Para quem acabou de receber a assinatura Apple Developer**  
 > Guia prático passo-a-passo para ativar notificações push no Giro Certo.
 > 
-> **Bundle atual:** `br.com.girocerto.app` (não use mais `com.example.giroCerto`).  
+> **Bundle atual:** `com.example.giroCerto` (o mesmo do TestFlight).  
 > **Data da última atualização:** 2026-09-10  
 > **Referência:** [`docs/APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md) e [`PUSH_BACKGROUND_SETUP.md`](../PUSH_BACKGROUND_SETUP.md).
 
