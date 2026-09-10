@@ -118,6 +118,38 @@ class _RotasScreenState extends State<RotasScreen> {
 
   Widget _buildContent(ThemeData theme) {
     final data = _data!;
+    if (data.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        children: [
+          const SizedBox(height: 64),
+          Icon(
+            LucideIcons.mapPin,
+            size: 56,
+            color: theme.iconTheme.color?.withValues(alpha: 0.35),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            data.profileIsDelivery
+                ? 'Você ainda não tem rotas de entrega'
+                : 'Ainda não há rotas para mostrar',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            data.profileIsDelivery
+                ? 'Quando você concluir corridas, o mapa de calor e o histórico aparecem aqui.'
+                : 'As rotas usam trajetos reais. Entregas concluídas e o histórico da API entram neste mapa — nada inventado.',
+            style: theme.textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
     final isDelivery = data.profileIsDelivery;
 
     return ListView(
@@ -467,6 +499,7 @@ class _RotasScreenState extends State<RotasScreen> {
   }
 
   List<Widget> _buildRegionTiles(RoutesData data, ThemeData theme) {
+    if (data.regions.isEmpty) return const [];
     return [
       SizedBox(
         height: 96,

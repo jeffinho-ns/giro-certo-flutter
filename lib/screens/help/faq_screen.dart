@@ -37,6 +37,12 @@ class FaqScreen extends StatelessWidget {
           'Delivery, mostramos um mapa de calor das suas regiões de entrega.',
     ),
     _Faq(
+      'Escolhi Casual e quero virar Delivery. Como mudo?',
+      'No menu, toque em "Corridas" (badge Entrar) ou, na home, em '
+          '"Quero trabalhar com entregas". Também fica em Configurações. '
+          'Você envia os documentos e espera a aprovação para receber corridas.',
+    ),
+    _Faq(
       'Sou Delivery — como entro no modo trabalho?',
       'Pelo menu, abra "Corridas" e toque em "Entrar em Corridas". Você passará '
           'a receber ofertas de pedidos das lojas parceiras próximas.',

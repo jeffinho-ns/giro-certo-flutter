@@ -176,12 +176,23 @@ class HelpScreen extends StatelessWidget {
     final userId = appState.user?.id;
     if (userId == null) return;
 
-    final conv = await ChatService.startSupportChat(currentUserId: userId);
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ChatScreen(initialConversation: conv)),
-    );
+    try {
+      final conv = await ChatService.startSupportChat(currentUserId: userId);
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ChatScreen(initialConversation: conv)),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível abrir o chat de suporte agora.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _openEmail(BuildContext context) async {
