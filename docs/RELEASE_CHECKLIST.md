@@ -1,32 +1,30 @@
 # Checklist de release nas lojas — App Flutter (riders + lojistas)
 
-> **Fase final — só após o piloto.**  
-> Enquanto o piloto corre em telefones de casa/confiança, **não** renomear `applicationId` / `PRODUCT_BUNDLE_IDENTIFIER` (hoje `com.example.giro_certo` / `com.example.giroCerto`): isso quebra instalações e Firebase atuais.  
-> Build piloto (API/WEB de produção, sem Play/App Store): [`PILOTO_BUILD.md`](./PILOTO_BUILD.md).  
-> Agentes ECC: `ecc-flutter-reviewer`, `ecc-dart-build-resolver`.
+> Identidade de loja: Android `br.com.girocerto.app`, iOS `br.com.girocerto.app`.  
+> O piloto antigo (`com.example.*`) **não** recebe mais este binário — testers reinstalam.  
+> App Store Connect (app novo): [`APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md).  
+> Build com API de produção: [`PILOTO_BUILD.md`](./PILOTO_BUILD.md).
 
 ---
 
 ## Ordem recomendada (após piloto)
 
-1. Definir package / bundle finais  
-2. Keystore Android + assinatura iOS  
-3. Firebase produção (apps novos com IDs finais) + APNs  
-4. Crashlytics (ou Sentry)  
-5. Builds de loja + TestFlight / Play internal  
-6. Smoke final nos tracks internos  
+1. ~~Definir package / bundle finais~~ → `br.com.girocerto.app`
+2. Keystore Android + assinatura iOS
+3. Firebase produção (apps **novos** com IDs finais) + APNs
+4. Crashlytics (ou Sentry)
+5. Builds de loja + TestFlight / Play internal
+6. Smoke final nos tracks internos
 
 ---
 
-## Após piloto — identidade do app
+## Identidade do app
 
-> ⚠️ **Não fazer agora.** Só quando for publicar nas lojas.
-
-- [ ] Definir package final (ex.: `br.com.girocerto.app`)
-- [ ] Android: alterar `applicationId` em `android/app/build.gradle.kts` (hoje `com.example.giro_certo`)
-- [ ] iOS: alterar `PRODUCT_BUNDLE_IDENTIFIER` no Xcode / `project.pbxproj` (hoje `com.example.giroCerto`)
-- [ ] Atualizar qualquer referência a package em docs e Firebase (ver secção abaixo)
-- [ ] Comunicar à equipa: utilizadores do piloto terão de **reinstalar** (ID novo = app novo)
+- [x] Package final: `br.com.girocerto.app`
+- [x] Android: `applicationId` em `android/app/build.gradle.kts`
+- [x] iOS: `PRODUCT_BUNDLE_IDENTIFIER` em `project.pbxproj`
+- [ ] Recriar apps Firebase com o bundle/package final (ficheiros locais, gitignored)
+- [x] Testers do piloto têm de **reinstalar** (ID novo = app novo)
 
 ---
 

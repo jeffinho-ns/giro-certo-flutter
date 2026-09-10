@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../../models/rider_ranking_entry.dart';
+import '../../providers/app_state_provider.dart';
 import '../../providers/navigation_provider.dart';
-import '../../services/mock_data_service.dart';
-import '../../models/part.dart';
+import '../../services/api_service.dart';
+import '../../services/delivery_migration_flow.dart';
 import '../../utils/colors.dart';
+import '../../widgets/api_image.dart';
 import '../../widgets/modern_header.dart';
-import 'part_detail_screen.dart';
 
 class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});
@@ -16,96 +18,144 @@ class RankingScreen extends StatefulWidget {
 }
 
 class _RankingScreenState extends State<RankingScreen> {
-  String _selectedCategory = 'Todas';
+  List<RiderRankingEntry> _entries = const [];
+  bool _loading = true;
+  String? _error;
 
-  final List<String> _categories = [
-    'Todas',
-    'Performance',
-    'Estética',
-    'Conforto',
-    'Custo-Benefício',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final raw = await ApiService.getDeliveryRanking(limit: 30);
+      final entries = raw
+          .asMap()
+          .entries
+          .map((e) => RiderRankingEntry.fromJson(e.value, e.key))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _entries = entries;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Não foi possível carregar o ranking.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    var parts = MockDataService.getMockParts();
-    
-    if (_selectedCategory != 'Todas') {
-      parts = parts.where((part) => part.category == _selectedCategory).toList();
-    }
-    
-    parts.sort((a, b) => b.rating.compareTo(a.rating));
-    parts = parts.take(5).toList();
-
     final theme = Theme.of(context);
-    
+    final app = Provider.of<AppStateProvider>(context);
+    final canSwitch = DeliveryMigrationFlow.canSwitch(app);
+
     return SafeArea(
       bottom: false,
       child: Column(
         children: [
-          // Header
           ModernHeader(
-            title: 'Ranking de Peças',
+            title: 'Ranking de entregadores',
             showBackButton: true,
             onBackPressed: () {
-              Provider.of<NavigationProvider>(context, listen: false).navigateTo(2);
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).maybePop();
+                return;
+              }
+              Provider.of<NavigationProvider>(context, listen: false)
+                  .navigateTo(2);
             },
           ),
-          
-          // Filtros
-          Container(
-              height: 60,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _categories.length,
-                itemBuilder: (context, index) {
-                  final category = _categories[index];
-                  final isSelected = category == _selectedCategory;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: FilterChip(
-                      label: Text(category),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedCategory = category;
-                        });
-                      },
-                      selectedColor: AppColors.racingOrange,
-                      backgroundColor: theme.cardColor,
-                      side: BorderSide(
-                        color: isSelected
-                            ? AppColors.racingOrange
-                            : theme.dividerColor,
-                        width: isSelected ? 2 : 1.5,
-                      ),
-                      labelStyle: TextStyle(
-                        color: isSelected
-                            ? Colors.white
-                            : theme.textTheme.bodyMedium?.color,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        fontSize: 13,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          
-          // Lista de peças
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(24),
-              itemCount: parts.length,
-              itemBuilder: (context, index) {
-                final part = parts[index];
-                return _buildModernPartCard(part, index + 1, theme);
-              },
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            const SizedBox(height: 120),
+                            Icon(LucideIcons.cloudOff,
+                                size: 48, color: AppColors.statusWarning),
+                            const SizedBox(height: 12),
+                            Center(child: Text(_error!, textAlign: TextAlign.center)),
+                            const SizedBox(height: 16),
+                            Center(
+                              child: FilledButton(
+                                onPressed: _load,
+                                child: const Text('Tentar novamente'),
+                              ),
+                            ),
+                          ],
+                        )
+                      : _entries.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(24),
+                              children: [
+                                const SizedBox(height: 64),
+                                Icon(
+                                  LucideIcons.trophy,
+                                  size: 56,
+                                  color: theme.iconTheme.color
+                                      ?.withValues(alpha: 0.35),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Ainda não há entregadores no ranking.',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'O ranking usa corridas realmente concluídas. '
+                                  'Quando houver entregas, os primeiros aparecem aqui.',
+                                  style: theme.textTheme.bodyMedium,
+                                  textAlign: TextAlign.center,
+                                ),
+                                if (canSwitch) ...[
+                                  const SizedBox(height: 20),
+                                  FilledButton.icon(
+                                    onPressed: () =>
+                                        DeliveryMigrationFlow.start(context),
+                                    icon: const Icon(LucideIcons.package),
+                                    label: const Text(
+                                      'Quero trabalhar com entregas',
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            )
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(24),
+                              itemCount: _entries.length + (canSwitch ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (canSwitch && index == 0) {
+                                  return _buildJoinBanner(theme);
+                                }
+                                final rankIndex =
+                                    canSwitch ? index - 1 : index;
+                                return _buildRiderCard(
+                                  _entries[rankIndex],
+                                  rankIndex + 1,
+                                  theme,
+                                );
+                              },
+                            ),
             ),
           ),
         ],
@@ -113,184 +163,137 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  Widget _buildModernPartCard(Part part, int rank, ThemeData theme) {
-    final isTopRank = rank <= 3;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => PartDetailScreen(part: part, rank: rank),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        gradient: isTopRank
-            ? LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppColors.racingOrange.withOpacity(0.15),
-                  AppColors.racingOrange.withOpacity(0.05),
-                ],
-              )
-            : null,
-        color: isTopRank ? null : theme.cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isTopRank
-              ? AppColors.racingOrange.withOpacity(0.4)
-              : theme.dividerColor,
-          width: isTopRank ? 2 : 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isTopRank
-                ? AppColors.racingOrange.withOpacity(0.2)
-                : Colors.black.withOpacity(0.05),
-            blurRadius: isTopRank ? 16 : 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+  Widget _buildJoinBanner(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: AppColors.statusWarning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: () => DeliveryMigrationFlow.start(context),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
               children: [
-                // Badge de ranking
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    gradient: isTopRank
-                        ? LinearGradient(
-                            colors: [
-                              AppColors.racingOrange,
-                              AppColors.racingOrangeLight,
-                            ],
-                          )
-                        : null,
-                    color: isTopRank ? null : theme.cardColor,
-                    shape: BoxShape.circle,
-                    border: isTopRank
-                        ? null
-                        : Border.all(
-                            color: theme.dividerColor,
-                            width: 1.5,
-                          ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '#$rank',
-                      style: TextStyle(
-                        color: isTopRank ? Colors.white : theme.textTheme.bodyMedium?.color,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                const Icon(LucideIcons.package, color: AppColors.statusWarning),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Complete corridas para entrar neste ranking.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        part.name,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        part.brand,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontSize: 14,
-                          color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Rating
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.racingOrange.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            LucideIcons.star,
-                            color: AppColors.racingOrange,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            part.rating.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.racingOrange,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${part.reviewCount} avaliações',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                const Icon(LucideIcons.chevronRight, size: 18),
               ],
             ),
-            const SizedBox(height: 16),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRiderCard(
+    RiderRankingEntry entry,
+    int rank,
+    ThemeData theme,
+  ) {
+    final isTopRank = rank <= 3;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: isTopRank
+            ? AppColors.racingOrange.withValues(alpha: 0.10)
+            : theme.cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isTopRank
+              ? AppColors.racingOrange.withValues(alpha: 0.4)
+              : theme.dividerColor,
+          width: isTopRank ? 2 : 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: AppColors.racingOrange.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(10),
+                color: isTopRank
+                    ? AppColors.racingOrange
+                    : theme.cardColor,
+                shape: BoxShape.circle,
+                border: isTopRank
+                    ? null
+                    : Border.all(color: theme.dividerColor, width: 1.5),
               ),
-              child: Text(
-                part.category,
-                style: TextStyle(
-                  color: AppColors.racingOrange,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+              child: Center(
+                child: Text(
+                  '#$rank',
+                  style: TextStyle(
+                    color: isTopRank
+                        ? Colors.white
+                        : theme.textTheme.bodyMedium?.color,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              part.description,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontSize: 14,
-                height: 1.5,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            const SizedBox(width: 16),
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.racingOrange.withValues(alpha: 0.15),
+              child: entry.photoUrl != null && entry.photoUrl!.isNotEmpty
+                  ? ClipOval(
+                      child: ApiImage(
+                        url: entry.photoUrl!,
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : const Icon(LucideIcons.user, color: AppColors.racingOrange),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${entry.completedCount} entregas concluídas',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            if (entry.rating != null)
+              Row(
+                children: [
+                  const Icon(
+                    LucideIcons.star,
+                    size: 16,
+                    color: AppColors.racingOrange,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    entry.rating!.toStringAsFixed(1),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
           ],
-        ),
-      ),
         ),
       ),
     );

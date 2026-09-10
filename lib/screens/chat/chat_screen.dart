@@ -75,7 +75,8 @@ class _ChatScreenState extends State<ChatScreen>
           const CommunityScreen(embeddedInTabs: true),
           _ChatListFromService(
             type: ChatListType.groups,
-            emptyMessage: 'Nenhum grupo ainda.',
+            emptyMessage:
+                'Você ainda não está em nenhum grupo. Entre numa comunidade para conversar de verdade — não mostramos chats inventados.',
           ),
           _ChatListFromService(
             type: ChatListType.privateChat,
@@ -319,15 +320,25 @@ class _ChatRoomScreenState extends State<_ChatRoomScreen> {
     if (user == null) return;
     FocusScope.of(context).unfocus();
     _controller.clear();
-    final msg = await ChatService.sendMessage(
-      chatId: widget.chatId,
-      userId: user.id,
-      userName: user.name,
-      text: t,
-    );
-    if (mounted) {
-      setState(() => _messages = [..._messages, msg]);
-      _scrollToBottom(animated: true);
+    try {
+      final msg = await ChatService.sendMessage(
+        chatId: widget.chatId,
+        userId: user.id,
+        userName: user.name,
+        text: t,
+      );
+      if (mounted) {
+        setState(() => _messages = [..._messages, msg]);
+        _scrollToBottom(animated: true);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _controller.text = t;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível enviar a mensagem. Tente de novo.'),
+        ),
+      );
     }
   }
 
@@ -444,9 +455,18 @@ class _ChatRoomScreenState extends State<_ChatRoomScreen> {
     );
     if (confirmed != true) return;
 
-    await ChatService.deleteConversation(widget.chatId);
-    if (!mounted) return;
-    Navigator.of(context).pop(); // fecha sala
+    try {
+      await ChatService.deleteConversation(widget.chatId);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível excluir a conversa agora.'),
+        ),
+      );
+    }
   }
 
   void _showDetailsSheet() {
@@ -532,7 +552,19 @@ class _ChatRoomScreenState extends State<_ChatRoomScreen> {
                     setState(() {
                       _muted = v;
                     });
-                    await ChatService.setChatMuted(widget.chatId, v);
+                    try {
+                      await ChatService.setChatMuted(widget.chatId, v);
+                    } catch (_) {
+                      if (!mounted) return;
+                      setState(() => _muted = !v);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Não foi possível atualizar o silêncio da conversa.',
+                          ),
+                        ),
+                      );
+                    }
                   },
                 ),
               ],

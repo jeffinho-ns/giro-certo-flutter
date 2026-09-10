@@ -39,6 +39,7 @@ import '../../models/community_type.dart';
 import '../../services/maintenance_service.dart';
 import '../../widgets/critical_alert_card.dart';
 import '../communities/communities_list_screen.dart';
+import '../../services/delivery_migration_flow.dart';
 
 class SocialHomeScreen extends StatefulWidget {
   /// Quando true, a tela foi aberta pelo menu (ex.: News); mostra botão para voltar à home padrão.
@@ -254,6 +255,72 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
     setState(() {
       _nearbyEventsCount = events.isEmpty ? 0 : 1;
     });
+  }
+
+  Widget _buildBecomeDeliveryCard(ThemeData theme, AppStateProvider appState) {
+    if (!DeliveryMigrationFlow.canSwitch(appState)) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => DeliveryMigrationFlow.start(context),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.statusWarning.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.statusWarning.withValues(alpha: 0.45),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: AppColors.statusWarning.withValues(alpha: 0.18),
+                  ),
+                  child: const Icon(
+                    LucideIcons.package,
+                    color: AppColors.statusWarning,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quero trabalhar com entregas',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Escolheu Casual, Diário ou Racing? Envie documentos e libere corridas.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => DeliveryMigrationFlow.start(context),
+                  child: const Text('Começar'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildProfileDynamicCard(ThemeData theme, AppStateProvider appState) {
@@ -920,6 +987,7 @@ class _SocialHomeScreenState extends State<SocialHomeScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
+                _buildBecomeDeliveryCard(theme, appState),
                 _buildProfileDynamicCard(theme, appState),
                 const SizedBox(height: 10),
                 _buildCommunityAndEventsShortcuts(theme),

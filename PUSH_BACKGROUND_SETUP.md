@@ -17,19 +17,19 @@ Esta fase prepara o projeto Xcode para receber push via APNs/FCM. O que ja foi f
 | `ios/Runner/AppDelegate.swift` | Ja configura `UNUserNotificationCenter.current().delegate`; `FlutterAppDelegate` + `firebase_messaging` registram token APNs/FCM |
 
 **Identificadores do app:**
-- Bundle ID: `com.example.giroCerto`
+- Bundle ID: `br.com.girocerto.app`
 - Development Team: `9HHX57B4G5`
 
 ### Passos manuais ainda necessarios
 
 1. **Apple Developer Portal** ([developer.apple.com](https://developer.apple.com/account)):
-   - Em *Certificates, Identifiers & Profiles* > *Identifiers*, abrir (ou criar) o App ID `com.example.giroCerto`.
+   - Em *Certificates, Identifiers & Profiles* > *Identifiers*, abrir (ou criar) o App ID `br.com.girocerto.app`.
    - Habilitar capability **Push Notifications**.
    - Criar uma **APNs Auth Key** (.p8) ou certificado APNs (recomendado: Auth Key, reutilizavel).
 
 2. **Firebase Console** > Project Settings > Cloud Messaging:
    - Em *Apple app configuration*, fazer upload da APNs Auth Key (.p8) com Key ID e Team ID (`9HHX57B4G5`).
-   - Confirmar que o app iOS esta registrado com bundle `com.example.giroCerto`.
+   - Confirmar que o app iOS esta registrado com bundle `br.com.girocerto.app`.
 
 3. **`GoogleService-Info.plist`** (nao commitar):
    - Baixar do Firebase Console e colocar em `ios/Runner/GoogleService-Info.plist`.
@@ -52,8 +52,8 @@ Esta fase prepara o projeto Xcode para receber push via APNs/FCM. O que ja foi f
 ## 1) Pre-requisitos Firebase
 
 1. Criar projeto/app no Firebase Console:
-   - Android: pacote `com.example.giro_certo` (ou o package final do app)
-   - iOS: bundle id do Runner
+   - Android: pacote `br.com.girocerto.app`
+   - iOS: bundle `br.com.girocerto.app`
 2. Baixar arquivos e adicionar no projeto:
    - Android: `android/app/google-services.json`
    - iOS: `ios/Runner/GoogleService-Info.plist`

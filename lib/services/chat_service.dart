@@ -9,58 +9,47 @@ enum ChatListType {
   privateChat,
 }
 
-/// Serviço de chat. Usa API quando disponível; fallback para mock.
+/// Serviço de chat. Só dados da API — sem conversas inventadas.
 class ChatService {
-  /// Lista conversas por tipo. Apenas privateChat usa API real.
   static Future<List<ChatConversation>> getConversations(
     ChatListType type,
   ) async {
-    if (type == ChatListType.privateChat) {
-      try {
-        final list = await ApiService.getChatConversations();
-        return list.map(_convFromMap).toList();
-      } catch (_) {
-        return _mockPrivate;
-      }
-    }
-    await Future.delayed(const Duration(milliseconds: 200));
+    final requestedType = switch (type) {
+      ChatListType.groups || ChatListType.community => 'group',
+      ChatListType.privateChat => 'private',
+    };
+    final list = await ApiService.getChatConversations(type: requestedType);
+    final conversations = list.map(_convFromMap).toList();
     switch (type) {
-      case ChatListType.community:
-        return _mockCommunity;
-      case ChatListType.groups:
-        return _mockGroups;
       case ChatListType.privateChat:
-        return _mockPrivate;
+        return conversations.where((c) => !c.isGroup).toList();
+      case ChatListType.groups:
+      case ChatListType.community:
+        return conversations.where((c) => c.isGroup).toList();
     }
   }
 
   static ChatConversation _convFromMap(Map<String, dynamic> j) =>
       ChatConversation(
-        id: j['id'] as String,
+        id: (j['id'] ?? '').toString(),
         title: (j['title'] as String?) ?? '',
         lastMessagePreview: (j['lastMessagePreview'] as String?) ?? '',
         lastMessageAt: j['lastMessageAt'] != null
             ? DateTime.tryParse(j['lastMessageAt'] as String)
             : null,
-        isGroup: (j['isGroup'] as bool?) ?? false,
+        isGroup: (j['isGroup'] as bool?) ??
+            (j['type']?.toString().toLowerCase() == 'group'),
         imageUrlOrUserId: j['imageUrlOrUserId'] as String?,
       );
 
-  /// Mensagens de uma conversa.
   static Future<List<ChatMessage>> getMessages(String chatId) async {
-    try {
-      final list = await ApiService.getChatMessages(chatId);
-      return list.map(_msgFromMap).toList();
-    } catch (_) {
-      await Future.delayed(const Duration(milliseconds: 150));
-      final list = _mockMessages[chatId];
-      return List.from(list ?? []);
-    }
+    final list = await ApiService.getChatMessages(chatId);
+    return list.map(_msgFromMap).toList();
   }
 
   static ChatMessage _msgFromMap(Map<String, dynamic> j) => ChatMessage(
-        id: j['id'] as String,
-        senderId: j['senderId'] as String,
+        id: (j['id'] ?? '').toString(),
+        senderId: (j['senderId'] ?? '').toString(),
         senderName: (j['senderName'] as String?) ?? '',
         text: (j['text'] as String?) ?? '',
         createdAt: j['createdAt'] != null
@@ -69,41 +58,20 @@ class ChatService {
         isFromMe: (j['isFromMe'] as bool?) ?? false,
       );
 
-  /// Envia mensagem.
   static Future<ChatMessage> sendMessage({
     required String chatId,
     required String userId,
     required String userName,
     required String text,
   }) async {
-    try {
-      final j = await ApiService.sendChatMessage(chatId, text);
-      return _msgFromMap(j);
-    } catch (_) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      final msg = ChatMessage(
-        id: 'm_${DateTime.now().millisecondsSinceEpoch}',
-        senderId: userId,
-        senderName: userName,
-        text: text,
-        createdAt: DateTime.now(),
-        isFromMe: true,
-      );
-      _mockMessages.putIfAbsent(chatId, () => []).add(msg);
-      return msg;
-    }
+    final j = await ApiService.sendChatMessage(chatId, text);
+    return _msgFromMap(j);
   }
 
-  /// Excluir/ocultar conversa para o utilizador atual.
   static Future<void> deleteConversation(String chatId) async {
-    try {
-      await ApiService.deleteChatConversation(chatId);
-    } catch (_) {
-      // Melhor esforço; em caso de erro mantemos a conversa.
-    }
+    await ApiService.deleteChatConversation(chatId);
   }
 
-  /// Detalhes da conversa (participantes, mute).
   static Future<Map<String, dynamic>> getChatSettings(String chatId) async {
     try {
       return await ApiService.getChatSettings(chatId);
@@ -112,138 +80,24 @@ class ChatService {
     }
   }
 
-  /// Atualizar mute da conversa.
   static Future<void> setChatMuted(String chatId, bool muted) async {
-    try {
-      await ApiService.updateChatMute(chatId, muted);
-    } catch (_) {
-      // Ignorar erros de rede.
-    }
+    await ApiService.updateChatMute(chatId, muted);
   }
 
-  static final List<ChatConversation> _mockCommunity = [
-    ChatConversation(
-      id: 'comm_1',
-      title: 'Comunidade CB 650F',
-      lastMessagePreview: 'Última: Boa noite a todos!',
-      lastMessageAt: DateTime.now().subtract(const Duration(hours: 1)),
-      isGroup: true,
-    ),
-  ];
-
-  static final List<ChatConversation> _mockGroups = [
-    ChatConversation(
-      id: 'grp_1',
-      title: 'Passeio domingo',
-      lastMessagePreview: 'Maria: Combinado às 8h',
-      lastMessageAt: DateTime.now().subtract(const Duration(minutes: 30)),
-      isGroup: true,
-    ),
-    ChatConversation(
-      id: 'grp_2',
-      title: 'Manutenção moto',
-      lastMessagePreview: 'João: Alguém indica oficina?',
-      lastMessageAt: DateTime.now().subtract(const Duration(hours: 2)),
-      isGroup: true,
-    ),
-  ];
-
-  static final List<ChatConversation> _mockPrivate = [
-    ChatConversation(
-      id: 'pv_1',
-      title: 'Maria Santos',
-      lastMessagePreview: 'Obrigada pela dica!',
-      lastMessageAt: DateTime.now().subtract(const Duration(minutes: 5)),
-      isGroup: false,
-    ),
-    ChatConversation(
-      id: 'pv_2',
-      title: 'João Costa',
-      lastMessagePreview: 'Amanhã combino contigo',
-      lastMessageAt: DateTime.now().subtract(const Duration(hours: 1)),
-      isGroup: false,
-    ),
-  ];
-
-  /// Obtém ou cria uma conversa particular com o destinatário.
-  /// Retorna ChatConversation para usar na ChatScreen.
   static Future<ChatConversation> getOrCreatePrivateChat({
     required String currentUserId,
     required String recipientId,
     required String recipientName,
     String? recipientPhotoUrl,
   }) async {
-    try {
-      final j = await ApiService.getOrCreatePrivateChat(recipientId);
-      return _convFromMap(j);
-    } catch (_) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      final ids = [currentUserId, recipientId]..sort();
-      final chatId = 'pv_${ids[0]}_${ids[1]}';
-      try {
-        return _mockPrivate.firstWhere(
-          (c) => c.id == chatId || c.imageUrlOrUserId == recipientId,
-        );
-      } catch (_) {}
-      return ChatConversation(
-        id: chatId,
-        title: recipientName,
-        lastMessagePreview: '',
-        lastMessageAt: null,
-        isGroup: false,
-        imageUrlOrUserId: recipientId,
-      );
-    }
+    final j = await ApiService.getOrCreatePrivateChat(recipientId);
+    return _convFromMap(j);
   }
 
-  /// Obtém ou inicia conversa com suporte técnico (programadores/moderação).
   static Future<ChatConversation> startSupportChat({
     required String currentUserId,
   }) async {
-    try {
-      final j = await ApiService.startSupportChat();
-      return _convFromMap(j);
-    } catch (_) {
-      return ChatConversation(
-        id: 'support_$currentUserId',
-        title: 'Suporte técnico',
-        lastMessagePreview: '',
-        lastMessageAt: null,
-        isGroup: false,
-      );
-    }
+    final j = await ApiService.startSupportChat();
+    return _convFromMap(j);
   }
-
-  static final Map<String, List<ChatMessage>> _mockMessages = {
-    'comm_1': [
-      ChatMessage(
-        id: '1',
-        senderId: 'u2',
-        senderName: 'Maria',
-        text: 'Oi! Alguém vai no passeio domingo?',
-        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-        isFromMe: false,
-      ),
-      ChatMessage(
-        id: '2',
-        senderId: 'me',
-        senderName: 'Você',
-        text: 'Eu vou! Às 8h no posto.',
-        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-        isFromMe: true,
-      ),
-      ChatMessage(
-        id: '3',
-        senderId: 'u3',
-        senderName: 'João',
-        text: 'Combinado, até lá.',
-        createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
-        isFromMe: false,
-      ),
-    ],
-    'grp_1': [],
-    'grp_2': [],
-    'pv_1': [],
-    'pv_2': [],
-  };
 }

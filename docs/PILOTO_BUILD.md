@@ -1,8 +1,7 @@
 # Build piloto — App Flutter apontando para produção
 
 > Fase **antes** da publicação nas lojas. Instala no telefone via cabo/USB.  
-> **Não** altera package ID (`com.example.*`). **Não** publica na Play Store / App Store.  
-> Checklist de loja: [`RELEASE_CHECKLIST.md`](./RELEASE_CHECKLIST.md) (só **após** o piloto).
+> Package de loja: `br.com.girocerto.app`. Passos do App Store Connect: [`APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md).
 
 ---
 
@@ -109,9 +108,9 @@ Sem estes ficheiros/tokens, a navegação turn-by-turn **não arranca** (placeho
 
 ## Firebase no piloto
 
-- Package atual: Android `com.example.giro_certo`, iOS `com.example.giroCerto`.
-- Se já existir `google-services.json` / `GoogleService-Info.plist` **para estes IDs**, push FCM pode funcionar no piloto.
-- **Não** recriar Firebase com package final agora — isso quebra instalações atuais. Ver secção “após piloto” em `RELEASE_CHECKLIST.md` e `FIREBASE_SETUP.md` / `PUSH_BACKGROUND_SETUP.md`.
+- Package: Android e iOS `br.com.girocerto.app`.
+- Recrie `google-services.json` / `GoogleService-Info.plist` **para estes IDs** no Firebase. Push do piloto antigo (`com.example.*`) não serve neste binário.
+- Ver [`APP_STORE_CONNECT.md`](./APP_STORE_CONNECT.md), `RELEASE_CHECKLIST.md` e `FIREBASE_SETUP.md`.
 
 ---
 

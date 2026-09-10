@@ -26,6 +26,7 @@ import '../screens/drive/drive_mode_screen.dart';
 import '../screens/communities/communities_list_screen.dart';
 import '../screens/delivery/delivery_history_screen.dart';
 import '../screens/social/social_home_screen.dart';
+import '../services/delivery_migration_flow.dart';
 
 class MenuGridModal extends StatefulWidget {
   final VoidCallback? onClose;
@@ -221,11 +222,11 @@ class _MenuGridModalState extends State<MenuGridModal> {
       MenuGridItem(
         id: 'rides',
         icon: LucideIcons.package,
-        label: 'Corridas',
+        label: _isDelivery ? 'Corridas' : 'Trabalhar com entregas',
         routeIndex: 105,
-        highlight: _isDelivery,
-        enabled: _isDelivery,
-        badgeText: _isDelivery ? null : 'Delivery',
+        highlight: true,
+        enabled: true,
+        badgeText: _isDelivery ? null : 'Entrar',
       ),
       if (_isDelivery)
         const MenuGridItem(
@@ -340,11 +341,6 @@ class _MenuGridModalState extends State<MenuGridModal> {
 
   Future<void> _handleRouteTap(MenuGridItem item) async {
     if (!item.enabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Corridas disponível apenas para perfil Delivery.'),
-        ),
-      );
       return;
     }
 
@@ -383,6 +379,11 @@ class _MenuGridModalState extends State<MenuGridModal> {
         );
         break;
       case 105:
+        if (!_isDelivery) {
+          final root = appNavigatorKey.currentContext ?? context;
+          await DeliveryMigrationFlow.start(root);
+          break;
+        }
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const DeliveryScreen()),
         );

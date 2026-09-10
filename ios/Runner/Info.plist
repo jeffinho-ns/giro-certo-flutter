@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>giro_certo</string>
+	<string>Giro Certo</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -24,6 +24,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -46,15 +48,15 @@
 	<key>MBXAccessToken</key>
 	<string>$(MAPBOX_ACCESS_TOKEN)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>O Giro Certo usa a sua localização para mostrar o mapa e corridas próximas.</string>
+	<string>O Giro Certo usa a sua localização para mostrar o mapa, calcular rotas de entrega e oferecer corridas próximas enquanto você usa o app.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>O Giro Certo usa Face ID para entrar na sua conta de forma rápida e segura.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>O Giro Certo usa a câmera para gravar momentos e enviar documentos.</string>
+	<string>O Giro Certo usa a câmera para gravar momentos, enviar foto de perfil e documentos do cadastro de entregador.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>O Giro Certo usa o microfone para gravar vídeos nos seus momentos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>O Giro Certo precisa acessar a galeria para escolher vídeos e fotos.</string>
+	<string>O Giro Certo precisa acessar a galeria para escolher fotos, vídeos e documentos.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>O Giro Certo pode guardar conteúdos na sua galeria quando você publicar.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
@@ -64,15 +66,16 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 	</array>
-	<!-- Necessário para o Flutter debug descobrir o Dart VM Service no iPhone (iOS 14+) -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>O Giro Certo usa a rede local para o debugger Flutter conectar ao iPhone durante o desenvolvimento.</string>
+	<string>O Giro Certo usa a rede local só no desenvolvimento, para o debugger Flutter conectar ao iPhone.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_dartVmService._tcp</string>

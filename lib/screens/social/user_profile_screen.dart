@@ -52,18 +52,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     final currentUser = appState.user;
     if (currentUser == null) return;
-    final conv = await ChatService.getOrCreatePrivateChat(
-      currentUserId: currentUser.id,
-      recipientId: widget.userId,
-      recipientName: widget.userName,
-      recipientPhotoUrl: widget.userAvatarUrl,
-    );
-    if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatScreen(initialConversation: conv),
-      ),
-    );
+    try {
+      final conv = await ChatService.getOrCreatePrivateChat(
+        currentUserId: currentUser.id,
+        recipientId: widget.userId,
+        recipientName: widget.userName,
+        recipientPhotoUrl: widget.userAvatarUrl,
+      );
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(initialConversation: conv),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível abrir a conversa agora.'),
+        ),
+      );
+    }
   }
 
   void _openComments(dynamic post) {

@@ -1,13 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import '../../models/pilot_profile.dart';
-import '../../models/user.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/app_state_provider.dart';
-import '../../screens/login/delivery_registration_screen.dart';
-import '../../services/api_service.dart';
-import '../../services/onboarding_service.dart';
+import '../../services/delivery_migration_flow.dart';
 import '../../utils/colors.dart';
 import '../../widgets/modern_header.dart';
 import 'image_diagnostic_screen.dart';
@@ -17,111 +14,6 @@ import 'delivery_rider_payout_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
-
-  Future<bool> _confirmSwitchToDelivery(BuildContext context) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        final theme = Theme.of(dialogContext);
-        return AlertDialog(
-          title: const Text('Mudar para Delivery?'),
-          content: Text(
-            'Para atuar como entregador, voce precisa enviar documentos para aprovacao. '
-            'Deseja continuar para o cadastro Delivery agora?',
-            style: theme.textTheme.bodyMedium,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Sim, continuar'),
-            ),
-          ],
-        );
-      },
-    );
-    return result ?? false;
-  }
-
-  Future<void> _promotePilotToDelivery(
-    BuildContext context,
-    AppStateProvider app,
-  ) async {
-    User? persistedUser;
-    Object? lastError;
-    final candidateProfiles = {
-      PilotProfileType.delivery.postgresPilotProfileValue,
-      PilotProfileType.delivery.apiValue,
-    };
-
-    for (final profileValue in candidateProfiles) {
-      try {
-        persistedUser = await ApiService.updateUserProfile(
-          pilotProfile: profileValue,
-        );
-        break;
-      } catch (e) {
-        lastError = e;
-      }
-    }
-
-    if (persistedUser != null) {
-      app.setUser(persistedUser);
-    } else if (app.user != null) {
-      app.setUser(
-        app.user!.copyWith(
-          pilotProfile: PilotProfileType.delivery.postgresPilotProfileValue,
-        ),
-      );
-      if (lastError != null) {
-        debugPrint('Falha ao persistir migracao para delivery: $lastError');
-      }
-    }
-
-    app.setPilotProfileType(PilotProfileType.delivery);
-    app.setDeliveryModerationStatus(DeliveryModerationStatus.pending);
-    await OnboardingService.savePilotType(PilotProfileType.delivery);
-    await OnboardingService.saveDeliveryStatus(
-        DeliveryModerationStatus.pending);
-    await OnboardingService.setLastKnownDeliveryRegStatus('PENDING');
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Perfil atualizado para Delivery. Seus documentos estao em analise.',
-        ),
-      ),
-    );
-  }
-
-  Future<void> _startDeliveryMigrationFlow(
-    BuildContext context,
-    AppStateProvider app,
-  ) async {
-    final confirmed = await _confirmSwitchToDelivery(context);
-    if (!confirmed || !context.mounted) return;
-
-    final isBicycleCourier = app.bike?.isBicycle ?? false;
-    await Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => DeliveryRegistrationScreen(
-          pilotType: PilotProfileType.delivery,
-          isBicycleCourier: isBicycleCourier,
-          onBack: () => Navigator.of(context).pop(),
-          onSubmit: (_) async {
-            await _promotePilotToDelivery(context, app);
-            if (!context.mounted) return;
-            Navigator.of(context).maybePop();
-          },
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -264,24 +156,25 @@ class SettingsScreen extends StatelessWidget {
 
                     const SizedBox(height: 32),
 
-                    // Diagnóstico de imagens
-                    ListTile(
-                      leading: Icon(LucideIcons.bug,
-                          color: themeProvider.primaryColor),
-                      title: const Text('Diagnóstico de Imagens'),
-                      subtitle: const Text(
-                          'Ver o que a API retorna (posts, stories)'),
-                      trailing: const Icon(LucideIcons.chevronRight),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ImageDiagnosticScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 10),
+                    if (kDebugMode) ...[
+                      ListTile(
+                        leading: Icon(LucideIcons.bug,
+                            color: themeProvider.primaryColor),
+                        title: const Text('Diagnóstico de Imagens'),
+                        subtitle: const Text(
+                            'Ver o que a API retorna (posts, stories)'),
+                        trailing: const Icon(LucideIcons.chevronRight),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ImageDiagnosticScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     ListTile(
                       leading: Icon(LucideIcons.map,
                           color: themeProvider.primaryColor),
@@ -459,23 +352,60 @@ class SettingsScreen extends StatelessWidget {
                     Consumer<AppStateProvider>(
                       builder: (context, app, _) {
                         final user = app.user;
-                        final canSwitchToDelivery = user != null &&
-                            user.partnerId == null &&
-                            user.userType != UserType.lojista &&
-                            !app.isDeliveryPilot;
+                        final canSwitchToDelivery =
+                            DeliveryMigrationFlow.canSwitch(app);
+                        final showPartnerPayout =
+                            user != null && user.isPartner;
+                        final showRiderPayout = app.isDeliveryPilot;
+                        final showPayments = showPartnerPayout ||
+                            showRiderPayout ||
+                            canSwitchToDelivery;
+                        if (!showPayments) {
+                          return const SizedBox.shrink();
+                        }
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Pagamentos na entrega',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -0.5,
+                            if (canSwitchToDelivery) ...[
+                              Text(
+                                'Trabalhar com entregas',
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: -0.5,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                            if (user != null && user.isPartner) ...[
+                              const SizedBox(height: 12),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  LucideIcons.package,
+                                  color: themeProvider.primaryColor,
+                                ),
+                                title: const Text(
+                                  'Quero trabalhar com entregas',
+                                ),
+                                subtitle: const Text(
+                                  'Envie documentos para aprovacao e liberar corridas',
+                                ),
+                                trailing: const Icon(LucideIcons.chevronRight),
+                                onTap: () =>
+                                    DeliveryMigrationFlow.start(context),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                            if (showPartnerPayout || showRiderPayout) ...[
+                              Text(
+                                'Pagamentos na entrega',
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                            if (showPartnerPayout) ...[
                               ListTile(
                                 contentPadding: EdgeInsets.zero,
                                 leading: Icon(
@@ -500,9 +430,7 @@ class SettingsScreen extends StatelessWidget {
                                 },
                               ),
                             ],
-                            if (user != null &&
-                                (user.partnerId == null ||
-                                    app.isDeliveryPilot)) ...[
+                            if (showRiderPayout) ...[
                               ListTile(
                                 contentPadding: EdgeInsets.zero,
                                 leading: Icon(
@@ -524,26 +452,6 @@ class SettingsScreen extends StatelessWidget {
                                     ),
                                   );
                                 },
-                              ),
-                            ],
-                            if (canSwitchToDelivery) ...[
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(
-                                  LucideIcons.package,
-                                  color: themeProvider.primaryColor,
-                                ),
-                                title: const Text(
-                                  'Mudar perfil de pilotagem para Delivery',
-                                ),
-                                subtitle: const Text(
-                                  'Envie documentos para aprovacao e liberar corridas',
-                                ),
-                                trailing: const Icon(LucideIcons.chevronRight),
-                                onTap: () => _startDeliveryMigrationFlow(
-                                  context,
-                                  app,
-                                ),
                               ),
                             ],
                             const SizedBox(height: 8),

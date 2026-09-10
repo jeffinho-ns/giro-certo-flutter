@@ -2244,6 +2244,31 @@ class ApiService {
     return quote;
   }
 
+  /// Histórico de rotas do utilizador logado (quando o backend expuser).
+  static Future<List<Map<String, dynamic>>> getUserRoutesHistory() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/me/routes-history'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 404 || response.statusCode == 501) return [];
+      _handleError(response);
+      final data = json.decode(response.body);
+      if (data is List) {
+        return data.whereType<Map<String, dynamic>>().toList();
+      }
+      if (data is Map<String, dynamic>) {
+        final list = data['routes'] as List<dynamic>? ??
+            data['history'] as List<dynamic>? ??
+            [];
+        return list.whereType<Map<String, dynamic>>().toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getDeliveryRouteHistory(
       String orderId) async {
     final response = await http.get(
@@ -2863,18 +2888,33 @@ class ApiService {
   // CHAT
   // ============================================
 
-  /// Listar conversas privadas.
-  static Future<List<Map<String, dynamic>>> getChatConversations() async {
+  /// Listar conversas. [type] opcional: `group` | `private`.
+  static Future<List<Map<String, dynamic>>> getChatConversations({
+    String? type,
+  }) async {
     try {
+      final params = <String, String>{};
+      if (type != null && type.isNotEmpty) params['type'] = type;
+      final uri = Uri.parse('$baseUrl/chats').replace(
+        queryParameters: params.isEmpty ? null : params,
+      );
       final response = await http.get(
-        Uri.parse('$baseUrl/chats'),
+        uri,
         headers: await _getHeaders(),
       );
       if (response.statusCode == 404 || response.statusCode == 501) return [];
       _handleError(response);
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      final list = data['conversations'] as List<dynamic>? ?? [];
-      return list.map((e) => e as Map<String, dynamic>).toList();
+      final decoded = json.decode(response.body);
+      if (decoded is List) {
+        return decoded.whereType<Map<String, dynamic>>().toList();
+      }
+      if (decoded is Map<String, dynamic>) {
+        final list = decoded['conversations'] as List<dynamic>? ??
+            decoded['chats'] as List<dynamic>? ??
+            [];
+        return list.whereType<Map<String, dynamic>>().toList();
+      }
+      return [];
     } catch (_) {
       return [];
     }
