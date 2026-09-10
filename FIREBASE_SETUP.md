@@ -53,5 +53,5 @@ Sem esses arquivos/plataforma configurada, o app roda normalmente, mas push FCM 
 
 ### Produção nas lojas (após piloto)
 
-Enquanto o piloto usa `com.example.*`, mantenha Firebase alinhado a esses IDs.  
-Quando for publicar nas lojas, recriar apps Firebase com o package/bundle **final** — passos em [`docs/RELEASE_CHECKLIST.md`](./docs/RELEASE_CHECKLIST.md) (secção “Após piloto — Firebase”). Não renomear IDs no código antes disso.
+Enquanto o piloto usava `com.example.*`, o Firebase estava alinhado a esses IDs.  
+Com a identidade de loja `br.com.girocerto.app`, recrie os apps Firebase — passos em [`docs/APP_STORE_CONNECT.md`](./docs/APP_STORE_CONNECT.md) e [`docs/RELEASE_CHECKLIST.md`](./docs/RELEASE_CHECKLIST.md).

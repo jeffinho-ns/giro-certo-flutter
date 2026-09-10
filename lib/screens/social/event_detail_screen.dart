@@ -173,7 +173,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                               TileLayer(
                                 urlTemplate:
                                     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                userAgentPackageName: 'com.girocerto.app',
+                                userAgentPackageName: 'br.com.girocerto.app',
                               ),
                               MarkerLayer(
                                 markers: [

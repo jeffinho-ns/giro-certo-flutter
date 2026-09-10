@@ -334,7 +334,7 @@ class _RotasScreenState extends State<RotasScreen> {
                   TileLayer(
                     urlTemplate:
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.girocerto.app',
+                    userAgentPackageName: 'br.com.girocerto.app',
                     tileBuilder: (context, child, _) => isDark
                         ? ColorFiltered(
                             colorFilter: const ColorFilter.matrix([

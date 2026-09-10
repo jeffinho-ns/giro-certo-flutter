@@ -56,8 +56,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.giro_certo"
+        // Identidade de loja (App Store / Play). Namespace Kotlin permanece
+        // com.example.giro_certo para não mover o MainActivity.
+        applicationId = "br.com.girocerto.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
