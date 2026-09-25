@@ -1,0 +1,18 @@
+---
+description: Projeto Giro Certo / Loja Virtual — App (Flutter) — contexto e regras específicas
+alwaysApply: true
+---
+
+# Giro Certo — App (Flutter)
+
+> Documentos mestre: **`PLANO_LOJA_VIRTUAL.md`** e **`AGENTS.md`** na raiz. Detalhes em `loja-virtual.mdc`. Regras gerais já vêm das rules `common-*` e `dart-*` — **não as repita aqui**. Padrões de Flutter: skill `dart-flutter-patterns`.
+
+## Stack (real)
+- Flutter / Dart (app — cliente e/ou motoboy).
+- Consome a API `giro-certo-api` (Node.js + PostgreSQL).
+
+## Específico deste repo
+- Segurança e autorização moram na API, nunca no app.
+- Rastreamento com privacidade: localização do motoboy só durante a entrega ativa.
+- Sempre criar testes (widget/unit) para novas telas e lógica.
+- Responder sempre em português.
