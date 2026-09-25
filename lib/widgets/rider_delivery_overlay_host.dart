@@ -16,6 +16,7 @@ import '../providers/app_state_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/rider_delivery_session_provider.dart';
 import '../utils/colors.dart';
+import '../utils/friendly_accept_delivery_error.dart';
 import 'delivery_pipcar_modal.dart';
 
 /// Oferta global de corrida e retomada da navegação em qualquer tela.
@@ -145,7 +146,7 @@ class _RiderDeliveryOverlayHostState extends State<RiderDeliveryOverlayHost> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao aceitar: $e')),
+        SnackBar(content: Text(friendlyAcceptDeliveryError(e))),
       );
     }
   }

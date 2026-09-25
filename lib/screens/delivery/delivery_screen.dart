@@ -13,6 +13,7 @@ import '../../providers/app_state_provider.dart';
 import '../../providers/rider_delivery_session_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/colors.dart';
+import '../../utils/friendly_accept_delivery_error.dart';
 import '../../features/trip_navigation/widgets/trip_delivery_proof_dialog.dart';
 import '../../utils/delivery_constants.dart';
 import '../../utils/delivery_proof_pin.dart';
@@ -510,7 +511,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao aceitar corrida: $e'),
+            content: Text(friendlyAcceptDeliveryError(e)),
             backgroundColor: Colors.red,
           ),
         );
