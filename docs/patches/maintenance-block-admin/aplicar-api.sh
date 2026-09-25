@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Aplica o patch de bloqueio por manutenção no giro-certo-api.
+# Preferir: APLICAR_TUDO.sh (aplica API+Next e verifica remoto).
 # Uso: a partir da pasta giro-certo-api:
 #   bash /caminho/giro-certo-flutter/docs/patches/maintenance-block-admin/aplicar-api.sh
 set -euo pipefail
@@ -23,7 +24,9 @@ cp "$SCRIPT_DIR/bikes.routes.ts" src/routes/bikes.routes.ts
 
 grep -q userHasActiveCriticalMaintenance src/utils/maintenance-block.ts
 grep -q maintenance-block-override src/routes/users.routes.ts
-grep -q SQL_USER_HAS_ACTIVE_CRITICAL_MAINTENANCE src/services/delivery.service.ts
+grep -q SQL_USER_HAS_ACTIVE_CRITICAL_MAINTENANCE src/services/delivery.service.ts \
+  || grep -q userHasActiveCriticalMaintenance src/services/delivery.service.ts \
+  || grep -q "from '../utils/maintenance-block'" src/services/delivery.service.ts
 
 git add \
   src/utils/maintenance-block.ts \
@@ -32,8 +35,17 @@ git add \
   src/routes/users.routes.ts \
   src/routes/bikes.routes.ts
 
-git status
-git commit -m "$(cat <<'EOF'
+# Guard: nunca versionar .cursor neste patch
+if git diff --cached --name-only | grep -E '^\.cursor(/|$)' >/dev/null; then
+  echo "ERRO: .cursor/ no stage — abortado"
+  exit 1
+fi
+
+git status --short
+if git diff --cached --quiet; then
+  echo "Nada novo para commit (já aplicado?)."
+else
+  git commit -m "$(cat <<'EOF'
 fix(maintenance): bloquear só pelo estado atual + override no admin
 
 Aceitar corrida deixava de funcionar com logs CRITICO antigos mesmo após
@@ -41,5 +53,6 @@ marcar manutenção como feita. Agora usa o último log por peça; admin pode
 ativar maintenanceBlockOverride no perfil.
 EOF
 )"
-git push origin main
-echo "SUCESSO: push API feito. Espera o Render ficar Live."
+  git push origin main
+  echo "SUCESSO: push API feito. Espera o Render ficar Live."
+fi
