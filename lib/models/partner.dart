@@ -36,8 +36,6 @@ class Partner {
   final List<Promotion> activePromotions;
   /// `prepaid` | `postpaid_pix` | `authorize_capture` — da API (`delivery_payment_collection_mode`).
   final String? deliveryPaymentCollectionMode;
-  /// `after_ifood_accept` espera o gerente no iFood. `immediate` chama o motoboy na hora.
-  final String? ifoodAcceptMode;
 
   Partner({
     required this.id,
@@ -52,7 +50,6 @@ class Partner {
     required this.specialties,
     required this.activePromotions,
     this.deliveryPaymentCollectionMode,
-    this.ifoodAcceptMode,
   });
 
   // Calcula a distância em km (fórmula de Haversine)

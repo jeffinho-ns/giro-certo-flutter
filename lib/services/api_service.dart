@@ -1796,7 +1796,6 @@ class ApiService {
       activePromotions: [], // TODO: Implementar quando a API retornar
       deliveryPaymentCollectionMode:
           json['delivery_payment_collection_mode'] as String?,
-      ifoodAcceptMode: json['ifoodAcceptMode'] as String?,
     );
   }
 
