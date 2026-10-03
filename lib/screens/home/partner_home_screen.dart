@@ -166,11 +166,15 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                 DeliveryStatusUtils.isPending(order.status)) &&
             mounted) {
           final fromWa = (order.notes ?? '').toLowerCase().contains('whatsapp');
-          final msg = DeliveryStatusUtils.isPending(order.status)
-              ? (fromWa
-                  ? 'Novo chamado (WhatsApp): motos já estão sendo notificadas.'
-                  : 'Novo chamado: buscando motociclista.')
-              : 'Novo pedido na loja — confirme para chamar motociclistas.';
+          final waitsForIfood = (order.notes ?? '').contains('Pedido iFood') &&
+              _myPartner?.ifoodAcceptMode != 'immediate';
+          final msg = waitsForIfood
+              ? 'Pedido do iFood parado. O motoboy entra quando o gerente aceitar no iFood.'
+              : (DeliveryStatusUtils.isPending(order.status)
+                  ? (fromWa
+                      ? 'Novo chamado (WhatsApp): motos já estão sendo notificadas.'
+                      : 'Novo chamado: buscando motociclista.')
+                  : 'Novo pedido na loja — confirme para chamar motociclistas.');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(msg)),
           );
@@ -1425,7 +1429,17 @@ class _PartnerHomeScreenState extends State<PartnerHomeScreen>
                 ),
               ),
             ),
-          if (variant == _OrderCardVariant.awaitingDispatch) ...[
+          if (variant == _OrderCardVariant.awaitingDispatch &&
+              (order.notes ?? '').contains('Pedido iFood') &&
+              _myPartner?.ifoodAcceptMode != 'immediate') ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text(
+                'Aguardando o aceite no iFood. O motoboy entra sozinho quando o gerente aceitar lá.',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ] else if (variant == _OrderCardVariant.awaitingDispatch) ...[
             if (DeliveryStatusUtils.allowsStorePaymentCheckout(
               order.status,
               _myPartner?.deliveryPaymentCollectionMode,
